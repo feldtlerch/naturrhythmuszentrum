@@ -154,7 +154,7 @@ fn kernel_mapped_family_selection_work_boundary() -> TestResult {
 /// ´claim:matrix:kernel-mapped-family-preparation-work-boundary´
 #[test]
 fn kernel_mapped_family_preparation_work_boundary() -> TestResult {
-    for work in [7289, 7288] {
+    for work in [7001, 7000] {
         let mut source = Fixture::new()?;
         let trace = source.trace(&mut ledger()?)?;
         let witness = select(&mut source.source, &trace, &mut ledger()?)?;
@@ -169,7 +169,7 @@ fn kernel_mapped_family_preparation_work_boundary() -> TestResult {
             witness,
             &mut budget,
         );
-        if work == 7289 {
+        if work == 7001 {
             result?;
             assert_eq!(budget.usage().work, work);
         } else {
@@ -179,7 +179,7 @@ fn kernel_mapped_family_preparation_work_boundary() -> TestResult {
             let nrz_bindings::DecisionError::Algebra(fault) = *fault else {
                 panic!("native preparation must name Work exhaustion");
             };
-            exhausted(&fault, work, 7289);
+            exhausted(&fault, work, 7001);
             assert!(budget.usage().work >= 17);
         }
         assert_eq!(budget.limits(), &limits);

@@ -141,15 +141,15 @@ fn bindings_decision_admission() -> TestResult {
     assert_eq!(selected.witness().hypotheses().len(), 1);
     assert_eq!(
         (physical_work, case_work, admission_work),
-        (52_584, 32_295, 496)
+        (52_584, 32_295, 208)
     );
     assert_eq!(proof_end - physical_work - case_work, 166_952);
-    assert_eq!(budget.usage().work, 252_327);
+    assert_eq!(budget.usage().work, 252_039);
     assert_eq!(selected.retained_payload_bytes(), 13_842);
-    assert_eq!(selected.usage()[1].work - selected.usage()[0].work, 496);
+    assert_eq!(selected.usage()[1].work - selected.usage()[0].work, 208);
     let mut reused = ledger()?;
     case.admit(Arc::clone(&graph), repeated, case.attachment(), &mut reused)?;
-    assert_eq!(reused.usage().work, 496);
+    assert_eq!(reused.usage().work, 208);
     assert_eq!(
         graph.lock().map_err(|_| "graph owner poisoned")?.counts(),
         before
@@ -366,9 +366,9 @@ fn bindings_decision_snapshot_boundaries() -> TestResult {
     let graph = Arc::new(Mutex::new(source.frame.cas));
     let before = graph.lock().map_err(|_| "graph owner poisoned")?.counts();
     for (work, output_bytes, accepted) in [
-        (513, 13_842, true),
-        (512, 13_842, false),
-        (513, 13_841, false),
+        (225, 13_842, true),
+        (224, 13_842, false),
+        (225, 13_841, false),
     ] {
         let mut budget = nrz_bindings::Budget::new(nrz_bindings::Limits {
             work,
@@ -384,7 +384,7 @@ fn bindings_decision_snapshot_boundaries() -> TestResult {
         );
         assert_eq!(result.is_ok(), accepted);
         if accepted {
-            assert_eq!(budget.usage().work, 513);
+            assert_eq!(budget.usage().work, 225);
         }
         assert!(budget.usage().work >= 17);
         assert_eq!(
@@ -400,7 +400,7 @@ fn bindings_decision_snapshot_boundaries() -> TestResult {
 #[test]
 fn bindings_decision_cumulative_boundary() -> TestResult {
     let owner = physical_source("LC nominal reference", false)?;
-    for (work, accepted) in [(252_344, true), (252_343, false)] {
+    for (work, accepted) in [(252_056, true), (252_055, false)] {
         let mut source = fixture(false, "3", "10/Pi")?;
         let mut budget = nrz_bindings::Budget::new(nrz_bindings::Limits {
             work,
@@ -423,7 +423,7 @@ fn bindings_decision_cumulative_boundary() -> TestResult {
         let result = case.admit(Arc::clone(&graph), witness, case.attachment(), &mut budget);
         assert_eq!(result.is_ok(), accepted);
         if accepted {
-            assert_eq!(budget.usage().work, 252_344);
+            assert_eq!(budget.usage().work, 252_056);
         }
         assert_eq!(
             graph.lock().map_err(|_| "graph owner poisoned")?.counts(),

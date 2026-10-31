@@ -315,12 +315,12 @@ fn quantity_count_storage_separates_continuous_meanings() -> TestResult {
 #[test]
 fn quantity_count_work_boundaries() -> TestResult {
     for (action, needed) in [
-        (0, 372),
+        (0, 84),
         (1, 1),
-        (2, 515),
-        (3, 515),
-        (4, 515),
-        (5, 515),
+        (2, 227),
+        (3, 227),
+        (4, 227),
+        (5, 227),
         (6, 995),
     ] {
         for limit in [needed, needed - 1] {

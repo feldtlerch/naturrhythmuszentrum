@@ -40,7 +40,7 @@ fn selected(budget: &mut Budget) -> TestResult<SelectedDecision> {
     let graph = Arc::new(Mutex::new(source.frame.cas));
     let before = graph.lock().map_err(|_| "graph owner poisoned")?.counts();
     let result = case.admit(Arc::clone(&graph), witness, case.attachment(), budget)?;
-    assert_eq!(budget.usage().work - start, 315_819);
+    assert_eq!(budget.usage().work - start, 315_531);
     assert_eq!(
         graph.lock().map_err(|_| "graph owner poisoned")?.counts(),
         before
@@ -56,12 +56,12 @@ fn bindings_lattice_scalar_baseline() -> TestResult {
     let selected = selected(&mut budget)?;
     let count = selected.count(3, &mut budget)?;
     assert_eq!(count.value(), 3);
-    assert_eq!(budget.usage().work, 315_878);
+    assert_eq!(budget.usage().work, 315_590);
     assert_eq!(selected.retained_payload_bytes(), 13_842);
     assert_eq!(count.retained_payload_bytes(), 2_068);
     let case = selected.case();
     let associated = case.associate_inputs(&mut budget)?;
-    assert_eq!(budget.usage().work, 361_130);
+    assert_eq!(budget.usage().work, 360_842);
     assert_eq!(associated.retained_payload_bytes(), 17_858);
     let originals = associated
         .operands()
@@ -75,7 +75,7 @@ fn bindings_lattice_scalar_baseline() -> TestResult {
         .map(DecisionOperand::symbols)
         .collect::<Vec<_>>();
     associated.authenticate(case, &symbols, &mut budget)?;
-    assert_eq!(budget.usage().work, 361_144);
+    assert_eq!(budget.usage().work, 360_856);
     let graph = selected.cas()?;
     let before = graph.counts();
     let bytes = graph.export_witness(selected.witness(), &mut ledger()?)?;
@@ -157,10 +157,10 @@ fn bindings_lattice_scalar_association_work() -> TestResult {
 
 /// Complete lifecycle exhaustion and fresh replay publish no partial physical or CAS result.
 /// ´test:integration:bindings-lattice-scalar-cumulative-work´
-/// ´claim:bindings:lattice-scalar-cumulative-work´ The complete scalar lifecycle falls from 364597 to 361161 Work with unchanged evidence and atomic one-below refusal.
+/// ´claim:bindings:lattice-scalar-cumulative-work´ The complete scalar lifecycle falls from 364597 to 360873 Work with unchanged evidence and atomic one-below refusal.
 #[test]
 fn bindings_lattice_scalar_cumulative_work() -> TestResult {
-    for (work, accepted) in [(361_161, true), (361_160, false)] {
+    for (work, accepted) in [(360_873, true), (360_872, false)] {
         let mut budget = prior(work)?;
         let selected = selected(&mut budget)?;
         let before = selected.cas()?.counts();

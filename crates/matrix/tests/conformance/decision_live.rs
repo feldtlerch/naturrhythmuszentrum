@@ -81,12 +81,12 @@ fn decision_live_lc_costs() -> TestResult {
         &nrz_bindings::readings::algebra::Rational::from_ratio(3, 1, &mut ledger()?)?
     );
     assert_eq!(capture, 2952);
-    assert_eq!(admission - selection, 2779);
+    assert_eq!(admission - selection, 2491);
     assert_eq!(publication - admission, 193);
     assert_eq!(materialization - publication, 125);
     assert_eq!(current - materialization, 66);
-    assert_eq!(materialization, 173_001);
-    assert_eq!(current, 173_067);
+    assert_eq!(materialization, 172_713);
+    assert_eq!(current, 172_779);
     Ok(())
 }
 
@@ -348,7 +348,7 @@ fn decision_live_admission_work_boundaries() -> TestResult {
     let mut heap = Heap::new(HeapLimits::default())?;
     let bindings = inputs(&mut heap, &association)?;
     let before = heap.provenance_usage();
-    for (work, accepted) in [(2796, true), (2795, false)] {
+    for (work, accepted) in [(2508, true), (2507, false)] {
         let frozen = heap.freeze_decision_inputs(&association, &bindings, &mut ledger()?)?;
         let mut budget = nrz_bindings::Budget::new(nrz_bindings::Limits {
             work,
@@ -368,7 +368,7 @@ fn decision_live_admission_work_boundaries() -> TestResult {
         );
         assert_eq!(result.is_ok(), accepted);
         if accepted {
-            assert_eq!(budget.usage().work, 2796);
+            assert_eq!(budget.usage().work, 2508);
         }
         let monotone = budget.usage().work >= 17 && budget.usage().work <= work;
         assert!(monotone);
@@ -399,10 +399,10 @@ fn decision_live_admission_work_boundaries() -> TestResult {
 
 /// Physical source, case, association and every live stage share the original caller allowance.
 /// ´test:integration:decision-live-complete-lc-work-boundaries´
-/// ´claim:matrix:decision-live-complete-lc-work-boundaries´ Frozen input environments reduce complete cumulative LC Work from 282308 to 280590 with atomic one-below refusal.
+/// ´claim:matrix:decision-live-complete-lc-work-boundaries´ Frozen input environments and exact count-sign admission reduce complete cumulative LC Work from 282308 to 280302 with atomic one-below refusal.
 #[test]
 fn decision_live_complete_lc_work_boundaries() -> TestResult {
-    for (work, accepted) in [(280_590, true), (280_589, false)] {
+    for (work, accepted) in [(280_302, true), (280_301, false)] {
         let mut budget = nrz_bindings::Budget::new(nrz_bindings::Limits {
             work,
             ..nrz_bindings::Limits::default()
@@ -433,7 +433,7 @@ fn decision_live_complete_lc_work_boundaries() -> TestResult {
         let result = published.count(&heap, 3, &mut budget);
         if accepted {
             assert_eq!(result?.current(&heap, &mut ledger()?)?.value(), 3);
-            assert_eq!(budget.usage().work, 280_590);
+            assert_eq!(budget.usage().work, 280_302);
         } else {
             let Err(LiveDecisionError::Admission(error)) = result else {
                 panic!("one-below complete LC Work must refuse");
@@ -513,13 +513,13 @@ fn lattice_live_scalar_baseline() -> TestResult {
     assert_eq!(originals, 107_572);
     assert_eq!(captured - originals, 2952);
     assert_eq!(selected - captured, 166_952);
-    assert_eq!(admitted - selected, 2779);
+    assert_eq!(admitted - selected, 2491);
     assert_eq!(attached - admitted, 193);
     assert_eq!(materialized - attached, 125);
     assert_eq!(current - materialized, 66);
     assert_eq!(retired - current, 34);
     assert_eq!(budget.usage().work - retired, 1);
-    assert_eq!(budget.usage().work, 280_674);
+    assert_eq!(budget.usage().work, 280_386);
     assert_eq!(graph_records.vertices, 36);
     assert_eq!(graph_records.edges, 96);
     assert_eq!(records.records(), 0);
@@ -627,7 +627,7 @@ fn kernel_live_baseline() -> TestResult {
     );
     assert_eq!(heap.provenance_usage(), records);
     assert_eq!(capture, 2969);
-    assert_eq!(budget.usage().work, 5748);
+    assert_eq!(budget.usage().work, 5460);
     assert_eq!(before.vertices, 36);
     assert_eq!(before.edges, 96);
     assert_eq!(

@@ -129,8 +129,8 @@ fn bindings_count_descriptor_routes() -> TestResult {
     assert_eq!(count.value(), 3);
     assert!(matches!(count.evidence(), CountEvidence::Proved { .. }));
     assert_eq!(decided_work.usage().work, 59);
-    assert_eq!(declared_work.usage().work, 384);
-    assert_eq!(proved_work.usage().work, 517);
+    assert_eq!(declared_work.usage().work, 96);
+    assert_eq!(proved_work.usage().work, 229);
     Ok(())
 }
 
@@ -344,10 +344,10 @@ fn bindings_count_work_boundaries() -> TestResult {
     for (route, work, accepted) in [
         (0, 76, true),
         (0, 75, false),
-        (1, 401, true),
-        (1, 400, false),
-        (2, 534, true),
-        (2, 533, false),
+        (1, 113, true),
+        (1, 112, false),
+        (2, 246, true),
+        (2, 245, false),
     ] {
         let mut budget = nrz_bindings::Budget::new(nrz_bindings::Limits {
             work,

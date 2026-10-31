@@ -170,7 +170,7 @@ fn kernel_live_selection_work_boundary() -> TestResult {
 /// ´claim:matrix:kernel-live-preparation-work-boundary´
 #[test]
 fn kernel_live_preparation_work_boundary() -> TestResult {
-    for work in [5254, 5253] {
+    for work in [4966, 4965] {
         let mut source = Fixture::new()?;
         let trace = source.trace(&mut ledger()?)?;
         let witness = select(&mut source.source, &trace, &mut ledger()?)?;
@@ -185,7 +185,7 @@ fn kernel_live_preparation_work_boundary() -> TestResult {
             witness,
             &mut budget,
         );
-        if work == 5254 {
+        if work == 4966 {
             result?;
             assert_eq!(budget.usage().work, work);
         } else {
@@ -195,7 +195,7 @@ fn kernel_live_preparation_work_boundary() -> TestResult {
             let nrz_bindings::DecisionError::Algebra(fault) = *fault else {
                 panic!("native preparation must name Work exhaustion");
             };
-            exhausted(&fault, work, 5254);
+            exhausted(&fault, work, 4966);
             assert!(budget.usage().work >= 17);
         }
         assert_eq!(budget.limits(), &limits);

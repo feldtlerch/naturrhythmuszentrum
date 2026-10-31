@@ -129,7 +129,7 @@ fn bindings_lc_count_complete() -> TestResult {
     );
     assert_eq!(model_work, 34_713);
     assert_eq!(physical_work, 81_363);
-    assert_eq!(budget.usage().work, 315_878);
+    assert_eq!(budget.usage().work, 315_590);
     Ok(())
 }
 
@@ -164,7 +164,7 @@ fn bindings_lc_count_physical_boundaries() -> TestResult {
 #[test]
 fn bindings_lc_count_cumulative_boundary() -> TestResult {
     let owner = physical_source("1")?;
-    for (work, accepted) in [(315_895, true), (315_894, false)] {
+    for (work, accepted) in [(315_607, true), (315_606, false)] {
         let mut budget = nrz_bindings::Budget::new(nrz_bindings::Limits {
             work,
             ..nrz_bindings::Limits::default()

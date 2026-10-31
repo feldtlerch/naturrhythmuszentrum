@@ -88,8 +88,16 @@ impl CountDomain {
         if !value.is_integer() {
             return Err(UnitError::CountValue);
         }
+        let minimum = if self.minimum == Some(0) {
+            if value.is_negative() {
+                return Err(UnitError::CountValue);
+            }
+            None
+        } else {
+            self.minimum
+        };
         for (bound, forbidden) in [
-            (self.minimum, std::cmp::Ordering::Less),
+            (minimum, std::cmp::Ordering::Less),
             (self.maximum, std::cmp::Ordering::Greater),
         ] {
             if let Some(bound) = bound {
