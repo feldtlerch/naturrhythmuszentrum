@@ -10,6 +10,7 @@
 mod catalog;
 mod coordinates;
 mod relation;
+mod scale_roots;
 
 pub use relation::{FrequencyDirection, FrequencyRelation};
 
@@ -53,6 +54,8 @@ pub struct Registry {
     binary: Vec<((BinaryOp, Kind, Kind), Kind)>,
     /// Declared power rules beyond the small builtin set.
     powers: Vec<((Kind, Rational), Kind)>,
+    /// Four checked exact scale roots, retained only after their complete consumers succeed.
+    scale_roots: scale_roots::ScaleRoots,
 }
 
 impl Registry {
@@ -66,6 +69,7 @@ impl Registry {
             names: BTreeMap::new(),
             binary: Vec::new(),
             powers: Vec::new(),
+            scale_roots: scale_roots::ScaleRoots::new(),
         }
     }
 

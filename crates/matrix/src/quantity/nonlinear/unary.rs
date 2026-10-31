@@ -46,16 +46,18 @@ impl QuantityContext {
     ) -> Result<Quantity<P>, QuantityError<P>> {
         charge(budget, 1)?;
         Self::nonlinear_kind::<P>(input.descriptor())?;
-        let descriptor = self
-            .declarations
-            .registry()
-            .coordinate_square_root(input.descriptor(), budget)?;
-        self.nonlinear_unary(
-            heap,
-            input,
-            &descriptor,
-            ScalarQuantityOp::SquareRoot,
+        self.declarations.registry().with_coordinate_square_root(
+            input.descriptor(),
             budget,
+            |descriptor, budget| {
+                self.nonlinear_unary(
+                    heap,
+                    input,
+                    &descriptor,
+                    ScalarQuantityOp::SquareRoot,
+                    budget,
+                )
+            },
         )
     }
 

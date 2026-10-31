@@ -43,8 +43,8 @@ fn quantity_powers_work_boundaries() -> TestResult {
         (Unary::Power(-1), true, 10_010, 9_882, (1_261, 1_133)),
         (Unary::Power(0), false, 12_576, 12_448, (1_260, 1_132)),
         (Unary::Power(0), true, 9_559, 9_431, (1_260, 1_132)),
-        (Unary::Root, false, 29_428, 29_300, (1_258, 1_130)),
-        (Unary::Root, true, 26_438, 26_310, (1_258, 1_130)),
+        (Unary::Root, false, 12_583, 12_455, (1_258, 1_130)),
+        (Unary::Root, true, 9_593, 9_465, (1_258, 1_130)),
     ] {
         for admitted in [false, true] {
             work_case(operation, warm, (required, refused), scalar, admitted)?;
@@ -106,7 +106,7 @@ fn quantity_powers_provenance_boundaries() -> TestResult {
         (Unary::Power(2), 2_129, 13_525),
         (Unary::Power(-1), 2_129, 13_026),
         (Unary::Power(0), 2_129, 12_576),
-        (Unary::Root, 2_129, 29_428),
+        (Unary::Root, 2_129, 12_583),
     ] {
         for admitted in [false, true] {
             let (context, mut heap, input) = prepared(operation, false)?;
@@ -145,7 +145,7 @@ fn quantity_powers_domain_work_boundaries() -> TestResult {
     for (operation, required, spent, scalar) in [
         (Unary::Power(-1), 12_313, 12_309, (548, 544)),
         (Unary::Power(0), 11_864, 11_860, (548, 544)),
-        (Unary::Root, 28_714, 28_713, (544, 543)),
+        (Unary::Root, 11_869, 11_868, (544, 543)),
     ] {
         for admitted in [false, true] {
             let (context, [_, area, _]) = fixture(ExponentPolicy::Rational)?;

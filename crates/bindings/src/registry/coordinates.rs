@@ -94,16 +94,47 @@ impl Registry {
         base: &Descriptor,
         budget: &mut Budget,
     ) -> Result<Descriptor, UnitError> {
-        let half = Rational::from_ratio(1, 2, budget)?;
+        self.with_coordinate_square_root(base, budget, |descriptor, _| Ok(descriptor))
+    }
+
+    /// Prepare an exact root and retain its checked scale only after its consumer succeeds.
+    ///
+    /// This keeps a caller's later numerical or publication refusal from warming the cache.
+    /// Work remains spent on every path; the callback shares the original caller ledger.
+    /// # Errors
+    /// Preserves descriptor, exact resource and consumer refusals without publishing a cache entry.
+    pub fn with_coordinate_square_root<T, E>(
+        &self,
+        base: &Descriptor,
+        budget: &mut Budget,
+        consume: impl FnOnce(Descriptor, &mut Budget) -> Result<T, E>,
+    ) -> Result<T, E>
+    where
+        E: From<UnitError> + From<nrz_cas::Fault>,
+    {
+        let half = Rational::from_ratio(1, 2, budget).map_err(UnitError::from)?;
         let derived = self.power(base, &half)?;
-        let scale = base.measure().scale_witness().sqrt(budget)?;
-        coordinate_name(base.measure().name().len().saturating_add(6), budget)?;
-        let measure = Measure::new(
-            format!("sqrt({})", base.measure().name()),
-            Scale::Expression(scale),
-            Rational::zero(),
+        let root = self
+            .scale_roots
+            .prepare(base.measure().scale_witness(), budget)?;
+        let result = budget.with_retained_payload(
+            root.reserved(),
+            Location::new("coordinate scale root consumer"),
+            |budget| {
+                let scale = root.value(budget)?;
+                coordinate_name(base.measure().name().len().saturating_add(6), budget)?;
+                let measure = Measure::new(
+                    format!("sqrt({})", base.measure().name()),
+                    Scale::Expression(scale),
+                    Rational::zero(),
+                )?;
+                let descriptor =
+                    Descriptor::new(derived.kind().clone(), measure, Role::Difference)?;
+                consume(descriptor, budget)
+            },
         )?;
-        Descriptor::new(derived.kind().clone(), measure, Role::Difference)
+        self.scale_roots.publish(root);
+        Ok(result)
     }
 }
 

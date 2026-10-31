@@ -4,6 +4,7 @@
 mod boundaries;
 mod lineage;
 mod refusals;
+mod reuse;
 
 use super::quantity_products::{bounded, channels, check_result, descriptor, evidence};
 use crate::conversion_testing::TestResult;
