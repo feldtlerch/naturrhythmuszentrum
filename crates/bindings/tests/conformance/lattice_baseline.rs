@@ -50,6 +50,7 @@ fn selected(budget: &mut Budget) -> TestResult<SelectedDecision> {
 
 /// The lattice lane remeasures the scalar lifecycle, record closure and original-input association.
 /// ´test:integration:bindings-lattice-scalar-baseline´
+/// ´claim:bindings:lattice-scalar-baseline´ Four shared-signature symbol graphs reduce the associated scalar lifecycle to 359922 Work while authentication, witness bytes and independent replay remain unchanged.
 #[test]
 fn bindings_lattice_scalar_baseline() -> TestResult {
     let mut budget = ledger()?;
@@ -61,7 +62,7 @@ fn bindings_lattice_scalar_baseline() -> TestResult {
     assert_eq!(count.retained_payload_bytes(), 2_068);
     let case = selected.case();
     let associated = case.associate_inputs(&mut budget)?;
-    assert_eq!(budget.usage().work, 360_842);
+    assert_eq!(budget.usage().work, 359_922);
     assert_eq!(associated.retained_payload_bytes(), 17_858);
     let originals = associated
         .operands()
@@ -75,7 +76,7 @@ fn bindings_lattice_scalar_baseline() -> TestResult {
         .map(DecisionOperand::symbols)
         .collect::<Vec<_>>();
     associated.authenticate(case, &symbols, &mut budget)?;
-    assert_eq!(budget.usage().work, 360_856);
+    assert_eq!(budget.usage().work, 359_936);
     let graph = selected.cas()?;
     let before = graph.counts();
     let bytes = graph.export_witness(selected.witness(), &mut ledger()?)?;
@@ -110,13 +111,13 @@ fn bindings_lattice_scalar_baseline() -> TestResult {
 
 /// Distinct association and authentication owners retain literal cumulative Work boundaries.
 /// ´test:integration:bindings-lattice-scalar-association-work´
-/// ´claim:bindings:lattice-scalar-association-work´ Frozen environments reduce cumulative association Work from 48705 to 45269 and preserve atomic one-below refusal.
+/// ´claim:bindings:lattice-scalar-association-work´ Frozen environments reduce cumulative association Work from 48705 to 44349 and preserve atomic one-below refusal.
 #[test]
 fn bindings_lattice_scalar_association_work() -> TestResult {
     let selected = selected(&mut ledger()?)?;
     let case = selected.case();
     let before = case.source().owner().cas()?.counts();
-    for (work, accepted) in [(45_269, true), (45_268, false)] {
+    for (work, accepted) in [(44_349, true), (44_348, false)] {
         let mut budget = prior(work)?;
         let result = case.associate_inputs(&mut budget);
         if accepted {
@@ -157,10 +158,10 @@ fn bindings_lattice_scalar_association_work() -> TestResult {
 
 /// Complete lifecycle exhaustion and fresh replay publish no partial physical or CAS result.
 /// ´test:integration:bindings-lattice-scalar-cumulative-work´
-/// ´claim:bindings:lattice-scalar-cumulative-work´ The complete scalar lifecycle falls from 364597 to 360873 Work with unchanged evidence and atomic one-below refusal.
+/// ´claim:bindings:lattice-scalar-cumulative-work´ The complete scalar lifecycle falls from 364597 to 359953 Work with unchanged evidence and atomic one-below refusal.
 #[test]
 fn bindings_lattice_scalar_cumulative_work() -> TestResult {
-    for (work, accepted) in [(360_873, true), (360_872, false)] {
+    for (work, accepted) in [(359_953, true), (359_952, false)] {
         let mut budget = prior(work)?;
         let selected = selected(&mut budget)?;
         let before = selected.cas()?.counts();

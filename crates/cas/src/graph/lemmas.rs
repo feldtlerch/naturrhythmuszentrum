@@ -269,7 +269,7 @@ fn publish(
     };
     state.record(Undo::Vertex {
         id,
-        key: Some(key.clone()),
+        key: Some(key.clone().into()),
         policy: None,
     })?;
     let citation = EdgeIndex::new(state.graph.edge_count() + 2);

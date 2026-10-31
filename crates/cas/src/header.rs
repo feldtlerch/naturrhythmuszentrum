@@ -81,7 +81,12 @@ impl Cas {
             spaces,
         };
         let edges = header_edges(&header)?;
-        self.insert(state, Vertex::Header(header), &edges, pending, budget)
+        if matches!(draft, HeaderDraft::Frozen(_)) {
+            let key = crate::graph::StoredKey::header(&header, budget)?;
+            self.insert_key(state, Vertex::Header(header), &edges, pending, key, budget)
+        } else {
+            self.insert(state, Vertex::Header(header), &edges, pending, budget)
+        }
     }
 
     /// Resolve exactly one space for each fresh space-dependent declaration.

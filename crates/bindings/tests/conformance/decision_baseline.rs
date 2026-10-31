@@ -137,10 +137,10 @@ fn bindings_lc_materialization_baseline() -> TestResult {
 
 /// Freezing the source environment reduces cumulative declaration and copy Work from 24642 to 23783.
 /// ´test:integration:bindings-symbol-copy-decision-baseline´
-/// ´claim:bindings:bindings-symbol-copy-decision-baseline´ A source declaration and its unchanged copy graph succeed at 23783 Work and refuse at 23782.
+/// ´claim:bindings:bindings-symbol-copy-decision-baseline´ A source declaration and its unchanged copy graph succeed at 23553 Work and refuse at 23782.
 #[test]
 fn bindings_symbol_copy_decision_baseline() -> TestResult {
-    for (allowance, accepted) in [(23_783, true), (23_782, false)] {
+    for (allowance, accepted) in [(23_553, true), (23_552, false)] {
         let mut budget = Budget::new(Limits {
             work: allowance,
             ..Limits::default()
@@ -150,7 +150,7 @@ fn bindings_symbol_copy_decision_baseline() -> TestResult {
         let result = symbols.copy_result([1, 1], &mut budget);
         if accepted {
             result?;
-            assert_eq!(budget.usage().work, 23_783);
+            assert_eq!(budget.usage().work, 23_553);
         } else {
             let Err(nrz_bindings::AdmissionError::Algebra(fault)) = result else {
                 panic!("one-below symbol copy must refuse");

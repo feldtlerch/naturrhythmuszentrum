@@ -4,6 +4,7 @@
 use super::FrozenEnvironment;
 use crate::domain::HeaderDraft;
 use crate::limits::{Budget, Limits};
+use crate::solving::{ScalarSpaceData, SolveDraft};
 use crate::syntax::{
     AtomicSort, Declaration, Draft, Environment, ExpressionDraft, Extent, Field, Operator, Sort,
     SymbolRelation,
@@ -81,11 +82,11 @@ fn drafts(header: HeaderDraft) -> Vec<Draft> {
 
 /// Freeze and admission retain literal boundaries even with thirty unused declarations.
 /// ´test:unit:frozen-environment-work-boundaries´
-/// ´claim:cas:frozen-environment-work´ Three and thirty-three declarations freeze at 3046 and 67240 Work and admit fresh graphs at 8100 and 15672, preserving canonical bytes.
+/// ´claim:cas:frozen-environment-work´ Three and thirty-three declarations freeze at 3046 and 67240 Work and admit fresh graphs at 7870 and 13192, preserving canonical bytes.
 #[test]
 fn frozen_environment_work_boundaries() -> TestResult {
     for (count, freeze_work, admission_work, complete_work) in
-        [(3, 3_046, 8_100, 11_146), (33, 67_240, 15_672, 82_912)]
+        [(3, 3_046, 7_870, 10_916), (33, 67_240, 13_192, 80_432)]
     {
         let original = environment(count);
         for limit in [freeze_work, freeze_work - 1] {
@@ -178,4 +179,111 @@ fn exhausted(fault: &crate::Fault, limit: u64, needed: u64) {
     };
     assert_eq!(*budget, crate::limits::BudgetKind::Work);
     assert_eq!([*actual_limit, *actual_needed], [limit, needed]);
+}
+
+/// Segmented and ordinary keys select the same graph record in either insertion order.
+/// ´test:unit:frozen-header-keys-preserve-mixed-interning´
+/// ´claim:cas:frozen-header-mixed-interning´ Ordinary and shared header keys intern to identical existing records in either insertion order and with either scalar-space allocation order without changing canonical graph bytes.
+#[test]
+fn frozen_header_keys_preserve_mixed_interning() -> TestResult {
+    let original = environment(3);
+    let frozen = FrozenEnvironment::freeze(&original, &mut Budget::new(Limits::default())?)?;
+    for (shared_first, complex_first) in
+        [(false, false), (true, false), (false, true), (true, true)]
+    {
+        let mut cas = Cas::new(Limits::default())?;
+        if complex_first {
+            let space = Draft::Solve(SolveDraft::ScalarSpace(ScalarSpaceData {
+                specification: "scalar.complex".into(),
+                version: 1,
+            }));
+            cas.admit(
+                std::slice::from_ref(&space),
+                &mut Budget::new(Limits::default())?,
+            )?;
+        }
+        let headers = [
+            HeaderDraft::Core(original.clone()),
+            HeaderDraft::Frozen(frozen.clone()),
+        ];
+        let first = usize::from(shared_first);
+        let expected = cas.admit(
+            &drafts(headers[first].clone()),
+            &mut Budget::new(Limits::default())?,
+        )?;
+        let before = cas.canonical_snapshot(&mut Budget::new(Limits::default())?)?;
+        let counts = cas.counts();
+        let actual = cas.admit(
+            &drafts(headers[1 - first].clone()),
+            &mut Budget::new(Limits::default())?,
+        )?;
+        assert_eq!(actual, expected);
+        assert_eq!(cas.counts(), counts);
+        assert_eq!(
+            cas.canonical_snapshot(&mut Budget::new(Limits::default())?)?,
+            before
+        );
+    }
+    Ok(())
+}
+
+/// Replacing the complete declaration signature cannot select a header from its prior revision.
+/// ´test:unit:frozen-header-replaced-environment-refuses-stale-drafts´
+/// ´claim:cas:frozen-header-replaced-environment´ Both ordinary and shared admission refuse stale symbol sorts after environment replacement atomically, while matching replacement drafts retain identical canonical bytes.
+#[test]
+fn frozen_header_replaced_environment_refuses_stale_drafts() -> TestResult {
+    let original = environment(3);
+    let mut replacement = original.clone();
+    let changed_sort = Sort::Value(AtomicSort::Matrix {
+        field: Field::Real,
+        rows: Extent::Literal(2),
+        columns: Extent::Literal(1),
+    });
+    for declaration in &mut replacement.declarations {
+        declaration.sort = changed_sort.clone();
+    }
+    let frozen = FrozenEnvironment::freeze(&replacement, &mut Budget::new(Limits::default())?)?;
+    let mut snapshots = Vec::new();
+    for header in [HeaderDraft::Core(replacement), HeaderDraft::Frozen(frozen)] {
+        let mut cas = Cas::new(Limits::default())?;
+        let prior = if matches!(header, HeaderDraft::Frozen(_)) {
+            HeaderDraft::Frozen(FrozenEnvironment::freeze(
+                &original,
+                &mut Budget::new(Limits::default())?,
+            )?)
+        } else {
+            HeaderDraft::Core(original.clone())
+        };
+        let old = cas.admit(&drafts(prior), &mut Budget::new(Limits::default())?)?;
+        let before = cas.canonical_snapshot(&mut Budget::new(Limits::default())?)?;
+        let counts = cas.counts();
+        let mut budget = Budget::new(Limits::default())?;
+        let Err(fault) = cas.admit(&drafts(header.clone()), &mut budget) else {
+            panic!("replacement environment must refuse stale Free sorts");
+        };
+        assert_eq!(
+            fault.kind,
+            crate::FaultKind::Invalid(crate::InvalidCode::SymbolSortMismatch)
+        );
+        assert!(budget.usage().work > 0);
+        assert_eq!(cas.counts(), counts);
+        assert_eq!(
+            cas.canonical_snapshot(&mut Budget::new(Limits::default())?)?,
+            before
+        );
+        let mut matching = drafts(header);
+        for draft in &mut matching {
+            if let Draft::Expression(value) = draft
+                && matches!(value.operator, Operator::Free(_))
+            {
+                value.sort = changed_sort.clone();
+            }
+        }
+        let fresh = cas.admit(&matching, &mut Budget::new(Limits::default())?)?;
+        assert_ne!(fresh[0], old[0]);
+        assert_ne!(fresh[1], old[1]);
+        snapshots.push(cas.canonical_snapshot(&mut Budget::new(Limits::default())?)?);
+    }
+    assert_eq!(snapshots[0], snapshots[1]);
+    Ok(())
 }

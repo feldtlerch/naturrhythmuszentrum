@@ -174,15 +174,15 @@ fn quantity_operation_work_boundaries() -> TestResult {
         (Action::Import, 2),
         (Action::Point, 1),
         (Action::Difference, 1),
-        (Action::Add, 11_150),
-        (Action::Subtract, 11_150),
-        (Action::PointDifference, 11_150),
-        (Action::Translate, 11_150),
-        (Action::Convert, 11_150),
-        (Action::Normalize, 11_150),
-        (Action::Restore, 11_150),
-        (Action::Narrow, 11_150),
-        (Action::Widen, 11_150),
+        (Action::Add, 10_920),
+        (Action::Subtract, 10_920),
+        (Action::PointDifference, 10_920),
+        (Action::Translate, 10_920),
+        (Action::Convert, 10_920),
+        (Action::Normalize, 10_920),
+        (Action::Restore, 10_920),
+        (Action::Narrow, 10_920),
+        (Action::Widen, 10_920),
     ] {
         for limit in [needed, needed - 1] {
             let mut fixture = Fixture::new()?;
@@ -237,10 +237,10 @@ fn work_refusal(error: &(dyn std::error::Error + 'static), limit: u64, needed: u
 
 /// A warm store still admits a fresh complete graph owner for each result.
 /// ´test:integration:quantity-warm-conversion-work-boundary´
-/// ´claim:matrix:quantity-warm-conversion-work´ Cold and warm conversions cost 11150 and 8157 caller Work and retain distinct complete output symbols.
+/// ´claim:matrix:quantity-warm-conversion-work´ Cold and warm conversions cost 10920 and 7927 caller Work and retain distinct complete output symbols.
 #[test]
 fn quantity_warm_conversion_work_boundary() -> TestResult {
-    for limit in [19_307, 19_306] {
+    for limit in [18_847, 18_846] {
         let mut fixture = Fixture::new()?;
         let target = fixture.point.descriptor().coherent();
         let mut budget = Budget::new(Limits {
@@ -251,15 +251,15 @@ fn quantity_warm_conversion_work_boundary() -> TestResult {
             fixture
                 .context
                 .convert(&mut fixture.heap, &fixture.point, &target, &mut budget)?;
-        assert_eq!(budget.usage().work, 11_150);
+        assert_eq!(budget.usage().work, 10_920);
         let usage = fixture.heap.provenance_usage();
         let result =
             fixture
                 .context
                 .convert(&mut fixture.heap, &fixture.point, &target, &mut budget);
-        if limit == 19_307 {
+        if limit == 18_847 {
             let second = result?;
-            assert_eq!(budget.usage().work - 11_150, 8_157);
+            assert_eq!(budget.usage().work - 10_920, 7_927);
             assert_eq!(first.descriptor(), second.descriptor());
             assert_ne!(first.symbol().node(), second.symbol().node());
             assert_ne!(
@@ -298,7 +298,7 @@ fn quantity_warm_conversion_work_boundary() -> TestResult {
             let Err(fault) = result else {
                 panic!("one-below warm conversion must refuse");
             };
-            work_refusal(&fault, 19_306, 19_307)?;
+            work_refusal(&fault, 18_846, 18_847)?;
             assert_eq!(fixture.heap.provenance_usage(), usage);
         }
         assert_eq!(budget.usage().work, limit);
@@ -309,10 +309,10 @@ fn quantity_warm_conversion_work_boundary() -> TestResult {
 
 /// Array entry work increases without repeating environment freezing for a compatible schema.
 /// ´test:integration:quantity-array-conversion-work-boundary´
-/// ´claim:matrix:quantity-array-conversion-work´ Four-entry conversions cost 11153 cold or 8132 warm caller Work and refuse atomically one unit below.
+/// ´claim:matrix:quantity-array-conversion-work´ Four-entry conversions cost 10923 cold or 7902 warm caller Work and refuse atomically one unit below.
 #[test]
 fn quantity_array_conversion_work_boundary() -> TestResult {
-    for (warm, needed) in [(false, 11_153), (true, 8_132)] {
+    for (warm, needed) in [(false, 10_923), (true, 7_902)] {
         for limit in [needed, needed - 1] {
             let context = super::context()?;
             let mut heap = Heap::new(HeapLimits::default())?;

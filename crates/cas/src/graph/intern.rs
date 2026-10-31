@@ -10,6 +10,35 @@ use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 
 use super::LogicalId;
 
+mod key;
+pub(crate) use key::StoredKey;
+
+/// Borrowed probes and retained keys expose the same ordered canonical byte sequence.
+#[derive(Clone)]
+enum KeyBytes<'a> {
+    /// Existing contiguous probes need no allocation or retained owner.
+    Flat(Cow<'a, [u8]>),
+    /// An owned index key or a borrowed probe of that same segmented representation.
+    Retained(Cow<'a, StoredKey>),
+}
+
+impl KeyBytes<'_> {
+    /// Borrow each segment without copying the immutable environment.
+    fn parts(&self) -> [&[u8]; 3] {
+        match self {
+            Self::Flat(bytes) => [bytes, &[], &[]],
+            Self::Retained(key) => key.parts(),
+        }
+    }
+
+    /// Canonical byte length, independent of how those bytes are retained.
+    fn len(&self) -> usize {
+        self.parts()
+            .into_iter()
+            .fold(0_usize, |length, part| length.saturating_add(part.len()))
+    }
+}
+
 /// Cumulative diagnostic work at a quiescent store boundary, never a budget charge.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) struct InterningSnapshot {
@@ -55,12 +84,12 @@ impl StoreToken {
     }
 }
 
-/// A retained key owns its existing bytes and shares the existing store-token allocation.
+/// A retained key owns ordinary bytes or a shared signature, plus the existing store token.
 /// A probe borrows bytes, allocating and cloning nothing. Only retained keys have an owner.
 #[derive(Clone)]
 struct Key<'a> {
     /// Unchanged structural bytes, borrowed for lookup and owned for retention/removal.
-    bytes: Cow<'a, [u8]>,
+    bytes: KeyBytes<'a>,
     /// Diagnostic destination; ignored by every ordering/equality decision.
     owner: Option<Arc<StoreToken>>,
 }
@@ -68,7 +97,10 @@ struct Key<'a> {
 impl fmt::Debug for Key<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         // State diagnostics describe retained keys, not cumulative work that survives rollback.
-        self.bytes.fmt(formatter)
+        formatter
+            .debug_list()
+            .entries(self.bytes.parts().into_iter().flatten())
+            .finish()
     }
 }
 
@@ -76,7 +108,13 @@ impl Ord for Key<'_> {
     fn cmp(&self, other: &Self) -> Ordering {
         let mut compared_bytes = 0_u64;
         let mut order = Ordering::Equal;
-        for (left, right) in self.bytes.iter().zip(other.bytes.iter()) {
+        for (left, right) in self
+            .bytes
+            .parts()
+            .into_iter()
+            .flatten()
+            .zip(other.bytes.parts().into_iter().flatten())
+        {
             compared_bytes = compared_bytes.saturating_add(1);
             order = left.cmp(right);
             if order != Ordering::Equal {
@@ -126,26 +164,39 @@ impl InternIndex {
     /// Probe without copying key bytes or allocating a diagnostic owner.
     pub(crate) fn get<'a>(&'a self, bytes: &'a [u8]) -> Option<&'a LogicalId> {
         self.entries.get(&Key {
-            bytes: Cow::Borrowed(bytes),
+            bytes: KeyBytes::Flat(Cow::Borrowed(bytes)),
+            owner: None,
+        })
+    }
+
+    /// Probe an already prepared key without acquiring or copying its retained segments.
+    pub(crate) fn get_key<'a>(&'a self, bytes: &'a StoredKey) -> Option<&'a LogicalId> {
+        self.entries.get(&Key {
+            bytes: KeyBytes::Retained(Cow::Borrowed(bytes)),
             owner: None,
         })
     }
 
     /// Move the existing key buffer into the map and share the existing token allocation.
     pub(crate) fn insert(&mut self, bytes: Vec<u8>, id: LogicalId, owner: &Arc<StoreToken>) {
+        self.insert_key(bytes.into(), id, owner);
+    }
+
+    /// Retain the same segmented key used by preflight and the rollback journal.
+    pub(crate) fn insert_key(&mut self, bytes: StoredKey, id: LogicalId, owner: &Arc<StoreToken>) {
         self.entries.insert(
             Key {
-                bytes: Cow::Owned(bytes),
+                bytes: KeyBytes::Retained(Cow::Owned(bytes)),
                 owner: Some(Arc::clone(owner)),
             },
             id,
         );
     }
 
-    /// Consume the journal's existing buffer; removal comparisons remain diagnostic work.
-    pub(crate) fn remove(&mut self, bytes: Vec<u8>) {
+    /// Consume the journal's existing key; removal compares the complete canonical sequence.
+    pub(crate) fn remove(&mut self, bytes: StoredKey) {
         self.entries.remove(&Key {
-            bytes: Cow::Owned(bytes),
+            bytes: KeyBytes::Retained(Cow::Owned(bytes)),
             owner: None,
         });
     }
@@ -153,11 +204,12 @@ impl InternIndex {
 
 #[cfg(test)]
 mod tests {
-    use super::{AtomicU64, Cow, InterningSnapshot, Key, StoreToken};
+    use super::{AtomicU64, Cow, InterningSnapshot, Key, KeyBytes, StoreToken};
     use std::sync::Arc;
 
     /// Empty, equal, differing and prefix keys retain byte order and count only examined pairs.
     /// ´test:unit:structural-key-order-and-prefix-counts´
+    /// ´claim:cas:structural-key-order-and-prefix-counts´ Structural keys preserve ordinary byte ordering and count each compared byte pair once.
     #[test]
     fn structural_key_order_and_prefix_counts() {
         let examples: &[(&[u8], &[u8], u64)] = &[
@@ -171,11 +223,11 @@ mod tests {
         for &(left, right, compared_bytes) in examples {
             let owner = Arc::new(StoreToken::default());
             let retained = Key {
-                bytes: Cow::Owned(left.to_vec()),
+                bytes: KeyBytes::Flat(Cow::Owned(left.to_vec())),
                 owner: Some(Arc::clone(&owner)),
             };
             let probe = Key {
-                bytes: Cow::Borrowed(right),
+                bytes: KeyBytes::Flat(Cow::Borrowed(right)),
                 owner: None,
             };
             assert_eq!(retained.cmp(&probe), left.cmp(right));
@@ -199,6 +251,7 @@ mod tests {
 
     /// Counter overflow neither wraps nor affects the total byte order.
     /// ´test:unit:interning-diagnostics-saturate-without-changing-order´
+    /// ´claim:cas:interning-diagnostics-saturate-without-changing-order´ Saturated diagnostic counters preserve the same structural key ordering.
     #[test]
     fn interning_diagnostics_saturate_without_changing_order() {
         let owner = Arc::new(StoreToken {
@@ -206,11 +259,11 @@ mod tests {
             compared_bytes: AtomicU64::new(u64::MAX - 1),
         });
         let retained = Key {
-            bytes: Cow::Owned(vec![1, 2]),
+            bytes: KeyBytes::Flat(Cow::Owned(vec![1, 2])),
             owner: Some(Arc::clone(&owner)),
         };
         let probe = Key {
-            bytes: Cow::Borrowed(&[1, 3]),
+            bytes: KeyBytes::Flat(Cow::Borrowed(&[1, 3])),
             owner: None,
         };
         assert!(retained < probe);

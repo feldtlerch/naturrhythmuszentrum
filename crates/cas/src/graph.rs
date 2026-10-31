@@ -28,6 +28,7 @@ mod lemmas;
 pub(crate) use lemmas::{PendingJudgment, PiIndex, PiInventory, ScalarInventory};
 
 pub(crate) use intern::InterningSnapshot;
+pub(crate) use intern::StoredKey;
 use intern::{InternIndex, StoreToken};
 
 /// A disjoint namespace for logical identifiers.
@@ -805,7 +806,7 @@ enum Undo {
         /// Logical identifier allocated during the batch.
         id: LogicalId,
         /// Only interned vertex kinds insert a structural key.
-        key: Option<Vec<u8>>,
+        key: Option<StoredKey>,
         /// Policy identity indexed by this insertion, if present.
         policy: Option<(String, u32)>,
     },
@@ -1907,11 +1908,29 @@ impl Cas {
         pending: u64,
         budget: &mut Budget,
     ) -> Result<LogicalId, Fault> {
+        let (_, key) = vertex_key(&vertex, state, budget)?;
+        self.insert_key(state, vertex, edges, pending, key.into(), budget)
+    }
+
+    /// Publish a prepared complete key through the same containment and rollback boundary.
+    /// Callers construct the key from this exact vertex before entering this private boundary.
+    pub(crate) fn insert_key(
+        &self,
+        state: &mut State,
+        vertex: Vertex,
+        edges: &[(LogicalId, Edge)],
+        pending: u64,
+        key: StoredKey,
+        budget: &mut Budget,
+    ) -> Result<LogicalId, Fault> {
         let at = Location::new("vertex admission");
-        let (kind, key) = vertex_key(&vertex, state, budget)?;
+        let kind = vertex_kind(&vertex);
         let interned = !matches!(kind, VertexKind::Occurrence | VertexKind::Binder);
-        if interned && let Some(id) = state.interned(&key, budget)? {
-            return Ok(id);
+        if interned {
+            lookup_work(key.len(), budget, Location::new("interning lookup"))?;
+            if let Some(id) = state.intern.get_key(&key) {
+                return Ok(*id);
+            }
         }
         let node_count = size(state.graph.node_count(), at)?
             .checked_add(1)
@@ -1977,7 +1996,7 @@ impl Cas {
         state.indices.insert(id, index);
         state.next.insert(kind, next);
         if interned {
-            state.intern.insert(key, id, &self.token);
+            state.intern.insert_key(key, id, &self.token);
         }
         state.payload = payload;
         Ok(id)

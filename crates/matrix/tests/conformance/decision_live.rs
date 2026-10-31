@@ -399,10 +399,10 @@ fn decision_live_admission_work_boundaries() -> TestResult {
 
 /// Physical source, case, association and every live stage share the original caller allowance.
 /// ´test:integration:decision-live-complete-lc-work-boundaries´
-/// ´claim:matrix:decision-live-complete-lc-work-boundaries´ Frozen input environments and exact count-sign admission reduce complete cumulative LC Work from 282308 to 280302 with atomic one-below refusal.
+/// ´claim:matrix:decision-live-complete-lc-work-boundaries´ Frozen input environments and exact count-sign admission reduce complete cumulative LC Work from 282308 to 279842 with atomic one-below refusal.
 #[test]
 fn decision_live_complete_lc_work_boundaries() -> TestResult {
-    for (work, accepted) in [(280_302, true), (280_301, false)] {
+    for (work, accepted) in [(279_842, true), (279_841, false)] {
         let mut budget = nrz_bindings::Budget::new(nrz_bindings::Limits {
             work,
             ..nrz_bindings::Limits::default()
@@ -433,7 +433,7 @@ fn decision_live_complete_lc_work_boundaries() -> TestResult {
         let result = published.count(&heap, 3, &mut budget);
         if accepted {
             assert_eq!(result?.current(&heap, &mut ledger()?)?.value(), 3);
-            assert_eq!(budget.usage().work, 280_302);
+            assert_eq!(budget.usage().work, 279_842);
         } else {
             let Err(LiveDecisionError::Admission(error)) = result else {
                 panic!("one-below complete LC Work must refuse");
@@ -510,7 +510,7 @@ fn lattice_live_scalar_baseline() -> TestResult {
         graph_records
     );
     assert_eq!(heap.provenance_usage(), records);
-    assert_eq!(originals, 107_572);
+    assert_eq!(originals, 107_112);
     assert_eq!(captured - originals, 2952);
     assert_eq!(selected - captured, 166_952);
     assert_eq!(admitted - selected, 2491);
@@ -519,7 +519,7 @@ fn lattice_live_scalar_baseline() -> TestResult {
     assert_eq!(current - materialized, 66);
     assert_eq!(retired - current, 34);
     assert_eq!(budget.usage().work - retired, 1);
-    assert_eq!(budget.usage().work, 280_386);
+    assert_eq!(budget.usage().work, 279_926);
     assert_eq!(graph_records.vertices, 36);
     assert_eq!(graph_records.edges, 96);
     assert_eq!(records.records(), 0);

@@ -148,7 +148,7 @@ impl Cas {
             let undo = match entry {
                 PendingJudgment::NewEnclosure(inventory) => Undo::Vertex {
                     id,
-                    key: Some(inventory.key.clone()),
+                    key: Some(inventory.key.clone().into()),
                     policy: None,
                 },
                 PendingJudgment::NewScalar(inventory) => Undo::ScalarJudgment {

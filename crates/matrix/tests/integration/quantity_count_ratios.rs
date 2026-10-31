@@ -184,7 +184,7 @@ fn work_refusal<P: Scalar>(error: &QuantityError<P>, limit: u64, needed: u64) ->
 
 /// Each boundary has a fresh context; warm trials retain one successful import first.
 fn import_boundary<P: Scalar + 'static>() -> TestResult {
-    for (warm, needed) in [(false, 11_246), (true, 8_225)] {
+    for (warm, needed) in [(false, 11_016), (true, 7_995)] {
         for limit in [needed, needed - 1] {
             let context = context()?;
             let source = ratio(&context, 1, 3)?;
@@ -242,12 +242,12 @@ fn import_boundary<P: Scalar + 'static>() -> TestResult {
 
 /// Exact scalar import and source-retaining arithmetic have literal fresh-store boundaries.
 /// ´test:integration:quantity-count-ratio-materialization-work´
-/// ´claim:matrix:quantity-count-ratio-materialization-work´ Ratio imports require 11246 cold or 8225 warm Work in either format and source-retaining warm sums require 8131, with atomic refusal one unit below.
+/// ´claim:matrix:quantity-count-ratio-materialization-work´ Ratio imports require 11016 cold or 7995 warm Work in either format and source-retaining warm sums require 7901, with atomic refusal one unit below.
 #[test]
 fn quantity_count_ratio_materialization_work() -> TestResult {
     import_boundary::<f32>()?;
     import_boundary::<f64>()?;
-    for limit in [8_131, 8_130] {
+    for limit in [7_901, 7_900] {
         let context = context()?;
         let source = ratio(&context, 1, 3)?;
         let mut heap = Heap::new(HeapLimits::new(6, 6, 2))?;
@@ -261,14 +261,14 @@ fn quantity_count_ratio_materialization_work() -> TestResult {
             ..Limits::default()
         })?;
         let result = context.add(&mut heap, &input, &input, &mut budget);
-        if limit == 8_131 {
+        if limit == 7_901 {
             assert_eq!(result?.count_ratio_sources().len(), 2);
-            assert_eq!(budget.usage().work, 8_131);
+            assert_eq!(budget.usage().work, 7_901);
         } else {
             let Err(fault) = result else {
                 panic!("one-below sum Work must refuse");
             };
-            work_refusal(&fault, 8_130, 8_131)?;
+            work_refusal(&fault, 7_900, 7_901)?;
             assert!(budget.usage().work > 0);
             assert!(budget.usage().work <= limit);
             context.add(
