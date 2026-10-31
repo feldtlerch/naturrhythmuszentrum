@@ -54,4 +54,65 @@ impl Registry {
         let measure = Measure::new(name, Scale::Expression(scale), Rational::zero())?;
         Descriptor::new(derived.kind().clone(), measure, Role::Difference)
     }
+    /// Admit an integer coordinate power without converting the original coordinate.
+    /// # Errors
+    /// Refuses points, counts, unsupported semantic powers and exhausted exact resources.
+    pub fn coordinate_integer_power(
+        &self,
+        base: &Descriptor,
+        exponent: i64,
+        budget: &mut Budget,
+    ) -> Result<Descriptor, UnitError> {
+        let exact = Rational::from_ratio(exponent, 1, budget)?;
+        let derived = self.power(base, &exact)?;
+        let scale = base.measure().scale().pow(exponent, budget)?;
+        let digits = exponent
+            .unsigned_abs()
+            .checked_ilog10()
+            .map_or(1, |value| value + 1);
+        let length = base
+            .measure()
+            .name()
+            .len()
+            .saturating_add(usize::try_from(digits).unwrap_or(usize::MAX))
+            .saturating_add(usize::from(exponent < 0))
+            .saturating_add(3);
+        coordinate_name(length, budget)?;
+        let measure = Measure::new(
+            format!("({}^{exponent})", base.measure().name()),
+            Scale::Expression(scale),
+            Rational::zero(),
+        )?;
+        Descriptor::new(derived.kind().clone(), measure, Role::Difference)
+    }
+
+    /// Admit the exact positive coordinate scale and half-dimensional square-root kind.
+    /// # Errors
+    /// Refuses unadmitted fractional dimensions, unsupported scale roots, points and counts.
+    pub fn coordinate_square_root(
+        &self,
+        base: &Descriptor,
+        budget: &mut Budget,
+    ) -> Result<Descriptor, UnitError> {
+        let half = Rational::from_ratio(1, 2, budget)?;
+        let derived = self.power(base, &half)?;
+        let scale = base.measure().scale_witness().sqrt(budget)?;
+        coordinate_name(base.measure().name().len().saturating_add(6), budget)?;
+        let measure = Measure::new(
+            format!("sqrt({})", base.measure().name()),
+            Scale::Expression(scale),
+            Rational::zero(),
+        )?;
+        Descriptor::new(derived.kind().clone(), measure, Role::Difference)
+    }
+}
+
+/// Prepay the exact unary measure spelling before allocating its reporting name.
+fn coordinate_name(length: usize, budget: &mut Budget) -> Result<(), UnitError> {
+    let bytes = u64::try_from(length).unwrap_or(u64::MAX);
+    let at = Location::new("coordinate power measure name");
+    budget.check(BudgetKind::OutputBytes, bytes, at)?;
+    budget.check(BudgetKind::StagedPayloadBytes, bytes, at)?;
+    budget.work(bytes, at)?;
+    Ok(())
 }

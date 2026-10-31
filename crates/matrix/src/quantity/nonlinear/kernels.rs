@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Executed full-box scalar certificates publish through the ordinary bound transaction.
 
+mod unary;
+
 use super::{QuantityKernelEvidence, ScalarQuantityOp, ScalarQuantityRecipe};
 use crate::kernels::arithmetic::{operand, operand_error};
 use crate::publication::Payload;
@@ -44,7 +46,6 @@ pub(crate) fn evaluate<P: Scalar + 'static, Q: Scalar + 'static>(
     context: &ArithmeticContext,
 ) -> Result<(Payload<Q>, RecipeEvidence), OperationError> {
     let left = channels(views.first().ok_or(OperationError::InputCount)?)?;
-    let right = channels(views.get(1).ok_or(OperationError::InputCount)?)?;
     let mut schedule = Schedule {
         context,
         budget: KernelBudget::new(recipe.allowance),
@@ -53,17 +54,23 @@ pub(crate) fn evaluate<P: Scalar + 'static, Q: Scalar + 'static>(
     let mut centers = crate::binding::buffer(1)?;
     let mut totals = crate::binding::buffer(1)?;
     let mut errors = crate::binding::buffer(1)?;
-    let operation = match recipe.operation {
-        ScalarQuantityOp::Product => BinaryOp::Multiply,
-        ScalarQuantityOp::Quotient => BinaryOp::Divide,
+    let outcome = match recipe.operation {
+        ScalarQuantityOp::Product | ScalarQuantityOp::Quotient => {
+            let right = channels(views.get(1).ok_or(OperationError::InputCount)?)?;
+            let operation = if recipe.operation == ScalarQuantityOp::Product {
+                BinaryOp::Multiply
+            } else {
+                BinaryOp::Divide
+            };
+            schedule.binary(left, right, operation)
+        }
+        ScalarQuantityOp::IntegerPower(exponent) => schedule.unary(left, Some(exponent)),
+        ScalarQuantityOp::SquareRoot => schedule.unary(left, None),
     };
-    let [center, total, error] =
-        schedule
-            .binary(left, right, operation)
-            .map_err(|cause| crate::KernelError::Quantity {
-                cause,
-                work: schedule.budget.usage().work,
-            })?;
+    let [center, total, error] = outcome.map_err(|cause| crate::KernelError::Quantity {
+        cause,
+        work: schedule.budget.usage().work,
+    })?;
     centers.push(crate::conversion::same_format(center)?);
     totals.push(crate::conversion::same_format(total)?);
     errors.push(crate::conversion::same_format(error)?);
@@ -175,6 +182,15 @@ impl Schedule<'_> {
         } else {
             left.center.get() / right.center.get()
         })?;
+        self.finish(center, outputs)
+    }
+
+    /// Pack complete total and numerical-only boxes around the chosen finite native center.
+    fn finish<P: Scalar>(
+        &mut self,
+        center: Finite<P>,
+        outputs: [Enclosure<P>; 3],
+    ) -> Result<[P; 3], KernelError> {
         let total = self
             .sum(Enclosure::singleton(center), outputs[1].negated())?
             .abs()

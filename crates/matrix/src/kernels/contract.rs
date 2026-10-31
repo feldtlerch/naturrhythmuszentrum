@@ -27,6 +27,10 @@ pub enum KernelKind {
     ScalarQuantityProduct,
     /// A scalar coordinate quotient with exported reciprocal and product certificates.
     ScalarQuantityQuotient,
+    /// An exact integer scalar quantity power built from certified products and reciprocals.
+    ScalarQuantityIntegerPower,
+    /// A scalar quantity positive square root with squared-endpoint evidence.
+    ScalarQuantitySquareRoot,
     /// A direct native image of a complete deterministic box.
     Elementwise(super::Elementwise),
 }

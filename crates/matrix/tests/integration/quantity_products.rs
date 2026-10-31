@@ -18,7 +18,11 @@ use nrz_scalar::{KernelLaw, Scalar};
 use std::rc::Rc;
 
 /// Exact physical fixture with independently stated SI exponents and scale.
-fn descriptor(name: &str, exponents: [i64; 7], scale: (i64, u64)) -> TestResult<Descriptor> {
+pub(super) fn descriptor(
+    name: &str,
+    exponents: [i64; 7],
+    scale: (i64, u64),
+) -> TestResult<Descriptor> {
     let mut budget = Budget::new(Limits::default())?;
     Ok(Descriptor::new(
         Kind::Named(name.into(), Box::new(Dimension::integers(exponents)?)),
@@ -61,7 +65,7 @@ fn fixture() -> TestResult<(QuantityContext, [Descriptor; 3])> {
 }
 
 /// Import explicit complete deterministic and numerical-only scalar channels.
-fn bounded<P: Scalar + 'static>(
+pub(super) fn bounded<P: Scalar + 'static>(
     context: &QuantityContext,
     heap: &mut Heap,
     descriptor: &Descriptor,
@@ -84,7 +88,10 @@ fn bounded<P: Scalar + 'static>(
 }
 
 /// Every independently stored companion targets the fresh value version.
-fn channels<P: Scalar + 'static>(heap: &Heap, quantity: &Quantity<P>) -> TestResult<[f64; 3]> {
+pub(super) fn channels<P: Scalar + 'static>(
+    heap: &Heap,
+    quantity: &Quantity<P>,
+) -> TestResult<[f64; 3]> {
     let view = quantity.view(heap)?;
     let total = heap.companion(view.bound().ok_or("total")?)?;
     let error = heap.companion(view.evaluation().ok_or("error")?)?;
@@ -176,7 +183,7 @@ fn physical<P: Scalar + 'static>() -> TestResult {
 }
 
 /// Check a center and both companion enclosures against independent integer truth.
-fn check_result<P: Scalar + 'static>(
+pub(super) fn check_result<P: Scalar + 'static>(
     heap: &Heap,
     result: &Quantity<P>,
     descriptor: &Descriptor,
@@ -310,7 +317,7 @@ fn quantity_products_companion_oracles() -> TestResult {
 }
 
 /// Borrow the executed certificates from the ordinary current operation record.
-fn evidence<'h, P: Scalar + 'static>(
+pub(super) fn evidence<'h, P: Scalar + 'static>(
     heap: &'h Heap,
     quantity: &Quantity<P>,
 ) -> TestResult<&'h nrz_matrix::QuantityKernelEvidence> {

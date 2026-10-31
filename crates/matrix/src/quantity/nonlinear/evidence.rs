@@ -57,6 +57,10 @@ pub(super) enum ScalarQuantityOp {
     Product,
     /// Nonzero reciprocal followed by product.
     Quotient,
+    /// Original exact signed integer exponent with strict zero-power definedness.
+    IntegerPower(i64),
+    /// Strictly positive square root with squared-endpoint certificates.
+    SquareRoot,
 }
 
 impl ScalarQuantityOp {
@@ -65,6 +69,8 @@ impl ScalarQuantityOp {
         match self {
             Self::Product => KernelKind::ScalarQuantityProduct,
             Self::Quotient => KernelKind::ScalarQuantityQuotient,
+            Self::IntegerPower(_) => KernelKind::ScalarQuantityIntegerPower,
+            Self::SquareRoot => KernelKind::ScalarQuantitySquareRoot,
         }
     }
 }

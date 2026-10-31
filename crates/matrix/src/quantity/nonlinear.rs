@@ -3,6 +3,7 @@
 
 mod evidence;
 mod kernels;
+mod unary;
 pub use evidence::QuantityKernelEvidence;
 use evidence::ScalarQuantityOp;
 
@@ -34,19 +35,39 @@ impl ScalarQuantityRecipe {
     }
 
     /// Complete successfully exported record count, including output radius packing.
-    pub(crate) const fn records(self) -> usize {
+    pub(crate) fn records(self) -> usize {
         match self.operation {
             ScalarQuantityOp::Product => 9,
             ScalarQuantityOp::Quotient => 12,
+            ScalarQuantityOp::IntegerPower(exponent) => {
+                4 + 3 * power_products(exponent) + if exponent <= 0 { 3 } else { 0 }
+            }
+            ScalarQuantityOp::SquareRoot => 7,
         }
     }
 
     /// Complete scalar construction, export and native-center schedule.
-    pub(crate) const fn work(self) -> usize {
+    pub(crate) fn work(self) -> usize {
         match self.operation {
             ScalarQuantityOp::Product => 1_681,
             ScalarQuantityOp::Quotient => 2_197,
+            ScalarQuantityOp::IntegerPower(exponent) => {
+                744 + 565 * power_products(exponent)
+                    + if exponent <= 0 { 516 } else { 0 }
+                    + usize::from(exponent < 0)
+            }
+            ScalarQuantityOp::SquareRoot => 1_258,
         }
+    }
+}
+
+/// Squaring plus noninitial accumulation count, bounded by the exact integer's bit length.
+fn power_products(exponent: i64) -> usize {
+    let magnitude = exponent.unsigned_abs();
+    if magnitude == 0 {
+        0
+    } else {
+        usize::try_from(magnitude.ilog2() + magnitude.count_ones() - 1).unwrap_or(usize::MAX)
     }
 }
 
@@ -105,18 +126,7 @@ impl QuantityContext {
     ) -> Result<Quantity<P>, QuantityError<P>> {
         charge(budget, 1)?;
         for descriptor in [left.descriptor(), right.descriptor()] {
-            if matches!(
-                descriptor.kind(),
-                Kind::Uncertainty(
-                    UncertaintyMode::Standard
-                        | UncertaintyMode::RelativeStandard
-                        | UncertaintyMode::Variance
-                        | UncertaintyMode::Covariance,
-                    ..
-                )
-            ) {
-                return Err(QuantityError::NonlinearStatistics);
-            }
+            Self::nonlinear_kind::<P>(descriptor)?;
         }
         let descriptor = self.declarations.registry().coordinate_binary(
             operation,
@@ -147,6 +157,23 @@ impl QuantityContext {
         )?;
         result.counts = counts;
         Ok(result)
+    }
+
+    /// Statistical value descriptors cannot enter deterministic nonlinear transport.
+    const fn nonlinear_kind<P: Scalar>(descriptor: &Descriptor) -> Result<(), QuantityError<P>> {
+        if matches!(
+            descriptor.kind(),
+            Kind::Uncertainty(
+                UncertaintyMode::Standard
+                    | UncertaintyMode::RelativeStandard
+                    | UncertaintyMode::Variance
+                    | UncertaintyMode::Covariance,
+                ..
+            )
+        ) {
+            return Err(QuantityError::NonlinearStatistics);
+        }
+        Ok(())
     }
 
     /// Retain exact presentation measures beside the admitted coherent tangent shapes.
