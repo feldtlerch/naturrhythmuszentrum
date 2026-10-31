@@ -1,0 +1,113 @@
+<!-- SPDX-License-Identifier: CC0-1.0 -->
+
+# Symbolic trigonometry and formal truncated series · `spec:nrz:cas-trig-series-concept`
+
+**Requirement (Concept scope)** · `req:nrz:cas-trig-series-purpose`
+
+This concept defines symbolic trigonometric primitives and a formal truncated power series layer, and introduces no implementation, public API, registered primitive or delivery commitment. Trigonometric nodes and trigonometric integration are absent; for series, this concept proposes the general truncated-series object and operations, while existing represented series requests remain non-executable (`rule:nrz:cas-limits-and-series`), (`def:nrz:cas-design-interning`). Existing finite Taylor sums inside certified enclosures and piecewise side-series machinery retain their narrower contracts (`spec:nrz:cas-enclosures-concept`), (`rule:nrz:cas-piecewise-limits-series`).
+
+## Symbolic trigonometric family · `sec:nrz:cas-trig-series-nodes`
+
+**Decision (Closed operators and real admission)** · `dec:nrz:cas-trig-series-closed-real`
+
+Sine, cosine and arctangent are proposed as three new closed operator variants beside the existing closed logarithm, exponential, sigmoid and hyperbolic tangent family. Each takes exactly one Real-sorted scalar with checked Real ambient and returns a Real-sorted scalar with checked Real ambient. Complex operands refuse at sort admission, including Complex expressions whose values happen to be real. This follows the real-only clamp regularity precedent (`[CAS-rule:cas:enclosure-clamp-regularity]`) and preserves immutable declaration sorts and explicit placements (`def:nrz:cas-symbol-sorts-declarations`). An opaque call with the same spelling acquires no identities, derivative rules or numerical semantics; closed registration supplies those meanings, not a name (`rule:nrz:cas-design-closed-registration`), (`[CAS-sec:cas:guarantees]`).
+
+**Requirement (Graph-first representation)** · `req:nrz:cas-trig-series-graph`
+
+The operators belong to the existing heterogeneous graph, with ordered operand edges, exact scope and placement, shared mathematical expressions and distinct original occurrences. The design must specify admission, source construction, capture-safe substitution, traversal, canonical identity and portable replay for the new variants. Original operands remain checked before rewriting, including operands hidden by cancellation or multiplication by zero. Neither a parallel expression tree nor a cached producer verdict supplies proof authority (`def:nrz:cas-graph-model`), (`rule:nrz:cas-design-occurrences`), (`[CAS-sec:cas:guarantees]`).
+
+**Decision (Tangent remains a guarded quotient)** · `dec:nrz:cas-trig-series-no-tangent`
+
+There is no tangent node. A tangent expression is sine divided by cosine with the explicit premise that cosine is nonzero on the claimed domain. Keeping that denominator and its premise visible exposes the pole set to definedness, substitution and proof replay. Simplification cannot cancel away the original exclusion, and a bounded failure to prove the premise is not proof that the denominator vanishes (`rule:nrz:cas-conditional-witnesses`).
+
+**Decision (Radians at the descriptor boundary)** · `dec:nrz:cas-trig-series-angle-boundary`
+
+CAS consumes plain Real scalars read in radians and arctangent returns a plain Real scalar in the same radian coordinate convention. Physical angle kinds, angle-difference roles, degree and turn conversions remain descriptor-side client declarations. The physical contract still requires declared angle arguments converted to radians and returns an angle descriptor for an inverse trigonometric operation on a suitable ratio. This separates exact mathematical coordinates from physical meaning without weakening the architecture's function signatures (`req:vision:algebraic-unit-checks`), (`rule:vision:check-before-normalization`), (`dec:nrz:descriptor-unit-authority`).
+
+The exact Pi node supplies conversion factors such as Pi/180 and 2 Pi; no decimal surrogate enters an exact conversion. Later designs must explain how bindings checks the original angle or ratio declaration, retains the conversion evidence, lowers the radian coordinate to the closed node and assigns the inverse result its angle descriptor. This concept changes no bindings code or unit catalog and grants no physical interpretation to a bare CAS scalar (`rule:vision:semantic-kinds-and-roles`), (`dec:nrz:descriptor-unit-authority`).
+
+**Rule (Principal arctangent range)** · `rule:nrz:cas-trig-series-atan-range`
+
+For every defined Real x, the proposed arctangent has −Pi/2 < arctangent(x) < Pi/2, where Pi is the exact named graph constant. Both endpoints are excluded. This is a citable mathematical fact that the design must expose through a named, versioned checked law, rather than an unstated branch convention or a numerical bound obtained from printed digits. It selects the principal real inverse and does not introduce a Complex branch (`rule:nrz:cas-design-closed-registration`), (`[CAS-sec:cas:primitive-schemas]`).
+
+**Requirement (Symbolic laws before numerical evaluation)** · `req:nrz:cas-trig-series-symbolic-laws`
+
+The symbolic layer comes first. For a differentiable Real operand u and declared variable x, the chain rules are D sine(u) = cosine(u) D u, D cosine(u) = −sine(u) D u, and D arctangent(u) = D u divided by (1 + u²). The last denominator is strictly positive for a defined Real operand; the checker must establish this fact and retain the original operand's definedness. Derivative judgments keep their coordinate, domain and child-derivative premises, rather than becoming equality between an expression and its derivative (`alg:nrz:cas-design-differentiation`).
+
+Exact special values use multiples of half Pi built from the exact Pi node. For an integer k, sine(k Pi/2) follows the residue pattern 0, 1, 0, −1 and cosine(k Pi/2) follows 1, 0, −1, 0 modulo four, including negative k through exact integer residue reasoning. Arctangent(0) = 0 and arctangent(1) = Pi/4, with arctangent(−1) = −Pi/4 by parity. Sine and arctangent are odd, cosine is even, and sine(x)² + cosine(x)² = 1 for defined Real x. The design must distinguish checked exact-Pi structure and integer evidence from an approximately equal argument; no general claim that the arctangent of a rational argument other than 0, 1 or −1 is a rational multiple of Pi is intended.
+
+Every admitted law needs its own formal name, semantic version, typed premises and replay checker. A concept label does not register a trusted theorem. The design must specify which laws are primitive and which expand into checked derivations, preserving the closed operator and proof registries (`rule:nrz:cas-design-closed-registration`), (`[CAS-sec:cas:primitive-schemas]`).
+
+**Caveat (Certified trigonometric values are later work)** · `cav:nrz:cas-trig-series-enclosures-later`
+
+Certified numerical enclosures are a later capability, sketched here only to identify its evidence obligations. Alternating Taylor expansions on suitably reduced arguments can bound a remainder by the first omitted term with its sign, after checking the hypotheses that justify the alternating bound. Argument reduction must use certified Pi enclosures and account for uncertainty in both the reduction and reduced argument. The existing Machin-type Pi construction supplies a precedent for exact finite sums with signed remainder intervals; it does not supply a general sine, cosine or arctangent evaluator (`arg:nrz:cas-pi-machin-derivation`), (`rule:nrz:cas-pi-machin-bounds`). A later enclosure design must register the reduction and remainder laws and check every finite instance, including branch and endpoint conditions (`req:nrz:cas-enclosures-formal-laws`).
+
+## Formal truncated power series · `sec:nrz:cas-trig-series-formal`
+
+**Definition (Exact series object and its sole meaning)** · `def:nrz:cas-trig-series-object`
+
+A formal series object records its exact centre a, declared variable x, positive integer order n and exact coefficient vector (c₀, …, cₙ₋₁) in a stated CAS exact scalar field K. Rationals are the minimum coefficient domain; other exact scalars are available only when the admitted field provides their checked arithmetic, equality and required inverses. Coefficients and centre are independent of x, with any other parameters retained in their context. With h = x − a, the object's sole meaning is its class modulo hⁿ, represented by the polynomial sum of cⱼ hʲ for 0 ≤ j < n. Its claim uses SeriesCongruence as design vocabulary, with an explicit modulus, order convention and context, never an equality that erases a remainder (`rule:nrz:cas-limits-and-series`), (`rule:nrz:cas-design-closed-registration`). The executable function-specific series statement is `Statement::Germ`, retaining side, centre, polynomial remainder and order+1 coefficients; this generic field-valued truncated-series record is distinct from it. This layer's order counts known coefficients, unlike the side-series convention f(a+h) = P(h) + h^(n+1)R(h) that knows coefficients through degree n (`tab:nrz:cas-piecewise-design-transforms`); any bridge must explicitly convert formal order n to side-series order n−1, or side-series order m to formal order m+1, without inferring the side-series analytic evidence from a formal congruence.
+
+The vector retains every coefficient position, including trailing zeros, because a zero coefficient is known information while an omitted order is unknown information. A polynomial representative can be evaluated as a polynomial, but that does not assert equality with a source function away from the centre. No floating coefficients, convergence claims or analytic remainder bounds belong to this layer. Certified enclosures own analytic bounds; piecewise side series retain their sides, domains, trace conventions and exceptional point values unchanged (`rule:nrz:cas-piecewise-limits-series`), (`req:nrz:cas-enclosures-formal-laws`).
+
+**Rule (Arithmetic and coefficient evidence)** · `rule:nrz:cas-trig-series-arithmetic`
+
+Addition, exact scalar multiplication and truncated product operate on compatible variables, centres, coefficient fields and contexts. At a common order n, addition and scalar multiplication act coefficientwise, while product coefficient k is the exact sum of cᵢ dⱼ over i + j = k for k < n. Different input orders support an explicit common truncation no greater than either input order; no operation silently pads unknown coefficients with zeros or raises available precision. Coefficient extraction admits only indices below the stated order. Every result retains its modulus and checked coefficient calculation, and the design must make incompatible contexts, unavailable coefficients and budget exhaustion distinct outcomes.
+
+**Rule (Composition at the formal origin)** · `rule:nrz:cas-trig-series-composition`
+
+Composition uses local increment coordinates and requires the inner constant coefficient to be exactly zero, with compatible coefficient fields, centres and substitution scopes. At common order n this makes every omitted outer term contribute only powers of order at least n, so truncated composition is well-defined modulo hⁿ. A nonzero inner constant coefficient refuses; it cannot be handled by pretending that the omitted outer coefficients are known. A change of expansion centre is a separate operation needing additional evidence and is not supplied by this composition rule.
+
+**Rule (Compositional inverse)** · `rule:nrz:cas-trig-series-inverse`
+
+An inverse request requires order at least two, exactly zero constant coefficient and a unit linear coefficient: a nonzero exact scalar invertible in the admitted coefficient field, not necessarily the scalar one. Its nonzero status and inverse must be checked or explicitly supported by retained premises; an undecided symbolic coefficient is not silently assumed invertible. The candidate inverse has zero constant coefficient and the same stated order. The checker independently composes both ways to the identity increment h modulo hⁿ, using exact coefficient arithmetic and the original premises. Checking both directions is a deliberate independent control: under these hypotheses a one-sided compositional inverse in the truncated ring is already two-sided. It does not repeat or trust the producer's inverse search. This is a formal inverse in the truncated ring, not an analytic inverse, a convergence radius or a global solution claim.
+
+**Rule (Termwise calculus changes order)** · `rule:nrz:cas-trig-series-calculus`
+
+For n at least two, the termwise derivative of an order-n series has order n−1 and coefficients (j + 1)cⱼ₊₁. An order-one input has only a vacuous order-zero derivative congruence; because the proposed objects have positive order, a request for a positive-order derivative from it refuses for insufficient coefficients. The termwise antiderivative has order n+1, a stated exact constant term C and coefficients cⱼ/(j + 1) at degree j + 1. These divisions require the admitted characteristic-zero coefficient field and exact inverses of the positive integers involved. The design must carry these order changes as exact evidence: differentiation loses one known order, and integration gains one only with its explicitly supplied constant. Formal termwise antiderivation supplies no definite integral or analytic remainder theorem.
+
+## Solving bridge and capability boundaries · `sec:nrz:cas-trig-series-bridge`
+
+**Requirement (Trial of the existing exact linear form)** · `req:nrz:cas-trig-series-solving-trial`
+
+Substituting formal series into a polynomial differential expression and requiring each available residual coefficient to vanish yields exact coefficient equations. A sufficient condition for the trial is a scalar equation of derivative order r ≥ 1 that is linear in its highest derivative, A(x,y,…,y^(r−1)) y^(r) = B(x,y,…,y^(r−1)), with polynomial A and B over the admitted characteristic-zero exact field, stated initial coefficients through degree r−1, and an ordinary centre where A has a checked unit value A₀. After lower-order coefficients are substituted, residual coefficient k contains the new coefficient cₖ₊ᵣ linearly with unit multiplier A₀ (k+r)!/k!. This recursive structure makes the existing exact linear-equivalence form the appropriate trial interface; it does not assert linearity for arbitrary polynomial differential expressions or at a singular centre. With an order-n input and n > r, the residual is known modulo h^(n−r), supplying exactly the coefficient equations for 0 ≤ k < n−r (`rule:nrz:cas-trig-series-calculus`).
+
+The existing exact linear-system form retains reversible row operations, pivot-zero partitions and explicit free parameters. A consumer trial of that form retains the actual real order-by-order residual system, the exact-linear certificates and the precise refusals met. The consumer produces and supplies the reversible row operations and pivot witnesses; the engine's checker verifies these certificates, and no automatic linear-family producer is assumed or requested. This is consumer validation, not a new solver capability delivered by the concept. Zero pivots, inconsistency and free coefficients must retain their evidence and branches; a formal coefficient solution establishes only the stated finite-order residual congruence, not an exact analytic solution of the differential equation (`tab:nrz:cas-solving-primitives`), (`[CAS-thm:cas:primitive-linear-equivalent]`), (`alg:nrz:cas-solving-next-slices`), (`rule:nrz:cas-solving-claims`).
+
+**Caveat (Integration and modeling remain outside scope)** · `cav:nrz:cas-trig-series-exclusions`
+
+Definite integration is polynomial case-split integration in the existing supported fragment (`tab:nrz:cas-piecewise-design-transforms`). Trigonometric integrands need the new nodes first, followed by separately designed derivative, domain, endpoint and fundamental-theorem evidence. Trigonometric integration therefore waits and remains outside this concept; the formal antiderivative operation does not bypass those obligations (`rule:nrz:cas-piecewise-integration`), (`cav:nrz:cas-calculus-boundaries`). Directional statistics, including the von Mises–Fisher family, are field-theory-of-overlap modeling on the primitives and are never proposed as CAS capabilities here.
+
+## Later design and verification obligations · `sec:nrz:cas-trig-series-design`
+
+**Requirement (Representation and independent evidence)** · `req:nrz:cas-trig-series-design-evidence`
+
+Later design documents must explain how the closed nodes and series records fit the graph-first representation; how Real admission, differentiation and the descriptor angle contract are checked; and how order, centre, coefficient field and truncation travel through exact judgments, substitutions and portable replay. They must specify closed law registration and versioning, coefficient capabilities, producer/checker separation, atomic publication and precise unsupported or unresolved outcomes. Implementation must not advertise a represented request as an executable service (`def:nrz:cas-graph-model`), (`rule:nrz:cas-design-expected-claim`), (`def:nrz:engineering-refusal-meaning`).
+
+Independent evidence must include exact special values and parity, chain-rule and Pythagorean checks, Complex and equal-spelled-call rejection controls, descriptor angle/ratio mismatches, pole-premise retention, and principal-range endpoint exclusions. Series evidence must include hand-computed coefficient products, explicit truncation and order changes, nonzero-inner-constant refusal, zero or unproved inverse-linear-coefficient refusal, two-way inverse composition, and tampered centre, order, coefficient, scope and context controls. Fresh replay must establish the expected claim without producer caches. The residual trial must preserve rank drops and free parameters rather than selecting only a generic branch.
+
+**Requirement (Bounded resources without invented measurements)** · `req:nrz:cas-trig-series-resources`
+
+Construction, coefficient arithmetic, composition, inverse production, exact comparisons and independent checking require finite caller-owned budgets, bounded intermediate sizes and atomic evidence publication. Failed work remains charged, and exhaustion proves no mathematical impossibility. The design specifies accounting boundaries; implementing commits measure successful Work and byte costs with boundary tests. This concept invents no measured resource figure and changes no policy ceiling (`def:nrz:engineering-budget-meaning`), (`def:nrz:engineering-budget-boundary`), (`[CAS-sec:cas:guarantees]`).
+
+## Open questions · `sec:nrz:cas-trig-series-questions`
+
+**Open Question (Law decomposition and delivery boundary)** · `open:nrz:cas-trig-series-law-design`
+
+Which symbolic laws should be primitive schemas and which should be checked derived lemmas, and what independently reviewable node and series design boundaries best preserve their shared graph and replay obligations?
+
+**Open Question (Exact coefficient admission)** · `open:nrz:cas-trig-series-coefficient-fields`
+
+Which exact scalar fields beyond rationals should the initial series design admit, and how should unavailable zero tests or inverses be exposed without widening trusted arithmetic?
+
+**Open Question (Residual trial and nonlinear orders)** · `open:nrz:cas-trig-series-residual-scope`
+
+Which concrete real residual system should field-theory-of-overlap use for the planned exact-linear trial, and what separate proposal would be needed for order-by-order systems that remain nonlinear after lower-order substitution and therefore lie outside that trial?
+
+**Open Question (Later certified trigonometric evaluation)** · `open:nrz:cas-trig-series-enclosure-design`
+
+Which argument-reduction regions and signed-remainder schemas should a later enclosure design admit, and how should certified Pi uncertainty determine refinement or an explicit unresolved result at reduction boundaries?
+
+**Open Question (Two-argument phase law)** · `open:nrz:cas-trig-series-two-argument-phase`
+
+How should checked chart laws provide the two-argument phase of a coordinate pair, in a later node design or descriptor-side, for the first physical consumer reading the angle of a complex impedance where a single-argument arctangent of a ratio loses the quadrant, while preserving the established principal range (−Pi,Pi], ownership of Pi on the negative real axis, angle-difference role, wrapped subtraction, undefined origin and undecided cut outcomes (`ex:nrz:decision-phase-chart`), (`ex:nrz:decision-phase-boundaries`), (`rule:nrz:lc-resonance-kinds`), (`rule:nrz:lc-resonance-phasor-domains`)?
