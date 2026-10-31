@@ -7,6 +7,12 @@ mod counts;
 mod execution;
 mod imports;
 mod lineage;
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "The existing kernel owner dispatches the quantity recipe through this module."
+)]
+pub(crate) mod nonlinear;
+pub use nonlinear::QuantityKernelEvidence;
 mod roles;
 mod shapes;
 pub use counts::{CountArray, CountError, CountHistory, CountQuantity, ExactCountRatio};
@@ -175,6 +181,12 @@ pub enum QuantityError<P: Scalar> {
     /// Arithmetic requires explicit conversion to common coordinate scales and origins.
     #[error("quantity arithmetic requires a common measure")]
     CommonMeasure,
+    /// Statistical nonlinear transport needs separate Jacobian evidence.
+    #[error("nonlinear statistical companion propagation is unsupported")]
+    NonlinearStatistics,
+    /// The initial closed nonlinear contract admits one scalar per operand.
+    #[error("nonlinear quantity operations require scalar regions")]
+    NonlinearExtent,
 }
 
 impl<P: Scalar> From<crate::OperationError> for QuantityError<P> {

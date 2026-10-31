@@ -44,7 +44,7 @@ mod quantity;
 pub use quantity::{
     CountArray, CountError, CountHistory, CountQuantity, DifferenceRole, DynamicRole,
     ExactCountRatio, NormalizedQuantity, PointRole, Quantity, QuantityContext, QuantityError,
-    QuantityInput, QuantityRole,
+    QuantityInput, QuantityKernelEvidence, QuantityRole,
 };
 
 pub use binding::{

@@ -104,3 +104,5 @@ mod quantity_baseline;
 mod quantity_count_arrays;
 mod quantity_count_ratios;
 mod quantity_counts;
+
+mod quantity_products;

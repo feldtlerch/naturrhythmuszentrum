@@ -18,6 +18,9 @@ pub(crate) fn evaluate<P: Scalar + 'static, Q: Scalar + 'static>(
 ) -> Result<(Payload<Q>, RecipeEvidence), OperationError> {
     validate::<P, Q>(contract, views, reservation)?;
     let context = ArithmeticContext::new().map_err(KernelError::from)?;
+    if let Recipe::Quantity(recipe) = &contract.recipe {
+        return crate::quantity::nonlinear::evaluate(*recipe, views, reservation, &context);
+    }
     if let Recipe::PositiveReciprocal(schedule) = &contract.recipe {
         let allocations = private.ok_or(crate::PrivateAllocationError::IncompleteCoverage)?;
         let entries = super::reciprocal::evaluate(schedule, views, &context, allocations)?;
@@ -25,7 +28,9 @@ pub(crate) fn evaluate<P: Scalar + 'static, Q: Scalar + 'static>(
         return Ok((payload, claim::<Q>(contract, reservation, &context)));
     }
     let (entries, contributions) = match &contract.recipe {
-        Recipe::PositiveReciprocal(_) => return Err(KernelError::Contract.into()),
+        Recipe::PositiveReciprocal(_) | Recipe::Quantity(_) => {
+            return Err(KernelError::Contract.into());
+        }
         Recipe::Sum { subtract, right } => (sum(views, *subtract, right, &context)?, None),
         Recipe::Transform(map) => (
             transform(views, map)?,
@@ -140,8 +145,19 @@ impl<P: Scalar + 'static, Q: Scalar + 'static> crate::Bound<'_, P, Q> {
             )?),
             _ => None,
         };
+        let prepared = if matches!(contract.recipe, Recipe::Quantity(_)) {
+            evidence
+                .try_reserve(1)
+                .map_err(|_| crate::HeapError::Capacity)?;
+            Some(buffer(1)?)
+        } else {
+            None
+        };
         let (payload, claim) = evaluate(contract, views, reservation, private.as_ref())?;
-        let mut outputs = buffer(1)?;
+        let mut outputs = match prepared {
+            Some(outputs) => outputs,
+            None => buffer(1)?,
+        };
         evidence
             .try_reserve(1)
             .map_err(|_| crate::HeapError::Capacity)?;

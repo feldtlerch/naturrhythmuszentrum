@@ -4,6 +4,9 @@
 /// A refused statistical propagation or covariance materialization.
 #[derive(Clone, Debug, thiserror::Error)]
 pub enum StatisticsError {
+    /// Scalar quantity nonlinear laws have no statistical companion propagation contract.
+    #[error("nonlinear quantity statistics are unsupported")]
+    NonlinearStatistics,
     /// Bindings could not establish a complete native derivative identity.
     #[error("statistical derivative: {0}")]
     Sensitivity(std::rc::Rc<nrz_bindings::SensitivityError>),

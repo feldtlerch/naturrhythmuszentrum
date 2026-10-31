@@ -53,6 +53,7 @@ pub(crate) fn map<P: Scalar + 'static>(
             identity(operation, slot, &mut result.jacobian)?;
         }
         NativeRecipe::Kernel(contract) => match &contract.recipe {
+            Recipe::Quantity(_) => return Err(StatisticsError::NonlinearStatistics.into()),
             Recipe::Sum { subtract, right } => {
                 for (row, &source) in right.indices().iter().enumerate() {
                     result.jacobian.set(row, row, P::ONE, singleton(P::ONE)?)?;

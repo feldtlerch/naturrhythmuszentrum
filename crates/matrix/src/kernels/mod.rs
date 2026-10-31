@@ -35,6 +35,14 @@ pub use nonlinear::{DomainReason, Elementwise};
 /// A deterministic kernel refusal, without a partially published result.
 #[derive(Clone, Debug, thiserror::Error)]
 pub enum KernelError {
+    /// A certified scalar quantity schedule refused after consuming the recorded scalar Work.
+    #[error("quantity scalar kernel after {work} Work: {cause}")]
+    Quantity {
+        /// Original certified scalar domain, arithmetic or resource refusal.
+        cause: nrz_scalar::KernelError,
+        /// Actual scalar Work consumed before refusal, including completed exports.
+        work: u64,
+    },
     /// The complete deterministic entry box does not admit a finite native image.
     #[error("kernel {function:?} domain at entry {entry}: {reason:?}")]
     Domain {

@@ -18,6 +18,12 @@ pub(crate) fn check(
     let NativeRecipe::Kernel(contract) = &operation.recipe else {
         return Ok(None);
     };
+    if matches!(
+        contract.recipe,
+        crate::kernels::contract::Recipe::Quantity(_)
+    ) {
+        return Err(super::StatisticsError::NonlinearStatistics.into());
+    }
     let crate::kernels::contract::Recipe::Elementwise(function) = &contract.recipe else {
         return Ok(None);
     };

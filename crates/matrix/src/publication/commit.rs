@@ -114,8 +114,17 @@ impl<P: Scalar + 'static, Q: Scalar + 'static> Bound<'_, P, Q> {
             | crate::binding::NativeRecipe::ReciprocalStatistics {
                 kernel: contract, ..
             } => {
-                let Some(crate::RecipeEvidence::Kernel(claim)) = evidence else {
-                    return Err(OperationError::CandidateContract);
+                let claim = match (&contract.recipe, evidence) {
+                    (
+                        crate::kernels::contract::Recipe::Quantity(recipe),
+                        Some(crate::RecipeEvidence::QuantityKernel(claim)),
+                    ) if claim.matches(*recipe) => &claim.kernel,
+                    (crate::kernels::contract::Recipe::Quantity(_), _)
+                    | (_, Some(crate::RecipeEvidence::QuantityKernel(_))) => {
+                        return Err(OperationError::CandidateContract);
+                    }
+                    (_, Some(crate::RecipeEvidence::Kernel(claim))) => claim,
+                    _ => return Err(OperationError::CandidateContract),
                 };
                 if claim.kind() != contract.kind()
                     || claim.precision() != Q::PRECISION

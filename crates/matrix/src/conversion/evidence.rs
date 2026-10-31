@@ -116,6 +116,8 @@ pub enum RecipeEvidence {
     Solve(Box<crate::SolveEvidence>),
     /// Complete deterministic propagation and independently checked numerical error.
     Kernel(crate::KernelEvidence),
+    /// Executed scalar-quantity certificates with ordinary heap dependency provenance.
+    QuantityKernel(Box<crate::QuantityKernelEvidence>),
     /// Exact represented-bit identity and retention of the complete companion set.
     Copy(CopyEvidence),
     /// Outward affine evaluation and propagated deterministic companions.
@@ -131,7 +133,7 @@ impl RecipeEvidence {
     #[must_use]
     pub const fn slot(&self) -> usize {
         match self {
-            Self::Solve(_) | Self::Kernel(_) => 0,
+            Self::Solve(_) | Self::Kernel(_) | Self::QuantityKernel(_) => 0,
             Self::Copy(claim) => claim.slot(),
             Self::Conversion(claim) => claim.slot,
             Self::PiConversion(claim) => claim.conversion.slot,
@@ -144,6 +146,7 @@ impl RecipeEvidence {
         match self {
             Self::Solve(claim) => claim.extent.entries(),
             Self::Kernel(claim) => claim.entries,
+            Self::QuantityKernel(claim) => claim.kernel.entries,
             Self::Copy(claim) => claim.entries(),
             Self::Conversion(claim) => claim.entries,
             Self::PiConversion(claim) => claim.conversion.entries,
@@ -156,6 +159,7 @@ impl RecipeEvidence {
         match self {
             Self::Solve(claim) => claim.coverage,
             Self::Kernel(claim) => claim.coverage,
+            Self::QuantityKernel(claim) => claim.kernel.coverage,
             Self::Copy(claim) => claim.coverage(),
             Self::Conversion(claim) => claim.coverage,
             Self::PiConversion(claim) => claim.conversion.coverage,

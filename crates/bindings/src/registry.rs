@@ -8,6 +8,7 @@
 //! sin, cos and tan take angle differences in radians and return ratios; asin, acos and atan reverse that relationship; exp and log take and return ratios. sqrt checks a rational power, while `count_ratio` checks an explicit count relation and retains a quotient coordinate expression. Other applications need an ordered fixed signature; their arguments and result receive exact conversions to and from the signature's declared measures. Numerical domains of logarithms, inverse functions and roots remain obligations of the original expression, not conclusions of dimensional checking.
 
 mod catalog;
+mod coordinates;
 mod relation;
 
 pub use relation::{FrequencyDirection, FrequencyRelation};

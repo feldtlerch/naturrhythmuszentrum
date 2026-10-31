@@ -23,6 +23,10 @@ pub enum KernelKind {
     TransformEntries,
     /// Full matrix product, including both linear terms and their interaction.
     Product,
+    /// A scalar coordinate product with exported full-box certificates.
+    ScalarQuantityProduct,
+    /// A scalar coordinate quotient with exported reciprocal and product certificates.
+    ScalarQuantityQuotient,
     /// A direct native image of a complete deterministic box.
     Elementwise(super::Elementwise),
 }
@@ -58,6 +62,8 @@ pub(crate) enum Recipe {
     Transform(EntryMap),
     /// Backend product with an independent outward contraction.
     Product,
+    /// A closed scalar-quantity schedule with an explicit per-attempt Work allowance.
+    Quantity(crate::quantity::nonlinear::ScalarQuantityRecipe),
     /// A direct native image of a complete deterministic box.
     Elementwise(super::Elementwise),
 }
@@ -74,6 +80,7 @@ impl KernelContract {
             Recipe::Linear(_) => KernelKind::LinearMap,
             Recipe::Transform(_) => KernelKind::TransformEntries,
             Recipe::Product => KernelKind::Product,
+            Recipe::Quantity(recipe) => recipe.kind(),
             Recipe::Elementwise(function) => KernelKind::Elementwise(*function),
         }
     }

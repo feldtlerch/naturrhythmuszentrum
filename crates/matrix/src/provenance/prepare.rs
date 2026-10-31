@@ -155,6 +155,9 @@ impl Provenance {
             ) {
                 usage.bytes = add(usage.bytes, size_of::<crate::PiConversionEvidence>())?;
             }
+            if let Some(RecipeEvidence::QuantityKernel(claim)) = record.evidence.get(node.slot) {
+                usage.bytes = add(usage.bytes, claim.retained_bytes())?;
+            }
             let output_map = output
                 .dependency
                 .layout()

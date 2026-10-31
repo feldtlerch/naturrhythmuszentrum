@@ -111,12 +111,13 @@ impl QuantityContext {
     /// Prepare the returned owner while outputs are private, then publish with no fallible tail.
     pub(super) fn publish<P: Scalar + 'static, Q: Scalar + 'static>(
         heap: &mut Heap,
-        binding: Binding<P, Q>,
+        mut binding: Binding<P, Q>,
         symbols: Vec<BindingSymbols>,
         budget: &mut Budget,
     ) -> Result<Quantity<Q>, QuantityError<P>> {
         charge(budget, 1)?;
         allocation::<Q>(budget)?;
+        super::nonlinear::configure(&mut binding.operation, budget)?;
         let bound = binding.validate_quantity(heap, budget, symbols)?;
         let result = bound
             .result_bindings()
@@ -128,7 +129,31 @@ impl QuantityContext {
             counts: None,
             role: PhantomData,
         };
-        let candidate = bound.evaluate(bound.normalized_inputs()?)?;
+        let evaluated = bound.evaluate(bound.normalized_inputs()?);
+        let work = match &evaluated {
+            Ok(candidate) => candidate
+                .evidence
+                .iter()
+                .find_map(|claim| {
+                    if let crate::RecipeEvidence::QuantityKernel(claim) = claim {
+                        Some(claim.usage().work)
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or(0),
+            Err(failure) => match failure.cause() {
+                crate::OperationError::Kernel(crate::KernelError::Quantity { work, .. }) => *work,
+                _ => 0,
+            },
+        };
+        if work != 0 {
+            budget.work(
+                work,
+                nrz_bindings::readings::algebra::Location::new("quantity certified kernels"),
+            )?;
+        }
+        let candidate = evaluated?;
         bound.publish(candidate)?;
         Ok(result)
     }

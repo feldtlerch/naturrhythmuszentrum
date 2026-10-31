@@ -67,6 +67,14 @@ impl<P: Scalar + 'static> Plan<P> {
             }
             return Ok(result);
         }
+        if let NativeRecipe::Kernel(contract) = &operation.recipe
+            && matches!(
+                contract.recipe,
+                crate::kernels::contract::Recipe::Quantity(_)
+            )
+        {
+            return Err(StatisticsError::NonlinearStatistics.into());
+        }
         if !operation.carries_statistics() {
             return Err(crate::HeapError::MissingCoverage.into());
         }
@@ -168,19 +176,25 @@ fn product(factors: &[usize]) -> Result<usize, OperationError> {
 
 impl CheckedOperation {
     /// Capability of the currently implemented closed statistical recipes.
-    pub(crate) const fn statistical_recipe(&self) -> bool {
-        if matches!(self.recipe, NativeRecipe::Reciprocal { .. }) {
-            return false;
-        }
-        matches!(
-            self.recipe,
+    pub(crate) fn statistical_recipe(&self) -> bool {
+        use crate::kernels::contract::Recipe;
+        match &self.recipe {
+            NativeRecipe::Reciprocal { .. } => false,
+            NativeRecipe::Kernel(contract) => match &contract.recipe {
+                Recipe::Quantity(_) => false,
+                Recipe::Sum { .. }
+                | Recipe::Linear(_)
+                | Recipe::Transform(_)
+                | Recipe::Product
+                | Recipe::Elementwise(_)
+                | Recipe::PositiveReciprocal(_) => true,
+            },
             NativeRecipe::Copy
-                | NativeRecipe::Solve(_)
-                | NativeRecipe::Kernel(_)
-                | NativeRecipe::Affine(_)
-                | NativeRecipe::Precision { .. }
-                | NativeRecipe::ReciprocalStatistics { .. }
-        )
+            | NativeRecipe::Solve(_)
+            | NativeRecipe::Affine(_)
+            | NativeRecipe::Precision { .. }
+            | NativeRecipe::ReciprocalStatistics { .. } => true,
+        }
     }
 }
 

@@ -184,7 +184,7 @@ impl Heap {
 
 impl Provenance {
     /// Locate exact source versions, never just equal schemas or unchanged addresses.
-    pub(super) fn find(&self, stamp: ValueStamp) -> Option<ProvenanceId> {
+    pub(crate) fn find(&self, stamp: ValueStamp) -> Option<ProvenanceId> {
         self.nodes.iter().enumerate().find_map(|(index, node)| {
             let record = self.records.get(node.record.index)?;
             let output = record.outputs.get(node.slot)?;
