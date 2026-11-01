@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-//! Independent rational pi witnesses and transactional resource refusals.
+//! Independent rational pi witnesses, monotone attempt spend and atomic output.
 
 use crate::testing::{Binary, Rational};
 use nrz_scalar::{
@@ -109,7 +109,7 @@ fn pi_refinement_is_nested() -> TestResult {
     Ok(())
 }
 
-/// Invalid tolerances and exhausted fixed resolution preserve nonzero caller usage.
+/// Invalid tolerances cost nothing; exhausted resolution retains Work and steps, not output.
 /// ´claim:scalar:pi-tolerance-refusals-are-atomic´
 /// ´test:integration:pi-tolerance-refusals-are-atomic´
 #[test]
@@ -117,24 +117,39 @@ fn pi_tolerance_refusals_are_atomic() -> TestResult {
     let context = ArithmeticContext::new()?;
     let mut ledger = budget();
     PiEnclosure::new(Finite::new(2.0_f64)?, &context, &mut ledger)?;
-    for (tolerance, refusal) in [
-        (0.0_f64, PiError::InvalidTolerance),
-        (-1.0, PiError::InvalidTolerance),
-        (f64::MIN_POSITIVE, PiError::ToleranceUnreachable),
+    assert_eq!(ledger.usage().work, 151);
+    for (tolerance, refusal, work, steps) in [
+        (0.0_f64, PiError::InvalidTolerance, 151, 0),
+        (-1.0, PiError::InvalidTolerance, 151, 0),
+        (f64::MIN_POSITIVE, PiError::ToleranceUnreachable, 3935, 21),
     ] {
         let before = ledger.usage();
         assert_eq!(
             PiEnclosure::new(Finite::new(tolerance)?, &context, &mut ledger),
             Err(refusal)
         );
-        assert_eq!(ledger.usage(), before);
+        assert_eq!(
+            ledger.usage(),
+            PiUsage {
+                work,
+                steps,
+                ..before
+            }
+        );
     }
     let before = ledger.usage();
     assert_eq!(
         PiEnclosure::new(Finite::new(f32::MIN_POSITIVE)?, &context, &mut ledger),
         Err(PiError::ToleranceUnreachable)
     );
-    assert_eq!(ledger.usage(), before);
+    assert_eq!(
+        ledger.usage(),
+        PiUsage {
+            work: 6443,
+            steps: 42,
+            ..before
+        }
+    );
     Ok(())
 }
 
@@ -169,12 +184,17 @@ fn pi_zero_resource_refusals() -> TestResult {
             PiEnclosure::new(Finite::new(1e-14_f64)?, &context, &mut ledger),
             Err(refusal)
         );
-        assert_eq!(ledger.usage(), before);
+        let work = if refusal == PiError::StepLimit {
+            151
+        } else {
+            0
+        };
+        assert_eq!(ledger.usage(), PiUsage { work, ..before });
     }
     Ok(())
 }
 
-fn exact_boundary<P: Binary>(tolerance: P, expected: PiUsage) -> TestResult {
+fn exact_boundary<P: Binary>(tolerance: P, expected: PiUsage, failed_work: [u64; 2]) -> TestResult {
     let context = ArithmeticContext::new()?;
     let limits = PiLimits {
         work: expected.work,
@@ -228,12 +248,29 @@ fn exact_boundary<P: Binary>(tolerance: P, expected: PiUsage) -> TestResult {
             PiEnclosure::new(Finite::new(tolerance)?, &context, &mut refused),
             Err(refusal)
         );
-        assert_eq!(refused.usage(), before);
+        let (work, steps) = match refusal {
+            PiError::WorkLimit => (failed_work[0], limits.steps),
+            PiError::StepLimit => (failed_work[1], limits.steps.saturating_sub(1)),
+            _ => (before.work, before.steps),
+        };
+        assert_eq!(
+            refused.usage(),
+            PiUsage {
+                work,
+                steps,
+                ..before
+            }
+        );
     }
     Ok(())
 }
 
-fn cumulative_boundary<P: Binary>(tolerance: P, limits: PiLimits, first: PiUsage) -> TestResult {
+fn cumulative_boundary<P: Binary>(
+    tolerance: P,
+    limits: PiLimits,
+    first: PiUsage,
+    failed_work: [u64; 2],
+) -> TestResult {
     let context = ArithmeticContext::new()?;
     let mut ledger = PiBudget::new(limits);
     PiEnclosure::new(Finite::new(tolerance)?, &context, &mut ledger)?;
@@ -282,7 +319,19 @@ fn cumulative_boundary<P: Binary>(tolerance: P, limits: PiLimits, first: PiUsage
             PiEnclosure::new(Finite::new(tolerance)?, &context, &mut refused),
             Err(refusal)
         );
-        assert_eq!(refused.usage(), before);
+        let (work, steps) = match refusal {
+            PiError::WorkLimit => (failed_work[0], limits.steps),
+            PiError::StepLimit => (failed_work[1], limits.steps.saturating_sub(1)),
+            _ => (before.work, before.steps),
+        };
+        assert_eq!(
+            refused.usage(),
+            PiUsage {
+                work,
+                steps,
+                ..before
+            }
+        );
     }
     Ok(())
 }
@@ -300,6 +349,7 @@ fn pi_resource_boundaries() -> TestResult {
             staged_bytes: 240,
             output_bytes: 64,
         },
+        [92, 0],
     )?;
     exact_boundary(
         2.0_f64,
@@ -309,6 +359,7 @@ fn pi_resource_boundaries() -> TestResult {
             staged_bytes: 256,
             output_bytes: 80,
         },
+        [150, 0],
     )?;
     for tolerance in [0.000_001_f32, 0.000_000_3] {
         exact_boundary(
@@ -319,9 +370,14 @@ fn pi_resource_boundaries() -> TestResult {
                 staged_bytes: 240,
                 output_bytes: 64,
             },
+            [667, 553],
         )?;
     }
-    for (tolerance, work, steps) in [(1e-12_f64, 1708, 9), (1e-14, 1881, 10), (5e-16, 2054, 11)] {
+    for (tolerance, work, steps, failed_work) in [
+        (1e-12_f64, 1708, 9, [1707, 1535]),
+        (1e-14, 1881, 10, [1880, 1708]),
+        (5e-16, 2054, 11, [2053, 1881]),
+    ] {
         exact_boundary(
             tolerance,
             PiUsage {
@@ -330,12 +386,13 @@ fn pi_resource_boundaries() -> TestResult {
                 staged_bytes: 256,
                 output_bytes: 80,
             },
+            failed_work,
         )?;
     }
     Ok(())
 }
 
-/// Repeated requests charge full cumulative Work, steps and output with atomic late refusal.
+/// Repeated requests retain attempted Work and steps while late refusal preserves prior output.
 /// ´claim:scalar:pi-cumulative-resource-boundaries´
 /// ´test:integration:pi-cumulative-resource-boundaries´
 #[test]
@@ -354,6 +411,7 @@ fn pi_cumulative_resource_boundaries() -> TestResult {
             staged_bytes: 240,
             output_bytes: 64,
         },
+        [1335, 1221],
     )?;
     cumulative_boundary(
         5e-16_f64,
@@ -369,6 +427,7 @@ fn pi_cumulative_resource_boundaries() -> TestResult {
             staged_bytes: 256,
             output_bytes: 80,
         },
+        [4107, 3935],
     )?;
     Ok(())
 }
@@ -405,5 +464,98 @@ fn pi_mixed_format_staging_boundary() -> TestResult {
             assert_eq!(ledger.usage(), before);
         }
     }
+    Ok(())
+}
+
+/// Finite failed attempts exhaust one original ledger without publishing any additional output.
+/// ´claim:scalar:pi-repeated-resolution-failures-exhaust-original-ledger´
+/// ´test:integration:pi-repeated-resolution-failures-exhaust-original-ledger´
+#[test]
+fn pi_repeated_resolution_failures_exhaust_original_ledger() -> TestResult {
+    let context = ArithmeticContext::new()?;
+    let mut ledger = PiBudget::new(PiLimits {
+        work: 7724,
+        steps: 42,
+        staged_bytes: 256,
+        output_bytes: 160,
+    });
+    let retained = PiEnclosure::new(Finite::new(2.0_f64)?, &context, &mut ledger)?;
+    assert_eq!(ledger.usage().work, 151);
+    for (work, steps, refusal) in [
+        (3935, 21, PiError::ToleranceUnreachable),
+        (7719, 42, PiError::ToleranceUnreachable),
+        (7724, 42, PiError::WorkLimit),
+        (7724, 42, PiError::WorkLimit),
+    ] {
+        assert_eq!(
+            PiEnclosure::new(Finite::new(f64::MIN_POSITIVE)?, &context, &mut ledger),
+            Err(refusal)
+        );
+        assert_eq!(
+            ledger.usage(),
+            PiUsage {
+                work,
+                steps,
+                staged_bytes: 256,
+                output_bytes: 80,
+            }
+        );
+    }
+    check(retained, 2.0);
+    Ok(())
+}
+
+/// A failed step reservation does not consume a step; temporary storage remains reusable.
+/// ´claim:scalar:pi-step-work-is-admitted-together-and-storage-is-released´
+/// ´test:integration:pi-step-work-is-admitted-together-and-storage-is-released´
+#[test]
+fn pi_step_work_is_admitted_together_and_storage_is_released() -> TestResult {
+    let context = ArithmeticContext::new()?;
+    let mut ledger = PiBudget::new(PiLimits {
+        work: 176,
+        steps: 1,
+        staged_bytes: 256,
+        output_bytes: 80,
+    });
+    assert_eq!(
+        PiEnclosure::new(Finite::new(1e-14_f64)?, &context, &mut ledger),
+        Err(PiError::WorkLimit)
+    );
+    assert_eq!(
+        ledger.usage(),
+        PiUsage {
+            work: 151,
+            steps: 0,
+            ..PiUsage::default()
+        }
+    );
+    let mut ledger = PiBudget::new(PiLimits {
+        work: 302,
+        steps: 0,
+        staged_bytes: 256,
+        output_bytes: 80,
+    });
+    assert_eq!(
+        PiEnclosure::new(Finite::new(1e-14_f64)?, &context, &mut ledger),
+        Err(PiError::StepLimit)
+    );
+    assert_eq!(
+        ledger.usage(),
+        PiUsage {
+            work: 151,
+            ..PiUsage::default()
+        }
+    );
+    let result = PiEnclosure::new(Finite::new(2.0_f64)?, &context, &mut ledger)?;
+    assert_eq!(result.work_used(), 151);
+    assert_eq!(
+        ledger.usage(),
+        PiUsage {
+            work: 302,
+            steps: 0,
+            staged_bytes: 256,
+            output_bytes: 80
+        }
+    );
     Ok(())
 }

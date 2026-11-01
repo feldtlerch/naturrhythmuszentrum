@@ -16,20 +16,20 @@ pub struct PiLimits {
     pub output_bytes: usize,
 }
 
-/// Committed usage; every refused request leaves all four fields unchanged.
+/// Monotone attempt spend and successfully published logical storage.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct PiUsage {
-    /// Numerical work from successful calls only.
+    /// Numerical work from all admitted schedules, including failed calls.
     pub work: u64,
-    /// Paired series refinements from successful calls only.
+    /// Paired refinements admitted together with their Work, including failed calls.
     pub steps: u64,
-    /// High-water logical algorithm state plus returned result bytes.
+    /// High-water logical state plus result bytes of successful calls.
     pub staged_bytes: usize,
     /// Sum of the logical result sizes returned by successful calls.
     pub output_bytes: usize,
 }
 
-/// Cumulative pi ledger, updated only when a complete enclosure is returned.
+/// Cumulative attempt ledger; only output publication depends on success.
 ///
 /// Storage counts fixed logical state and results, not stack frames, compiler
 /// temporaries, the caller's ledger/context or allocator overhead. There is no
@@ -38,7 +38,7 @@ pub struct PiUsage {
 pub struct PiBudget {
     /// Immutable explicit caller policy.
     limits: PiLimits,
-    /// All-or-none admitted usage.
+    /// Attempt Work/steps and separately committed output usage.
     usage: PiUsage,
 }
 
@@ -63,13 +63,13 @@ impl PiBudget {
         self.limits
     }
 
-    /// Current committed usage.
+    /// Current attempt spend and published storage; available after every outcome.
     #[must_use]
     pub const fn usage(&self) -> PiUsage {
         self.usage
     }
 
-    /// Prepay a fixed bounded arithmetic schedule on the private transaction.
+    /// Prepay a fixed bounded arithmetic schedule without refund on later refusal.
     pub(super) fn work(&mut self, amount: u64) -> Result<(), PiError> {
         let total = self
             .usage
@@ -89,12 +89,13 @@ impl PiBudget {
         if total > self.limits.steps {
             return Err(PiError::StepLimit);
         }
+        self.work(26)?;
         self.usage.steps = total;
-        self.work(26)
+        Ok(())
     }
 
     /// Reserve the fixed logical scratch and result before numerical evaluation.
-    pub(super) fn storage(&mut self, state: usize, output: usize) -> Result<(), PiError> {
+    pub(super) fn storage(&self, state: usize, output: usize) -> Result<(usize, usize), PiError> {
         let staged = state.checked_add(output).ok_or(PiError::StagedBytesLimit)?;
         if staged > self.limits.staged_bytes {
             return Err(PiError::StagedBytesLimit);
@@ -107,8 +108,12 @@ impl PiBudget {
         if total > self.limits.output_bytes {
             return Err(PiError::OutputBytesLimit);
         }
-        self.usage.staged_bytes = self.usage.staged_bytes.max(staged);
-        self.usage.output_bytes = total;
-        Ok(())
+        Ok((self.usage.staged_bytes.max(staged), total))
+    }
+
+    /// Publish a prechecked storage reservation after a complete enclosure succeeds.
+    pub(super) const fn publish(&mut self, (staged, output): (usize, usize)) {
+        self.usage.staged_bytes = staged;
+        self.usage.output_bytes = output;
     }
 }

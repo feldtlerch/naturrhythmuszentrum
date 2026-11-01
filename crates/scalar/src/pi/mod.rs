@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-//! Certified mathematical pi with bounded rational refinement and atomic usage.
+//! Certified mathematical pi with bounded rational refinement and monotone attempt spend.
 //!
 //! # Constant theorem
 //!
@@ -17,7 +17,7 @@
 //! The requested tolerance bounds that displacement, including quantization.
 //! This is a fixed-resolution admitted algorithm, not arbitrary precision or
 //! an evaluator of supplied expressions. Exhausted refinement, format precision
-//! or caller resources refuse without publishing a result or charging usage.
+//! or caller resources refuse without publishing a result; admitted Work remains spent.
 //!
 //! # Resource contract
 //!
@@ -25,8 +25,8 @@
 //! endpoint's 22-unit integer/import schedule plus one unit per exact binary
 //! scaling, and one outward displacement per tolerance check. These are fixed
 //! schedule allowances, not processor instruction counts. The explicit caller
-//! ledger accumulates successful work, steps and output bytes; staging is a
-//! high-water mark of logical state plus result. There is no heap allocation,
+//! ledger accumulates attempted Work and steps on every outcome. Output bytes and
+//! the successful staging high-water mark commit only with a complete result. There is no heap allocation,
 //! hidden default, cache or physical interpretation. See (´rule:scalar:pi-policy´).
 
 mod binary;
@@ -36,7 +36,7 @@ mod series;
 use crate::{ArithmeticContext, ArithmeticFailure, Enclosure, Finite, Scalar};
 pub use budget::{PiBudget, PiLimits, PiUsage};
 
-/// A refused constant request; the caller's ledger remains unchanged.
+/// A refused constant request; admitted Work and steps remain on the caller's ledger.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum PiError {
     /// A strictly positive finite absolute displacement tolerance is required.
@@ -111,8 +111,8 @@ pub struct PiEnclosure<P: Scalar> {
 impl<P: Scalar> PiEnclosure<P> {
     /// Refine the fixed mathematical pi definition to an absolute displacement tolerance.
     ///
-    /// A successful result and its cumulative usage commit together. Existing
-    /// usage is preserved on every error, including late refinement exhaustion.
+    /// Work and paired steps remain consumed on every outcome. Logical output
+    /// bytes and the successful staging high-water mark commit only with a result.
     /// # Errors
     /// Refuses nonpositive tolerance, unavailable precision, any explicit resource
     /// limit or scalar arithmetic failure. A positive tolerance does not guarantee
@@ -125,27 +125,27 @@ impl<P: Scalar> PiEnclosure<P> {
         if tolerance <= Finite::ZERO {
             return Err(PiError::InvalidTolerance);
         }
-        let mut staged = *budget;
-        staged.storage(size_of::<series::State>(), size_of::<Self>())?;
-        staged.work(5)?;
+        let storage = budget.storage(size_of::<series::State>(), size_of::<Self>())?;
+        let before = budget.usage().work;
+        budget.work(5)?;
         let mut state = series::State::new();
         loop {
-            let enclosure = binary::enclose::<P>(state.bounds(), &mut staged)?;
-            staged.work(1)?;
+            let enclosure = binary::enclose::<P>(state.bounds(), budget)?;
+            budget.work(1)?;
             let displacement = enclosure.displacement_from(enclosure.lower(), context)?;
             if displacement <= tolerance {
                 let result = Self {
                     rational: state.bounds(),
                     enclosure,
                     displacement,
-                    work: staged.usage().work - budget.usage().work,
+                    work: budget.usage().work - before,
                     steps: state.steps(),
                     revision: 1,
                 };
-                *budget = staged;
+                budget.publish(storage);
                 return Ok(result);
             }
-            state.refine(&mut staged)?;
+            state.refine(budget)?;
         }
     }
 
