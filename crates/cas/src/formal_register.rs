@@ -42,7 +42,7 @@ const fn named(
 /// Every native and solving primitive in the same ASCII key order as `PRIMITIVES`.
 ///
 /// Unavailable schemas remain represented assumptions and cannot certify an application.
-pub static PRIMITIVE_SCHEMAS: [PrimitiveSchema; 80] = [
+pub static PRIMITIVE_SCHEMAS: [PrimitiveSchema; 81] = [
     named(
         Primitive::CaseCongruence,
         "thm:cas:primitive-case-congruence",
@@ -523,6 +523,12 @@ pub static PRIMITIVE_SCHEMAS: [PrimitiveSchema; 80] = [
         "A complete finite inclusive integer partition sums to the checked forward-difference endpoint expression.",
         "No ordered proof premises; complete range cover, exact forward differences and endpoint certificates.",
     ),
+    named(
+        Primitive::HalfPiWitness,
+        "thm:cas:primitive-trig-half-pi-witness",
+        "The original Real operand equals the exact named Pi times half its retained concrete integer. The coefficient check accepts literal Mul(Pi, q) operand order; producers reach other spellings through checked equality.",
+        "Ordered original definedness and checked equality in the identical context and domain, retaining every original divisor guard; canonical integer payload and exact repeated statement.",
+    ),
 ];
 
 impl Primitive {
@@ -530,6 +536,7 @@ impl Primitive {
     #[must_use]
     pub const fn formal_schema(self) -> &'static PrimitiveSchema {
         match self {
+            Self::HalfPiWitness => &PRIMITIVE_SCHEMAS[80],
             Self::Solve(schema) => solving(schema),
             Self::CaseCongruence => &PRIMITIVE_SCHEMAS[0],
             Self::CaseDomain => &PRIMITIVE_SCHEMAS[1],

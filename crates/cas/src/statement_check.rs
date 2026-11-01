@@ -52,6 +52,14 @@ fn endpoints(
 pub(crate) fn validate(cas: &Cas, statement: &Statement, budget: &mut Budget) -> Result<(), Fault> {
     budget.work(1, Location::new("statement object roles"))?;
     match statement {
+        Statement::HalfPiWitness {
+            u,
+            k,
+            context,
+            domain,
+        } => {
+            crate::trig::roles(cas, u, k, context, domain, budget)?;
+        }
         Statement::LatticeSelection(value) | Statement::LatticeNearestSelection(value) => {
             crate::lattice::selection::roles(cas, value, budget)?;
         }

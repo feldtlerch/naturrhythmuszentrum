@@ -10,9 +10,9 @@ const OWNERS: [[u64; 3]; 6] = [
     [169, 2_952, 0],
     [593_488, 65_170, 13_336],
     [2_574, 616, 0],
-    [41_888, 63_178, 63_386],
-    [38_815, 63_642, 63_850],
-    [38_863, 127_012, 127_188],
+    [42_008, 63_234, 63_442],
+    [38_935, 63_698, 63_906],
+    [38_983, 127_124, 127_300],
 ];
 
 /// Each operation charges its measured Work and refuses immediately below each positive resource boundary.

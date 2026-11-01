@@ -194,6 +194,9 @@ pub(crate) fn certificate(
     mut write: impl FnMut(&Handle, &mut Encoder<'_>) -> Result<(), Fault>,
 ) -> Result<(), Fault> {
     match value {
+        Certificate::HalfPiWitness { .. } => {
+            crate::trig::encode_certificate(value, out, &mut write)
+        }
         Certificate::DecisionNonZero(_) | Certificate::DecisionDischarge => {
             crate::decision_wire::sign(value, out, &mut write)
         }
@@ -315,6 +318,7 @@ pub(crate) fn encode(
     mut write: impl FnMut(&Handle, &mut Encoder<'_>) -> Result<(), Fault>,
 ) -> Result<(), Fault> {
     match value {
+        Statement::HalfPiWitness { .. } => crate::trig::encode_statement(value, out, &mut write)?,
         Statement::LatticeSelection(value) => {
             crate::lattice::selection::wire::encode(value, 29, out, &mut write)?;
         }
@@ -558,6 +562,9 @@ fn encode_boundary(
 /// Enumerate every mathematical object referenced by a typed statement.
 pub(crate) fn objects(value: &Statement) -> Vec<&Handle> {
     match value {
+        Statement::HalfPiWitness {
+            u, context, domain, ..
+        } => vec![u, context, domain],
         Statement::LatticeSelection(value) | Statement::LatticeNearestSelection(value) => {
             crate::lattice::selection::wire::objects(value)
         }
@@ -733,6 +740,7 @@ fn boundary_objects(value: &Statement) -> Vec<&Handle> {
 /// Reconstruct semantic roles from positions in a validated statement's object sequence.
 pub(crate) const fn edge_role(value: &Statement, position: u32) -> Edge {
     match (value, position) {
+        (Statement::HalfPiWitness { .. }, 1) => Edge::InContext,
         (
             Statement::BoundaryPartition(_)
             | Statement::CaseDerivative(_)
@@ -754,6 +762,7 @@ pub(crate) const fn edge_role(value: &Statement, position: u32) -> Edge {
         | (Statement::DefinedDomain { .. } | Statement::Split(_), 1)
         | (
             Statement::Equality { .. }
+            | Statement::HalfPiWitness { .. }
             | Statement::Compatibility { .. }
             | Statement::Elaboration { .. }
             | Statement::DerivativeOn { .. }
@@ -776,6 +785,7 @@ pub(crate) const fn edge_role(value: &Statement, position: u32) -> Edge {
         }
         (
             Statement::Ownership { .. }
+            | Statement::HalfPiWitness { .. }
             | Statement::DefinedDomain { .. }
             | Statement::Jet { .. }
             | Statement::Jump { .. }

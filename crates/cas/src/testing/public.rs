@@ -271,3 +271,17 @@ pub(crate) mod strict_sign;
 )]
 #[path = "trig.rs"]
 pub(crate) mod trig;
+
+#[expect(clippy::redundant_pub_crate, reason = "shared half-Pi fixtures")]
+pub(crate) mod half_pi;
+
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "shared half-Pi resource fixtures"
+)]
+pub(crate) mod half_pi_limits;
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "shared half-Pi resource fixtures"
+)]
+pub(crate) mod half_pi_work;

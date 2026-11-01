@@ -77,10 +77,10 @@ fn boundaries<P: Scalar + 'static>(
 /// ´test:integration:lc-operator-root-family-cumulative-work-boundary´
 #[test]
 fn lc_operator_root_family_cumulative_work_boundary() -> TestResult {
-    cumulative::<f32>(false, 5_694_101)?;
-    cumulative::<f64>(false, 5_694_101)?;
-    cumulative::<f32>(true, 5_694_145)?;
-    cumulative::<f64>(true, 5_694_145)
+    cumulative::<f32>(false, 5_694_545)?;
+    cumulative::<f64>(false, 5_694_545)?;
+    cumulative::<f32>(true, 5_694_589)?;
+    cumulative::<f64>(true, 5_694_589)
 }
 
 fn cumulative<P: Scalar + 'static>(full_rank: bool, required: u64) -> TestResult {
@@ -109,7 +109,7 @@ fn lifecycle<P: Scalar + 'static>(full_rank: bool, budget: &mut Budget) -> TestR
     let contract = shared::derivative(&mut fixture, budget)?;
     let mut case = prepare::<P>(&fixture, &contract, full_rank, budget)?;
     let outputs = family::publish(&fixture, &mut case, budget)?;
-    let published = if full_rank { 5_693_917 } else { 5_693_885 };
+    let published = if full_rank { 5_694_361 } else { 5_694_329 };
     assert_eq!(budget.usage().work - start, published);
     shared_identity(&case, &outputs, &contract, full_rank)?;
     let before = case.heap.provenance_usage();

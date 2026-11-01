@@ -559,6 +559,11 @@ pub(crate) fn validate_judgment(
     budget: &mut Budget,
 ) -> Result<(), Fault> {
     crate::statement_check::validate(cas, &value.statement, budget)?;
+    if let Statement::HalfPiWitness { context, .. } = &value.statement
+        && *context != value.context
+    {
+        return Err(Fault::invalid(InvalidCode::Context, AT));
+    }
     let context = cas.state.context(cas.checked(&value.context)?)?;
     if value.layer != crate::statement::layer(&value.statement)
         || value.space != crate::statement::space(&value.statement)
@@ -584,6 +589,7 @@ pub(crate) fn validate_judgment(
                 if matches!(
                     &value.statement,
                     Statement::LatticeCover(_)
+                        | Statement::HalfPiWitness { .. }
                         | Statement::LatticeSelection(_)
                         | Statement::LatticeNearestSelection(_)
                 ) =>

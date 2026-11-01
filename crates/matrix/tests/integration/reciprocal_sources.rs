@@ -58,7 +58,7 @@ fn reciprocal_source_jacobian_reuses_original_graph() -> TestResult {
             budget.usage().work - first.usage().after.work,
             first.retained_payload_bytes()
         ),
-        (810_646, 323_789, 4_762_190, 7_579, 108_158)
+        (810_738, 324_057, 4_762_190, 7_635, 108_298)
     );
     Ok(())
 }
@@ -68,8 +68,8 @@ fn reciprocal_source_jacobian_reuses_original_graph() -> TestResult {
 #[test]
 fn reciprocal_source_jacobian_keeps_fixed_input_domains() -> TestResult {
     let limits = Limits {
-        work: 8_074_706,
-        replay_work: 8_074_706,
+        work: 8_075_898,
+        replay_work: 8_075_898,
         ..Limits::default()
     };
     let mut prepared = plan_with_policy(limits.clone(), false)?;
@@ -115,7 +115,7 @@ fn reciprocal_source_jacobian_keeps_fixed_input_domains() -> TestResult {
     assert_eq!(cache.len(), 2);
     assert_eq!(
         (costs, budget.usage().work),
-        (vec![3_813_962, 2_911_429], 8_074_706)
+        (vec![3_814_230, 2_911_753], 8_075_898)
     );
     Ok(())
 }
@@ -127,7 +127,7 @@ fn reciprocal_source_jacobian_cumulative_boundary() -> TestResult {
     let mut measured = Budget::new(policy())?;
     pipeline(&mut measured)?;
     let required = measured.usage().work;
-    assert_eq!(required, 5_904_204);
+    assert_eq!(required, 5_904_620);
     for ceiling in [required, required - 1] {
         let mut budget = Budget::new(Limits {
             work: ceiling,
@@ -164,8 +164,8 @@ fn pipeline(budget: &mut Budget) -> TestResult {
 /// Exact measured recipe, key, native derivative and one cache hit, including 17 prior Work.
 fn policy() -> Limits {
     Limits {
-        work: 5_904_204,
-        replay_work: 5_904_204,
+        work: 5_904_620,
+        replay_work: 5_904_620,
         ..Limits::default()
     }
 }

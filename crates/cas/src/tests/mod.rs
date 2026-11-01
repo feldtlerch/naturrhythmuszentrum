@@ -58,6 +58,8 @@ mod work_trace;
 
 mod wire_memo;
 
+mod half_pi;
+mod half_pi_work;
 mod reading_memo;
 mod trig;
 mod trig_wire_work;

@@ -26,6 +26,12 @@ pub(crate) fn statement(
     records: &[Decoded],
 ) -> Result<Statement, Fault> {
     Ok(match reader.byte()? {
+        31 => Statement::HalfPiWitness {
+            u: object(reader, records)?,
+            k: Box::new(integer(reader)?),
+            context: object(reader, records)?,
+            domain: object(reader, records)?,
+        },
         30 => Statement::LatticeNearestSelection(Box::new(
             crate::lattice::selection::wire::decode(reader, records)?,
         )),
@@ -250,6 +256,14 @@ pub(crate) fn certificate(
     records: &[Decoded],
 ) -> Result<Certificate, Fault> {
     Ok(match reader.byte()? {
+        19 => Certificate::HalfPiWitness {
+            u: object(reader, records)?,
+            k: Box::new(integer(reader)?),
+            context: object(reader, records)?,
+            domain: object(reader, records)?,
+            defined: reader.small()?,
+            equality: reader.small()?,
+        },
         18 => Certificate::LatticeSelection(Box::new(
             crate::lattice::selection::wire::decode_certificate(reader, records)?,
         )),
@@ -296,6 +310,15 @@ pub(crate) fn certificate(
         )?)),
         _ => return Err(invalid()),
     })
+}
+
+/// Integer payloads use the canonical Rational grammar without narrowing their magnitude.
+fn integer(reader: &mut Reader<'_, '_>) -> Result<crate::number::Rational, Fault> {
+    let value = reader.rational()?;
+    if !value.is_integer() {
+        return Err(invalid());
+    }
+    Ok(value)
 }
 
 /// Decode every case vector under the corresponding semantic ceiling before allocation.
