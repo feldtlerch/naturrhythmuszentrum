@@ -310,7 +310,7 @@ fn commit<P: Scalar + 'static>(
 }
 
 /// Every original source and any earlier producer ancestor remains in the flattened closure.
-fn sources<P: Scalar>(
+pub(super) fn sources<P: Scalar>(
     inputs: &[crate::ReadingBinding<P>; 2],
     budget: &mut Budget,
 ) -> Result<Vec<crate::binding::live::selected::SelectedReading>, Error> {
@@ -354,4 +354,14 @@ fn parameter<P: Scalar + 'static>(
         }
     }
     Err(Error::Identity)
+}
+
+/// Share the existing complete adapter allowance with the closed angular-frequency publisher.
+pub(super) fn adapter_storage<P: Scalar>(
+    coverage: &ReadingCoverage<usize>,
+    companions: &[CompanionAdapter<usize>],
+    sources: usize,
+    budget: &mut Budget,
+) -> Result<u64, Error> {
+    check::storage::<P>(coverage, companions, sources, budget)
 }

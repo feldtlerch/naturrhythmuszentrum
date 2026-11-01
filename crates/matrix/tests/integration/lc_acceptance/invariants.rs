@@ -169,9 +169,9 @@ fn lc_invariant_rechecks_every_source_and_companion_version() -> TestResult {
 }
 
 /// Equal-bit replacements still advance the actual source or companion version.
-pub(super) fn mutate(
+pub(super) fn mutate<P: Scalar + 'static>(
     heap: &mut Heap,
-    sources: &[ReadingBinding<f64>; 2],
+    sources: &[ReadingBinding<P>; 2],
     change: usize,
 ) -> TestResult {
     if change < 2 {

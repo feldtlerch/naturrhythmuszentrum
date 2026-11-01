@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! The closed LC law joins original complete roots to one retained state similarity and time map.
 
+mod angular;
+pub use angular::{LcAngularFrequencyDefinition, LcAngularFrequencySymbols};
 mod hypotheses;
 mod jacobian;
 pub use jacobian::LcRootJacobian;

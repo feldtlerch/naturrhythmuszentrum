@@ -54,7 +54,8 @@ fn measure<P: Scalar + 'static>() -> TestResult {
             moments.covariance().get(0, 0)?.to_f64(),
             moments.covariance().error(0, 0)?.to_f64()
         )?);
-        let (_, direct) = crate::omega_oracle::targets(centers, covariance, None)?;
+        let (direct_squares, direct) = crate::omega_oracle::targets(centers, covariance, None)?;
+        report::<P>(index, &squares, &direct_squares, &expected, &direct)?;
         assert_eq!(crate::omega_oracle::equal(&expected, &direct)?, index == 0);
         assert_eq!(
             moments.assurance(),
@@ -62,5 +63,38 @@ fn measure<P: Scalar + 'static>() -> TestResult {
         );
         assert!(moments.means().is_none());
     }
+    Ok(())
+}
+
+/// Exact rational differences quantify the two policies; decimal derivative gaps are reported estimates.
+fn report<P: Scalar>(
+    index: usize,
+    chain: &[crate::reciprocal_testing::oracle::Rational; 2],
+    direct: &[crate::reciprocal_testing::oracle::Rational; 2],
+    chain_variance: &crate::reciprocal_testing::oracle::Rational,
+    direct_variance: &crate::reciprocal_testing::oracle::Rational,
+) -> TestResult {
+    use crate::reciprocal_testing::oracle::Rational;
+    use std::io::Write;
+    let minus_one = Rational::new(-1, 1)?;
+    let ratio_delta = chain[0]
+        .divide(&direct[0])?
+        .add(&minus_one)?
+        .binary64_bounds()?;
+    let variance_delta = chain_variance
+        .add(&direct_variance.multiply(&minus_one)?)?
+        .binary64_bounds()?;
+    let delta = f64::midpoint(ratio_delta[0], ratio_delta[1]);
+    let relative = delta / ((1.0 + delta).sqrt() + 1.0);
+    let mut partial_gaps = Vec::new();
+    for square in direct {
+        let bounds = square.binary64_bounds()?;
+        partial_gaps.push(-bounds[0].sqrt() * relative);
+    }
+    writeln!(
+        std::io::stdout().lock(),
+        "omega target gap {:?} case={index}: (J_chain/J_direct)^2-1 in {ratio_delta:?}; U_chain-U_direct in {variance_delta:?}; approximate J_chain-J_direct={partial_gaps:?}",
+        P::PRECISION
+    )?;
     Ok(())
 }

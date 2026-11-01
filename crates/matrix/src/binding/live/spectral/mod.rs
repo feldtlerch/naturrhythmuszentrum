@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Strict positive-family spectral bounds retain the original theorem and every live input version.
 
+mod angular;
+pub(crate) use angular::Origin as AngularFrequencyOrigin;
+pub use angular::{
+    LcAngularFrequencyParameter, LcAngularFrequencyPublication, PublishedLcAngularFrequency,
+};
 mod input;
 mod moments;
 mod numeric;

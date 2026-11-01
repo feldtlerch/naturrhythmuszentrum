@@ -56,6 +56,17 @@ pub(super) struct Moments<P: Scalar> {
 }
 
 impl<P: Scalar + 'static> LcSpectrum<P> {
+    /// Lend the retained original physical point only after validating its derivative dependencies.
+    pub(super) fn statistical_operating_point<'a>(
+        &'a self,
+        heap: &Heap,
+        context: &ArithmeticContext,
+        budget: &mut Budget,
+    ) -> Result<&'a [P], Error> {
+        let input = &self.extension().ok_or(Error::Identity)?.input;
+        Ok(input.derivative.operating_point(heap, context, budget)?)
+    }
+
     /// Original joint declaration and physical input columns for the closed family consumer.
     pub(crate) fn statistical_selection(&self) -> Option<(CompanionRef<P>, [usize; 2])> {
         self.extension()

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Shared original LC bindings exercise the operator and complete spectral publication together.
 
+mod angular_frequency;
 mod boundaries;
 mod bridge;
 mod companions;

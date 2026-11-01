@@ -81,4 +81,45 @@ impl Rational {
         let below = self.0.compare(&upper, &mut ledger()?)? != Ordering::Greater;
         Ok(above && below)
     }
+
+    /// Adjacent binary64 bounds for zero or magnitudes in 2^-128..=2^128, by exact ordering.
+    pub(crate) fn binary64_bounds(&self) -> TestResult<[f64; 2]> {
+        if self.0.is_zero() {
+            return Ok([0.0; 2]);
+        }
+        let negative = self.at_most(&Self::new(0, 1)?)?;
+        let positive = if negative {
+            self.multiply(&Self::new(-1, 1)?)?
+        } else {
+            self.multiply(&Self::new(1, 1)?)?
+        };
+        let mut low = 0x37f0_0000_0000_0000;
+        let mut high = 0x47f0_0000_0000_0000;
+        if !Self::binary(f64::from_bits(low))?.at_most(&positive)? {
+            return Err("oracle below bounded reporting range".into());
+        }
+        if !positive.at_most(&Self::binary(f64::from_bits(high))?)? {
+            return Err("oracle exceeds bounded reporting range".into());
+        }
+        while low < high {
+            let middle = low + (high - low) / 2;
+            if positive.at_most(&Self::binary(f64::from_bits(middle))?)? {
+                high = middle;
+            } else {
+                low = middle + 1;
+            }
+        }
+        let upper = f64::from_bits(low);
+        let exact = Self::binary(upper)?.at_most(&positive)?;
+        let lower = if exact {
+            upper
+        } else {
+            f64::from_bits(low - 1)
+        };
+        Ok(if negative {
+            [-upper, -lower]
+        } else {
+            [lower, upper]
+        })
+    }
 }

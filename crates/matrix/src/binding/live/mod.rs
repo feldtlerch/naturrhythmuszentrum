@@ -21,8 +21,9 @@ pub use phasor::{
     PhasorTransferBounds, PhasorTransferredResidual, PublishedPhasor, PublishedPhasorSolve,
 };
 pub use spectral::{
-    LcSpectralEvaluation, LcSpectralPublication, LcSpectrum, PublishedLcSpectrum, SpectralError,
-    SpectralValue,
+    LcAngularFrequencyParameter, LcAngularFrequencyPublication, LcSpectralEvaluation,
+    LcSpectralPublication, LcSpectrum, PublishedLcAngularFrequency, PublishedLcSpectrum,
+    SpectralError, SpectralValue,
 };
 mod derivatives;
 pub use derivatives::{
@@ -129,7 +130,8 @@ impl<P: Scalar> ReadingBinding<P> {
             ResultDefinition::Product(value) => Some(value),
             ResultDefinition::Solve(_)
             | ResultDefinition::Spectral(_)
-            | ResultDefinition::Coordinate(_) => None,
+            | ResultDefinition::Coordinate(_)
+            | ResultDefinition::AngularFrequency(_) => None,
         }
     }
     /// Original checked LC equation, when certified solve publication initialized this family.
@@ -139,7 +141,8 @@ impl<P: Scalar> ReadingBinding<P> {
             ResultDefinition::Solve(value) => Some(value),
             ResultDefinition::Product(_)
             | ResultDefinition::Spectral(_)
-            | ResultDefinition::Coordinate(_) => None,
+            | ResultDefinition::Coordinate(_)
+            | ResultDefinition::AngularFrequency(_) => None,
         }
     }
     /// Original complete LC spectral law and all six output views that initialized this family.
@@ -151,6 +154,20 @@ impl<P: Scalar> ReadingBinding<P> {
             ResultDefinition::Spectral(value) => Some(value),
             ResultDefinition::Product(_)
             | ResultDefinition::Solve(_)
+            | ResultDefinition::Coordinate(_)
+            | ResultDefinition::AngularFrequency(_) => None,
+        }
+    }
+    /// Original sealed angular-frequency recipe that initialized this complete result family.
+    #[must_use]
+    pub fn lc_angular_frequency(
+        &self,
+    ) -> Option<&nrz_bindings::readings::LcAngularFrequencyDefinition> {
+        match self.group.result_definition.as_ref()? {
+            ResultDefinition::AngularFrequency(value) => Some(value.definition()),
+            ResultDefinition::Product(_)
+            | ResultDefinition::Solve(_)
+            | ResultDefinition::Spectral(_)
             | ResultDefinition::Coordinate(_) => None,
         }
     }
@@ -232,6 +249,8 @@ pub(crate) enum ResultDefinition {
     Product(nrz_bindings::readings::PhasorResultDefinition),
     /// Original LC equation and complete current result slot.
     Solve(nrz_bindings::readings::PhasorSolveDefinition),
+    /// Angular frequency with its original radian relation and complete companion inventory.
+    AngularFrequency(Rc<spectral::AngularFrequencyOrigin>),
     /// Both conjugate roots and their checked physical components.
     Spectral(nrz_bindings::readings::LcSpectralResultDefinition),
 }

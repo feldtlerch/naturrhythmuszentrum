@@ -149,3 +149,10 @@ mod mapped_testing;
     reason = "the independent LC oracle serves both quantity and native public tests"
 )]
 mod omega_oracle;
+
+#[path = "../src/testing/angular.rs"]
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "the exact angular-frequency fixture serves public integration and conformance tests"
+)]
+mod angular_testing;
