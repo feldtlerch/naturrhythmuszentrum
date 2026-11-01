@@ -81,6 +81,7 @@ pub use constants::{
     ReferenceDefinition,
 };
 pub use decision::{
+    AxisPhaseAttempt, AxisPhaseAttempts, AxisPhaseCase, AxisPhaseOutcome, AxisPhaseSpec,
     CountDescriptor, CountEvidence, DecisionAttachment, DecisionCoordinate, DecisionError,
     DecisionExpression, DecisionInputs, DecisionOperand, IntegerDecisionCase, IntegerDecisionSpec,
     LatticeAttachment, LatticeAxis, LatticeCoordinate, LatticeDecisionCase, LatticeDecisionSpec,

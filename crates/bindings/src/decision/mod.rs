@@ -2,6 +2,10 @@
 //! Storage-neutral certified Integer admission for closed, physically checked expressions.
 
 mod association;
+mod axis;
+pub use axis::{
+    AxisPhaseAttempt, AxisPhaseAttempts, AxisPhaseCase, AxisPhaseOutcome, AxisPhaseSpec,
+};
 mod case;
 mod count;
 mod expression;
@@ -66,6 +70,9 @@ pub enum DecisionError {
     /// Existing physical reading and restoration checks refused.
     #[error("physical lattice reading: {0}")]
     Reading(#[from] crate::readings::ReadingError),
+    /// The predeclared finite sign-attempt allowance has been consumed.
+    #[error("axis-phase attempt limit exhausted")]
+    Attempts,
     /// The bounded retained metadata cannot be represented.
     #[error("decision metadata capacity exhausted")]
     Capacity,
