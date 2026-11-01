@@ -58,6 +58,37 @@ pub(in crate::binding::live::spectral) fn partials<P: Scalar + 'static>(
     context: &ArithmeticContext,
     budget: &mut Budget,
 ) -> Result<[Enclosure<P>; 2], Error> {
+    differentiate(heap, derivative, constants, None, context, budget)
+}
+
+/// The caller authenticates this enclosure to the same original live spectral plan.
+pub(in crate::binding::live::spectral) fn retained_partials<P: Scalar + 'static>(
+    heap: &Heap,
+    derivative: &crate::ReciprocalDerivativeEvaluation<P>,
+    constants: &[DecodedLiteral<P>; 3],
+    magnitude: Enclosure<P>,
+    context: &ArithmeticContext,
+    budget: &mut Budget,
+) -> Result<[Enclosure<P>; 2], Error> {
+    differentiate(
+        heap,
+        derivative,
+        constants,
+        Some(magnitude),
+        context,
+        budget,
+    )
+}
+
+/// Both entry points retain the original represented operating point and exact operator partials.
+fn differentiate<P: Scalar + 'static>(
+    heap: &Heap,
+    derivative: &crate::ReciprocalDerivativeEvaluation<P>,
+    constants: &[DecodedLiteral<P>; 3],
+    retained: Option<Enclosure<P>>,
+    context: &ArithmeticContext,
+    budget: &mut Budget,
+) -> Result<[Enclosure<P>; 2], Error> {
     let point = derivative.operating_point(heap, context, budget)?;
     let values = derivative.values(heap, context, budget)?;
     let [inductance, capacitance] = point else {
@@ -73,7 +104,10 @@ pub(in crate::binding::live::spectral) fn partials<P: Scalar + 'static>(
     let lower = constants[1]
         .enclosure()
         .div(Enclosure::singleton(Finite::new(*inductance)?), context)?;
-    let magnitude = upper.mul(lower, context)?.sqrt(context)?;
+    let magnitude = match retained {
+        Some(value) => value,
+        None => upper.mul(lower, context)?.sqrt(context)?,
+    };
     let twice = Enclosure::singleton(Finite::new(P::ONE + P::ONE)?);
     let denominator = twice
         .mul(magnitude, context)?

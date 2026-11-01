@@ -223,7 +223,10 @@ fn check<P: Scalar + 'static>(
 }
 
 /// Independently contract the two rational factor directions in original source order.
-fn oracle<P: Scalar>(values: &[[nrz_scalar::Enclosure<P>; 8]; 8], full: bool) -> TestResult {
+pub(super) fn oracle<P: Scalar>(
+    values: &[[nrz_scalar::Enclosure<P>; 8]; 8],
+    full: bool,
+) -> TestResult {
     let first = [
         (0, 1),
         (1, 320),

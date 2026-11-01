@@ -3,6 +3,7 @@
 
 mod admission;
 mod numeric;
+mod reuse;
 
 use super::{Heap, LcSpectralEvaluation, LcSpectrum, SpectralError as Error};
 use crate::{CompanionRef, ModelId, ReadingBinding, ReciprocalDerivativeEvaluation};

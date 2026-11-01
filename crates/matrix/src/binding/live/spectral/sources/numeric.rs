@@ -47,6 +47,45 @@ pub(super) fn evaluate<P: Scalar + 'static>(
     ))
 }
 
+/// Reconstruct the retained numerical-only root enclosure outward, without taking another root.
+/// The original numerical-only input boxes contain the represented centers, so their root image
+/// also covers the exact operating point of the retained native operator partials.
+pub(super) fn reuse<P: Scalar + 'static>(
+    heap: &Heap,
+    input: &Input<P>,
+    spectrum: &LcSpectralEvaluation<P>,
+    context: &ArithmeticContext,
+    budget: &mut Budget,
+) -> Result<Values<P>, Error> {
+    storage(input, budget)?;
+    let value = spectrum.normalized(heap, context)?;
+    budget.work(2, AT)?;
+    let magnitude = Enclosure::singleton(Finite::new(value.center)?)
+        .add(Enclosure::new(-value.error, value.error)?, context)?;
+    if magnitude.lower().get() <= P::ZERO {
+        return Err(Error::NotSeparated);
+    }
+    let constants = super::super::numeric::constants(&input.spectrum, context, budget)?;
+    let partials = super::super::statistics::numeric::retained_partials(
+        heap,
+        &input.derivative,
+        &constants,
+        magnitude,
+        context,
+        budget,
+    )?;
+    let original = input.derivative.values(heap, context, budget)?;
+    if original.len() != 8 {
+        return Err(Error::Identity);
+    }
+    let sensitivities = sensitivity(input, original, partials, context, budget)?;
+    let covariance = contract(heap, input, &sensitivities, context, budget)?;
+    Ok(Values {
+        covariance,
+        sensitivities,
+    })
+}
+
 /// Exact maps have two complete rows; no coefficient is inferred from evaluated covariance.
 fn sensitivity<P: Scalar>(
     input: &Input<P>,

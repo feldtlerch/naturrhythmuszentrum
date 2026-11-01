@@ -4,6 +4,7 @@
 mod costs;
 mod mapped;
 mod refusals;
+mod reuse;
 
 use super::{reciprocal_statistics as shared, root_support as inputs};
 use crate::reading_testing::{TestResult, ledger};
