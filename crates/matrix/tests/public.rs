@@ -142,3 +142,10 @@ mod spectral_testing;
     reason = "mapped companion fixtures serve public tests and standalone measurements"
 )]
 mod mapped_testing;
+
+#[path = "../src/testing/omega.rs"]
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "the independent LC oracle serves both quantity and native public tests"
+)]
+mod omega_oracle;

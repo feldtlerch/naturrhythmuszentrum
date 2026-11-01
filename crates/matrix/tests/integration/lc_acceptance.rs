@@ -16,6 +16,7 @@ mod family_statistics;
 mod family_support;
 mod grid;
 mod invariants;
+mod omega_measurement;
 mod oracle_regression;
 mod reciprocal_costs;
 mod reciprocal_refusals;

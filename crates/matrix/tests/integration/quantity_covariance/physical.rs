@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Physical quantity products retain declared kind relations as well as correlation.
 
+mod measurements;
+
 use super::{TestResult, append_pair};
 use crate::integration::quantity_products::descriptor;
 use crate::kernel_oracle::Rational;
@@ -158,16 +160,24 @@ fn resonance_context() -> TestResult<(QuantityContext, [nrz_bindings::Descriptor
 
 /// Three original sources include an exact radian with declared zero covariance.
 fn resonance_case() -> TestResult<(QuantityContext, Heap, [nrz_matrix::Quantity<f64>; 3])> {
+    resonance_at([0.25_f64, 0.0625], [0.5, 0.25, 7.0])
+}
+
+/// Original coherent L/C declarations and a source-free exact radian share one joint model.
+fn resonance_at<P: nrz_scalar::Scalar + 'static>(
+    centers: [P; 2],
+    covariance: [P; 3],
+) -> TestResult<(QuantityContext, Heap, [nrz_matrix::Quantity<P>; 3])> {
     use nrz_matrix::{
-        CompanionSetDraft, CovarianceBlock, DenseCovariance, Extent, JointLimits, JointModel,
-        Source, TargetMap,
+        CompanionSetDraft, CovarianceBlock, Extent, JointLimits, JointModel, Source, SourceFactor,
+        TargetMap,
     };
     let (context, [inductance, capacitance, angle]) = resonance_context()?;
     let mut heap = Heap::new(HeapLimits::default())?;
     let descriptors = [&inductance, &capacitance, &angle];
     let handles = descriptors
         .into_iter()
-        .zip([0.25_f64, 0.0625, 1.0])
+        .zip([centers[0], centers[1], P::ONE])
         .map(|(descriptor, center)| -> TestResult<_> {
             Ok(heap
                 .import_represented(Extent::new(1, 1)?, descriptor, &[center])?
@@ -179,15 +189,22 @@ fn resonance_case() -> TestResult<(QuantityContext, Heap, [nrz_matrix::Quantity<
         .map(|descriptor| Source::new(descriptor, 1))
         .collect::<Result<Vec<_>, _>>()?;
     let limits = JointLimits::default();
-    let covariance = DenseCovariance::new(
+    let factor = SourceFactor::new(
         3,
-        &[0.25, 0.125, 0.0, 0.125, 0.5, 0.0, 0.0, 0.0, 0.0],
-        &nrz_scalar::ArithmeticContext::new()?,
+        &[
+            covariance[0],
+            covariance[1],
+            P::ZERO,
+            P::ZERO,
+            covariance[1],
+            P::ZERO,
+        ],
+        &[P::ONE, covariance[2]],
         limits,
     )?;
-    let model = JointModel::from_dense(
+    let model = JointModel::from_factor(
         &sources,
-        covariance,
+        factor,
         &[const { CovarianceBlock::Known }; 9],
         limits,
     )?;
