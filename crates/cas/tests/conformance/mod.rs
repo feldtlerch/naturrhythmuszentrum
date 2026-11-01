@@ -125,3 +125,5 @@ mod integer_cases;
 mod pi_bounds;
 
 mod decision_pi;
+mod trig;
+mod trig_work;

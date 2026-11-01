@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Complete client computations and portable proof lifecycles.
 
+mod trig_work;
+
 mod graph;
 mod numbers;
 mod proofs;
@@ -65,3 +67,4 @@ mod jacobian_matrices;
 mod jacobian_composition;
 
 mod strict_sign;
+mod trig;

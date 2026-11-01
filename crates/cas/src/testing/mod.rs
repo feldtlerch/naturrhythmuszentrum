@@ -5,6 +5,14 @@
 //!
 //! Inline unit tests keep their setup local and never import this harness.
 
+#[expect(clippy::redundant_pub_crate, reason = "shared graph resource ceilings")]
+pub(crate) mod trig_limits;
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "shared portable syntax fixtures"
+)]
+pub(crate) mod trig_replay;
+
 #[expect(
     clippy::redundant_pub_crate,
     reason = "shared test helpers stay crate-visible inside the private harness"
@@ -121,3 +129,8 @@ pub(crate) mod work_trace;
     reason = "agreement tests share the independent exclusion oracle"
 )]
 pub(crate) mod exclusion_oracle;
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "shared structural trigonometric fixtures"
+)]
+pub(crate) mod trig;
