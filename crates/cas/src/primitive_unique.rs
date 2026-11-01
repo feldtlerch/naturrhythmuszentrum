@@ -3,7 +3,7 @@
 //!
 //! # Primitive uniqueness
 //!
-//! `Task::PrimitiveUnique { space }` checks equal first derivatives on a connected open interval. `DistributionStatement::PrimitiveUnique` asserts that the two distributions differ by some constant distribution; it does not select a constant or an initial condition. Step and step plus seven both differentiate to `δ_0`. The three primitive keys are `dist.affine-pullback`, `dist.simple-zero-pullback` and `dist.primitive-unique`, at semantic version 1 and logical weights 12, 12 and 8. The complete default policy is version 11 with 81 registered schemas: the existing 60 executable checkers and 21 registered solving schemas with separate availability.
+//! `Task::PrimitiveUnique { space }` checks equal first derivatives on a connected open interval. `DistributionStatement::PrimitiveUnique` asserts that the two distributions differ by some constant distribution; it does not select a constant or an initial condition. Step and step plus seven both differentiate to `δ_0`. The three primitive keys are `dist.affine-pullback`, `dist.simple-zero-pullback` and `dist.primitive-unique`, at semantic version 1 and logical weights 12, 12 and 8. The complete default policy is version 12 with 85 registered schemas: the 64 executable native checkers and 21 registered solving schemas with separate availability.
 
 use crate::budget::Budget;
 use crate::case_syntax::invalid;

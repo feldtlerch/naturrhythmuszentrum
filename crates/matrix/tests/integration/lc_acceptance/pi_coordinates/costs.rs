@@ -13,21 +13,21 @@ fn pi_live_coordinate_owner_boundaries() -> TestResult {
     let plan = fixture::plan()?;
     boundaries::<f32>(
         &plan,
-        [209_489, 31_049, 5401],
-        [96_463, 79_600],
-        [116_514, 368],
-        [80_272, 80_240, 80_736],
-        [80_888, 80_880, 81_352],
-        [209_488, 30_173, 38_411],
+        [210_365, 31_140, 5401],
+        [97_339, 79_782],
+        [116_787, 368],
+        [80_454, 80_422, 80_918],
+        [81_070, 81_062, 81_534],
+        [210_364, 30_173, 38_411],
     )?;
     boundaries::<f64>(
         &plan,
-        [209_489, 31_049, 5401],
-        [96_463, 79_600],
-        [116_674, 496],
-        [80_576, 80_424, 81_200],
-        [81_352, 81_248, 81_976],
-        [209_488, 30_173, 38_411],
+        [210_365, 31_140, 5401],
+        [97_339, 79_782],
+        [116_947, 496],
+        [80_758, 80_606, 81_382],
+        [81_534, 81_430, 82_158],
+        [210_364, 30_173, 38_411],
     )
 }
 
@@ -38,21 +38,21 @@ fn pi_live_coordinate_point_owner_boundaries() -> TestResult {
     let plan = super::point::point_plan()?;
     boundaries::<f32>(
         &plan,
-        [298_848, 33_882, 5979],
-        [100_460, 82_025],
-        [122_350, 368],
-        [82_697, 82_665, 83_161],
-        [83_313, 83_305, 83_777],
-        [298_847, 33_016, 42_117],
+        [299_724, 33_973, 5979],
+        [101_336, 82_207],
+        [122_623, 368],
+        [82_879, 82_847, 83_343],
+        [83_495, 83_487, 83_959],
+        [299_723, 33_016, 42_117],
     )?;
     boundaries::<f64>(
         &plan,
-        [298_848, 33_882, 5979],
-        [100_460, 82_025],
-        [122_510, 496],
-        [83_001, 82_849, 83_625],
-        [83_777, 83_673, 84_401],
-        [298_847, 33_016, 42_117],
+        [299_724, 33_973, 5979],
+        [101_336, 82_207],
+        [122_783, 496],
+        [83_183, 83_031, 83_807],
+        [83_959, 83_855, 84_583],
+        [299_723, 33_016, 42_117],
     )
 }
 
@@ -197,13 +197,13 @@ fn cumulative<P: Scalar + 'static>() -> TestResult {
     let plan = fixture::plan()?;
     let context = ArithmeticContext::new()?;
     let circle = pi::<P>(&context, &mut ledger()?)?;
-    for limit in [216_179, 216_178] {
-        let mut budget = prior([limit, 116_674, 81_248])?;
+    for limit in [217_055, 217_054] {
+        let mut budget = prior([limit, 116_947, 81_430])?;
         let contract = PiCoordinateContract::new(
             &plan.graph,
             &plan.contract,
             &circle,
-            &policy([209_489, 31_049, 5401]),
+            &policy([210_365, 31_140, 5401]),
             &context,
             &mut budget,
         )?;
@@ -226,7 +226,7 @@ fn cumulative<P: Scalar + 'static>() -> TestResult {
             normalized.coefficients().as_ptr(),
             warm.coefficients().as_ptr()
         ));
-        assert_eq!(budget.usage().work, 216_002);
+        assert_eq!(budget.usage().work, 216_878);
         let before = budget.usage();
         let result = heap.restore_certified_reading(
             &normalized,
@@ -235,7 +235,7 @@ fn cumulative<P: Scalar + 'static>() -> TestResult {
             &context,
             &mut budget,
         );
-        if limit == 216_179 {
+        if limit == 217_055 {
             result?;
             assert_eq!(budget.usage().work, limit);
         } else {

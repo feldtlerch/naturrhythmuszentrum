@@ -4,6 +4,14 @@
 /// A compiled checker whose mathematical meaning is fixed by its semantic version.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Primitive {
+    /// Exact sine from the checked original half-Pi witness.
+    SinHalfPi,
+    /// Exact cosine from the checked original half-Pi witness.
+    CosHalfPi,
+    /// Exact arctangent from original definedness and equality to zero.
+    AtanZero,
+    /// Exact arctangent from original definedness and equality to one.
+    AtanOne,
     /// Recognize an exact concrete integer multiple of half Pi from two checked premises.
     HalfPiWitness,
     /// One registered solving schema, available only when its owning checker is enabled.
@@ -241,6 +249,10 @@ impl Primitive {
             self,
             Self::Solve(_)
                 | Self::HalfPiWitness
+                | Self::SinHalfPi
+                | Self::CosHalfPi
+                | Self::AtanZero
+                | Self::AtanOne
                 | Self::DistAffinePullback
                 | Self::DistSimpleZeroPullback
                 | Self::DistPrimitiveUnique
@@ -278,6 +290,10 @@ impl Primitive {
     pub const fn specification(self) -> RuleSpec {
         let (key, weight) = match self {
             Self::HalfPiWitness => ("trig.half-pi-witness", 2),
+            Self::SinHalfPi => ("trig.sin-half-pi", 2),
+            Self::CosHalfPi => ("trig.cos-half-pi", 2),
+            Self::AtanZero => ("trig.atan-zero", 2),
+            Self::AtanOne => ("trig.atan-one", 2),
             Self::Solve(schema) => return schema.specification(),
             Self::DistAffinePullback => ("dist.affine-pullback", 12),
             Self::DistSimpleZeroPullback => ("dist.simple-zero-pullback", 12),
@@ -427,6 +443,8 @@ impl Primitive {
             Self::ContextClose => PremiseShape::AtLeast(2),
             Self::Jacobian => PremiseShape::JacobianCells,
             Self::Transitivity
+            | Self::AtanZero
+            | Self::AtanOne
             | Self::HalfPiWitness
             | Self::ContextWeaken
             | Self::DifferentiateAdd
@@ -435,6 +453,8 @@ impl Primitive {
             | Self::DifferentiateQuotient
             | Self::DerivativeTransport => PremiseShape::Exact(2),
             Self::Symmetry
+            | Self::SinHalfPi
+            | Self::CosHalfPi
             | Self::Congruence
             | Self::Substitute
             | Self::DifferentiateNeg
@@ -479,7 +499,7 @@ impl Primitive {
 }
 
 /// Every registered primitive, in ASCII key order; availability is separate metadata.
-pub const PRIMITIVES: [Primitive; 81] = [
+pub const PRIMITIVES: [Primitive; 85] = [
     Primitive::CaseCongruence,
     Primitive::CaseDomain,
     Primitive::CaseEliminate,
@@ -560,5 +580,9 @@ pub const PRIMITIVES: [Primitive; 81] = [
     Primitive::Solve(crate::solving::SolveSchema::TotalPredicateSplit),
     Primitive::Solve(crate::solving::SolveSchema::SolutionTransport),
     Primitive::SumCaseSplit,
+    Primitive::AtanOne,
+    Primitive::AtanZero,
+    Primitive::CosHalfPi,
     Primitive::HalfPiWitness,
+    Primitive::SinHalfPi,
 ];

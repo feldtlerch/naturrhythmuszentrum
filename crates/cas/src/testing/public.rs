@@ -274,6 +274,16 @@ pub(crate) mod trig;
 
 #[expect(clippy::redundant_pub_crate, reason = "shared half-Pi fixtures")]
 pub(crate) mod half_pi;
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "shared exact trigonometric value fixtures"
+)]
+pub(crate) mod trig_values;
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "shared exact value boundary fixtures"
+)]
+pub(crate) mod trig_values_work;
 
 #[expect(
     clippy::redundant_pub_crate,

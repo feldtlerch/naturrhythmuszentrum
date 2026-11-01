@@ -70,3 +70,5 @@ mod half_pi;
 mod half_pi_work;
 mod strict_sign;
 mod trig;
+mod trig_values;
+mod trig_values_work;
