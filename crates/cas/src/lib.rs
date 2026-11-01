@@ -387,6 +387,7 @@ mod region;
     reason = "scoped key helpers remain private implementation"
 )]
 mod statement;
+mod trig;
 
 #[expect(
     clippy::redundant_pub_crate,

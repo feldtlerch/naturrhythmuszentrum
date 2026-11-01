@@ -36,6 +36,17 @@ pub enum Ownership {
 /// A mathematical statement with exactly the objects needed by its proposition.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Statement {
+    /// Exact recognition of an original Real operand as an integer multiple of half Pi.
+    HalfPiWitness {
+        /// Original operand, before any normalization.
+        u: Handle,
+        /// Canonical arbitrary-precision integer, encoded as a Rational with denominator one.
+        k: Box<crate::number::Rational>,
+        /// Complete context in which both premises hold.
+        context: Handle,
+        /// Original domain retained by both premises.
+        domain: Handle,
+    },
     /// The original target belongs to the nearest cell with greatest original-index ties.
     LatticeNearestSelection(Box<crate::lattice::LatticeSelection>),
     /// The original lattice target lies in the cell of one exact ordered Integer tuple.
@@ -256,6 +267,21 @@ pub struct Judgment {
 /// Independently checked evidence tied to a closed primitive schema.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Certificate {
+    /// Exact recognition payload and ordered slots in the ordinary premise list.
+    HalfPiWitness {
+        /// Original operand repeated for exact conclusion comparison.
+        u: Handle,
+        /// Concrete canonical integer repeated without machine narrowing.
+        k: Box<crate::number::Rational>,
+        /// Exact conclusion context.
+        context: Handle,
+        /// Exact conclusion domain.
+        domain: Handle,
+        /// Slot of original definedness evidence; version one requires zero.
+        defined: u32,
+        /// Slot of the checked equality; version one requires one.
+        equality: u32,
+    },
     /// Complete original-target box evidence consumed by the lattice tuple checker.
     LatticeSelection(Box<crate::lattice::LatticeEnclosure>),
     /// Original target enclosure consumed by the exact Integer projection checker.

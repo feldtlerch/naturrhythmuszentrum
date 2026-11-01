@@ -4,6 +4,8 @@
 /// A compiled checker whose mathematical meaning is fixed by its semantic version.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Primitive {
+    /// Recognize an exact concrete integer multiple of half Pi from two checked premises.
+    HalfPiWitness,
     /// One registered solving schema, available only when its owning checker is enabled.
     Solve(crate::solving::SolveSchema),
     /// Affine delta pullback with both spaces, inverse and absolute Jacobian.
@@ -129,6 +131,8 @@ pub enum Primitive {
 /// Typed conclusion family selected by an executable checker.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ConclusionKind {
+    /// Original Real operand with its concrete exact integer half-Pi witness.
+    HalfPiWitness,
     /// Native typed solution, coefficient, root, family or local fact.
     Solve,
     /// Finite limit or polynomial series on an explicit approach.
@@ -179,6 +183,8 @@ pub enum PremiseShape {
 /// The sole auxiliary schema admitted by one primitive.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CertificateSchema {
+    /// Repeated half-Pi statement and ordered definedness/equality premise slots.
+    HalfPiWitness,
     /// One exact typed solving certificate subtype.
     Solve,
     /// Finite factorization, zero and inverse-Jacobian evidence.
@@ -234,6 +240,7 @@ impl Primitive {
         matches!(
             self,
             Self::Solve(_)
+                | Self::HalfPiWitness
                 | Self::DistAffinePullback
                 | Self::DistSimpleZeroPullback
                 | Self::DistPrimitiveUnique
@@ -270,6 +277,7 @@ impl Primitive {
     #[must_use]
     pub const fn specification(self) -> RuleSpec {
         let (key, weight) = match self {
+            Self::HalfPiWitness => ("trig.half-pi-witness", 2),
             Self::Solve(schema) => return schema.specification(),
             Self::DistAffinePullback => ("dist.affine-pullback", 12),
             Self::DistSimpleZeroPullback => ("dist.simple-zero-pullback", 12),
@@ -350,6 +358,7 @@ impl Primitive {
     /// Identify the exact proposition family without inspecting untrusted payloads.
     const fn conclusion_kind(self) -> ConclusionKind {
         match self {
+            Self::HalfPiWitness => ConclusionKind::HalfPiWitness,
             Self::Solve(_) => ConclusionKind::Solve,
             Self::LimitCaseRestrict | Self::SeriesCaseRestrict => ConclusionKind::Germ,
             Self::IntegralCaseSplit | Self::SumCaseSplit => ConclusionKind::Split,
@@ -418,6 +427,7 @@ impl Primitive {
             Self::ContextClose => PremiseShape::AtLeast(2),
             Self::Jacobian => PremiseShape::JacobianCells,
             Self::Transitivity
+            | Self::HalfPiWitness
             | Self::ContextWeaken
             | Self::DifferentiateAdd
             | Self::DifferentiateSub
@@ -436,6 +446,7 @@ impl Primitive {
     /// Certificate meaning is independent of a statement's wire representation.
     const fn certificate_schema(self) -> CertificateSchema {
         match self {
+            Self::HalfPiWitness => CertificateSchema::HalfPiWitness,
             Self::Solve(_) => CertificateSchema::Solve,
             Self::DistAffinePullback | Self::DistSimpleZeroPullback => CertificateSchema::Pullback,
             Self::SeriesCaseRestrict => CertificateSchema::Germ,
@@ -468,7 +479,7 @@ impl Primitive {
 }
 
 /// Every registered primitive, in ASCII key order; availability is separate metadata.
-pub const PRIMITIVES: [Primitive; 80] = [
+pub const PRIMITIVES: [Primitive; 81] = [
     Primitive::CaseCongruence,
     Primitive::CaseDomain,
     Primitive::CaseEliminate,
@@ -549,4 +560,5 @@ pub const PRIMITIVES: [Primitive; 80] = [
     Primitive::Solve(crate::solving::SolveSchema::TotalPredicateSplit),
     Primitive::Solve(crate::solving::SolveSchema::SolutionTransport),
     Primitive::SumCaseSplit,
+    Primitive::HalfPiWitness,
 ];

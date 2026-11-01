@@ -134,3 +134,7 @@ pub(crate) mod exclusion_oracle;
     reason = "shared structural trigonometric fixtures"
 )]
 pub(crate) mod trig;
+
+#[expect(clippy::redundant_pub_crate, reason = "shared half-Pi fixtures")]
+#[expect(dead_code, reason = "public and private fixtures use different fields")]
+pub(crate) mod half_pi;

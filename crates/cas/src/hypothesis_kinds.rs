@@ -16,6 +16,8 @@ mod classify;
 /// A kind is an assumed shape; a checked proof of an instance remains evidence for that instance.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum HypothesisKind {
+    /// The original Real operand equals Pi times half its retained concrete integer.
+    HalfPiWitness,
     /// The original subject lies between ordered endpoints on the complete stated box.
     Enclosure,
     /// The original operands are defined on the stated region.
@@ -123,7 +125,7 @@ pub enum HypothesisKind {
 }
 
 /// Every formal hypothesis kind in register order.
-pub const HYPOTHESIS_KINDS: [HypothesisKind; 52] = [
+pub const HYPOTHESIS_KINDS: [HypothesisKind; 53] = [
     HypothesisKind::DomainGuard,
     HypothesisKind::NonZero,
     HypothesisKind::StrictSign,
@@ -176,10 +178,11 @@ pub const HYPOTHESIS_KINDS: [HypothesisKind; 52] = [
     HypothesisKind::LatticeSelection,
     HypothesisKind::LatticeNearestSelection,
     HypothesisKind::Enclosure,
+    HypothesisKind::HalfPiWitness,
 ];
 
 /// The named assumed shape of every supported hypothesis kind.
-pub static HYPOTHESIS_SCHEMAS: [LemmaSchema; 52] = [
+pub static HYPOTHESIS_SCHEMAS: [LemmaSchema; 53] = [
     LemmaSchema {
         name: "hyp.domain-guard",
         label: "assum:cas:hyp-domain-guard",
@@ -596,6 +599,14 @@ pub static HYPOTHESIS_SCHEMAS: [LemmaSchema; 52] = [
         statement: "The original subject lies between the ordered rational endpoints throughout the exact coordinate box.",
         premises: "Original subject, context, ordered coordinate box and endpoints; an unchecked interval confers no hypothesis authority.",
     },
+    LemmaSchema {
+        name: "hyp.half-pi-witness",
+        label: "assum:cas:hyp-half-pi-witness",
+        version: 1,
+        standing: crate::proof::Standing::Hypothesis,
+        statement: "The original Real operand equals Pi times half its retained concrete integer.",
+        premises: "Exact original operand, canonical integer, context and domain; a retained statement alone supplies no recognition authority.",
+    },
 ];
 
 impl HypothesisKind {
@@ -603,6 +614,7 @@ impl HypothesisKind {
     #[must_use]
     pub const fn formal_schema(self) -> &'static LemmaSchema {
         match self {
+            Self::HalfPiWitness => &HYPOTHESIS_SCHEMAS[52],
             Self::Enclosure => &HYPOTHESIS_SCHEMAS[51],
             Self::LatticeNearestSelection => &HYPOTHESIS_SCHEMAS[50],
             Self::LatticeSelection => &HYPOTHESIS_SCHEMAS[49],
