@@ -12,6 +12,7 @@
 //! | [`literal_representable_fraction_oracles`] | scalar | Representable normal integer fractions preserve exact signs and significands with singleton enclosures and zero displacement. |
 //! | [`literal_fraction_fallback_oracles`] | scalar | Nonrepresentable fractions and subnormal edges retain conservative enclosures while range overflow still refuses. |
 //! | [`literal_exact_fraction_work_boundaries`] | scalar | Exact fraction imports enforce measured Work limits and report consumed Work on atomic one-below refusal. |
+//! | [`literal_construction_attempt_receipts`] | scalar | Construction reports prepaid scans on late syntax/digit/exponent refusal and resets stale receipts. |
 
 //! Exact rational expectations for bounded literal decoding.
 
@@ -325,4 +326,21 @@ fn literal_exact_fraction_work_boundaries() -> TestResult {
     }
     fraction_boundary::<f32>("16777215/2", 82)?;
     fraction_boundary::<f64>("9007199254740991/2", 146)
+}
+
+/// Construction reports prepaid scans on late syntax/digit/exponent refusal and resets stale receipts.
+/// ´claim:scalar:literal-construction-attempt-receipts´
+/// ´test:integration:literal-construction-attempt-receipts´
+#[test]
+fn literal_construction_attempt_receipts() {
+    for (text, limits, expected) in [
+        ("1", LiteralLimits::new(1, 0, 7), 0),
+        ("x", LiteralLimits::new(1, 0, 8), 8),
+        ("12", LiteralLimits::new(1, 0, 16), 16),
+        ("1e2", LiteralLimits::new(1, 1, 24), 24),
+    ] {
+        let mut work = 999;
+        assert!(NumericLiteral::new_with_work(text, limits, &mut work).is_err());
+        assert_eq!(work, expected);
+    }
 }

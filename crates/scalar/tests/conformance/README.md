@@ -34,6 +34,7 @@
 |(`test:integration:literal-representable-fraction-oracles`)|scalar|Representable normal integer fractions preserve exact signs and significands with singleton enclosures and zero displacement.|
 |(`test:integration:literal-fraction-fallback-oracles`)|scalar|Nonrepresentable fractions and subnormal edges retain conservative enclosures while range overflow still refuses.|
 |(`test:integration:literal-exact-fraction-work-boundaries`)|scalar|Exact fraction imports enforce measured Work limits and report consumed Work on atomic one-below refusal.|
+|(`test:integration:literal-construction-attempt-receipts`)|scalar|Construction reports prepaid scans on late syntax/digit/exponent refusal and resets stale receipts.|
 |(`test:integration:pi-independent-rational-bounds`)|scalar|Every refinement and format encloses pi by an independent exact rational theorem.|
 |(`test:integration:pi-refinement-is-nested`)|scalar|Tightened requests retain nested rational evidence and include binary quantization.|
 |(`test:integration:pi-tolerance-refusals-are-atomic`)|scalar|Invalid tolerances cost nothing; exhausted resolution retains Work and steps, not output.|

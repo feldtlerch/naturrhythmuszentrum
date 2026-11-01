@@ -56,7 +56,24 @@ impl<'a> NumericLiteral<'a> {
     /// # Errors
     /// Refuses malformed text or digit, exponent or scanning-work exhaustion.
     pub fn new(text: &'a str, limits: LiteralLimits) -> Result<Self, ArithmeticFailure> {
+        let mut used = 0;
+        Self::new_with_work(text, limits, &mut used)
+    }
+
+    /// Validate a spelling and report its admitted scan reservation on every outcome.
+    ///
+    /// The receipt is reset to zero before admission. Once scans are prepaid,
+    /// grammar, digit and exponent refusals retain that charge in `work_used`.
+    /// # Errors
+    /// Preserves every refusal of `new`, including failures after scan admission.
+    pub fn new_with_work(
+        text: &'a str,
+        limits: LiteralLimits,
+        work_used: &mut u64,
+    ) -> Result<Self, ArithmeticFailure> {
+        *work_used = 0;
         let work = Work::new(text.len(), limits.max_work())?;
+        *work_used = work.used();
         let (numerator, denominator) = if let Some((top, bottom)) = text.split_once('/') {
             (
                 syntax::decimal(top, limits)?,

@@ -38,11 +38,12 @@ struct Certified<P: Scalar> {
 impl<P: Scalar + 'static> PiCoordinateContract<P> {
     /// Authenticate both exact nodes and lower their coefficients before any input float is read.
     ///
-    /// Exact arithmetic uses the explicit child policy; only complete successful
-    /// Work is committed to the caller. Existing exact declarations and pi are shared.
+    /// Exact arithmetic uses the explicit child policy; consumed child Work is
+    /// reconciled on every outcome. Existing exact declarations and pi are shared.
     /// # Errors
     /// Refuses foreign graph authority, rational-only contracts, unsupported constants,
-    /// mismatched arithmetic, nonpositive enclosed scales and exhausted resources atomically.
+    /// mismatched arithmetic, nonpositive scales and exhausted resources without
+    /// publishing an owner. Earlier admitted Work remains on the caller ledger.
     pub fn new(
         graph: &Rc<Cas>,
         original: &CoordinateContract,
@@ -63,32 +64,41 @@ impl<P: Scalar + 'static> PiCoordinateContract<P> {
         }
         let bytes = owned_bytes::<P>(original.normalization().scales().len())?;
         let mut local = reserve(original, pi, exact, bytes, budget)?;
-        for image in [original.normalization(), original.restoration()] {
-            graph.validate_reuse_key(image.reuse_key(), &mut local)?;
-        }
+        let authenticated = (|| {
+            for image in [original.normalization(), original.restoration()] {
+                graph.validate_reuse_key(image.reuse_key(), &mut local)?;
+            }
+            Ok::<(), CoordinateError>(())
+        })();
         let authentication = local.usage().work;
+        budget.work(authentication, AT)?;
+        authenticated?;
         let mut limits = local.limits().clone();
         limits.work = limits.work.saturating_sub(authentication);
         drop(local);
         let mut local = Budget::new(limits)?;
-        let images = [
-            Rc::new(lower(
-                original.normalization(),
-                original,
-                pi,
-                exact,
-                context,
-                &mut local,
-            )?),
-            Rc::new(lower(
-                original.restoration(),
-                original,
-                pi,
-                exact,
-                context,
-                &mut local,
-            )?),
-        ];
+        let images = (|| {
+            Ok::<_, CoordinateError>([
+                Rc::new(lower(
+                    original.normalization(),
+                    original,
+                    pi,
+                    exact,
+                    context,
+                    &mut local,
+                )?),
+                Rc::new(lower(
+                    original.restoration(),
+                    original,
+                    pi,
+                    exact,
+                    context,
+                    &mut local,
+                )?),
+            ])
+        })();
+        budget.work(local.usage().work, AT)?;
+        let images = images?;
         let result = Self(Rc::new(Certified {
             original: original.clone(),
             graph: Rc::clone(graph),
@@ -96,10 +106,6 @@ impl<P: Scalar + 'static> PiCoordinateContract<P> {
             pi: pi.clone(),
             bytes,
         }));
-        let work = authentication
-            .checked_add(local.usage().work)
-            .ok_or(HeapError::ExtentOverflow)?;
-        budget.work(work, AT)?;
         Ok(result)
     }
     /// Original typed exact coordinate definition and both graph nodes.
@@ -220,12 +226,10 @@ fn coefficient<P: Scalar + 'static>(
     context: &ArithmeticContext,
     budget: &mut Budget,
 ) -> Result<ConstantCoefficient<P>, CoordinateError> {
-    let available = budget.limits().work.saturating_sub(budget.usage().work);
-    let mut policy = exact.clone();
-    policy.work = Some(available);
-    let exported =
-        ExactEnclosureExport::new(value, &policy).map_err(crate::ConversionError::from)?;
-    let result = crate::conversion::enclose_pi_factor(
+    let exported = crate::conversion::exact_attempt(exact, budget, |policy, work| {
+        ExactEnclosureExport::new_with_work(value, policy, work)
+    })?;
+    Ok(crate::conversion::enclose_pi_factor(
         (
             exported.rational_factor(),
             exported.pi_factor(),
@@ -234,8 +238,6 @@ fn coefficient<P: Scalar + 'static>(
         pi,
         original.0.literals,
         context,
-        available,
-    )?;
-    budget.work(result.work_used(), AT)?;
-    Ok(result)
+        budget,
+    )?)
 }

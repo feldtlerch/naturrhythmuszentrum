@@ -37,8 +37,8 @@ pub enum ConversionError {
 }
 
 mod pi;
-pub(crate) use pi::enclose_pi_factor;
 pub use pi::{CertifiedCoefficient, PiConstant, PiConstantEvidence, PiConversionUse};
+pub(crate) use pi::{enclose_pi_factor, exact_attempt};
 
 mod contract;
 pub use contract::ConversionContract;

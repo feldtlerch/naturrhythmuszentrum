@@ -471,43 +471,97 @@ fn pi_enclosure_export_resource_boundaries() -> TestResult {
     for (source, costs) in [
         (
             angle("degree", 1, 180)?,
-            [(38_371, 6731, 297), (84_462, 8264, 749)],
+            [
+                (38_371, 6731, 297, [38_339, 21_969, 10_750]),
+                (84_462, 8264, 749, [84_430, 28_946, 57_289]),
+            ],
         ),
         (
             angle("turn", 2, 1)?,
-            [(37_908, 6721, 297), (85_387, 8256, 749)],
+            [
+                (37_908, 6721, 297, [37_876, 21_900, 10_750]),
+                (85_387, 8256, 749, [85_355, 29_129, 57_781]),
+            ],
         ),
     ] {
         let forward = declarations.conversion_map(&source, &source.coherent())?;
         let reverse = forward.inverse()?;
-        for (map, (work, staged, output)) in [&forward, &reverse].into_iter().zip(costs) {
+        for (map, (work, staged, output, failed_work)) in
+            [&forward, &reverse].into_iter().zip(costs)
+        {
             let policy = LimitsOverride {
                 work: Some(work),
                 staged_payload_bytes: Some(staged),
                 output_bytes: Some(output),
                 ..LimitsOverride::default()
             };
-            let exported = map.scale().enclosure_export(&policy)?;
+            let mut receipt = 999;
+            let exported = map
+                .scale()
+                .enclosure_export_with_work(&policy, &mut receipt)?;
+            assert_eq!(receipt, work);
             assert_eq!(exported.work_used(), work);
             assert_eq!(exported.owned_bytes(), 64);
-            let direct = nrz_bindings::ExactEnclosureExport::new(map.scale().exact(), &policy)?;
+            let direct = nrz_bindings::ExactEnclosureExport::new_with_work(
+                map.scale().exact(),
+                &policy,
+                &mut receipt,
+            )?;
+            assert_eq!(receipt, work);
             assert_eq!(direct.work_used(), work);
             assert_eq!(direct.owned_bytes(), 64);
-            for field in 0..3 {
+            for (field, expected) in failed_work.into_iter().enumerate() {
                 let mut limited = policy.clone();
                 match field {
                     0 => limited.work = Some(work - 1),
                     1 => limited.staged_payload_bytes = Some(staged - 1),
                     _ => limited.output_bytes = Some(output - 1),
                 }
-                assert!(map.scale().enclosure_export(&limited).is_err());
                 assert!(
-                    nrz_bindings::ExactEnclosureExport::new(map.scale().exact(), &limited).is_err()
+                    map.scale()
+                        .enclosure_export_with_work(&limited, &mut receipt)
+                        .is_err()
                 );
+                assert_eq!(receipt, expected);
+                let descriptor_receipt = receipt;
+                assert!(
+                    nrz_bindings::ExactEnclosureExport::new_with_work(
+                        map.scale().exact(),
+                        &limited,
+                        &mut receipt,
+                    )
+                    .is_err()
+                );
+                assert_eq!(receipt, descriptor_receipt);
                 assert!(std::ptr::eq(exported.definition(), map.scale()));
                 assert_eq!(exported.work_used(), work);
             }
         }
+    }
+    Ok(())
+}
+
+/// Reused receipt slots reset before zero-work storage and Work preflight refusals.
+/// ´test:integration:pi-enclosure-export-preflight-resets-receipt´
+#[test]
+fn pi_enclosure_export_preflight_resets_receipt() -> TestResult {
+    let value = pi()?;
+    for policy in [
+        LimitsOverride {
+            work: Some(0),
+            ..LimitsOverride::default()
+        },
+        LimitsOverride {
+            staged_payload_bytes: Some(0),
+            ..LimitsOverride::default()
+        },
+    ] {
+        let mut receipt = 999;
+        assert!(
+            nrz_bindings::ExactEnclosureExport::new_with_work(&value, &policy, &mut receipt)
+                .is_err()
+        );
+        assert_eq!(receipt, 0);
     }
     Ok(())
 }

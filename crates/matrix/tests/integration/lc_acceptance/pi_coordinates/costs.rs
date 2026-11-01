@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-//! Literal child and parent ceilings preserve every caller prefix on refusal.
+//! Literal child and parent ceilings preserve prior spend and atomic output on refusal.
 
 use super::{TestResult, fixture, ledger, pi};
 use nrz_bindings::{Budget, Limits, LimitsOverride, readings::algebra::Location};
@@ -18,6 +18,7 @@ fn pi_live_coordinate_owner_boundaries() -> TestResult {
         [116_430, 368],
         [80_216, 80_184, 80_680],
         [80_832, 80_824, 81_296],
+        [209_248, 30_173, 38_411],
     )?;
     boundaries::<f64>(
         &plan,
@@ -26,6 +27,7 @@ fn pi_live_coordinate_owner_boundaries() -> TestResult {
         [116_590, 496],
         [80_520, 80_368, 81_144],
         [81_296, 81_192, 81_920],
+        [209_248, 30_173, 38_411],
     )
 }
 
@@ -41,6 +43,7 @@ fn pi_live_coordinate_point_owner_boundaries() -> TestResult {
         [122_266, 368],
         [82_641, 82_609, 83_105],
         [83_257, 83_249, 83_721],
+        [298_607, 33_016, 42_117],
     )?;
     boundaries::<f64>(
         &plan,
@@ -49,6 +52,7 @@ fn pi_live_coordinate_point_owner_boundaries() -> TestResult {
         [122_426, 496],
         [82_945, 82_793, 83_569],
         [83_721, 83_617, 84_345],
+        [298_607, 33_016, 42_117],
     )
 }
 
@@ -60,6 +64,7 @@ fn boundaries<P: Scalar + 'static>(
     certificate: [u64; 2],
     normalization: [u64; 3],
     restoration: [u64; 3],
+    failed_work: [u64; 3],
 ) -> TestResult {
     let context = ArithmeticContext::new()?;
     let circle = pi::<P>(&context, &mut ledger()?)?;
@@ -78,6 +83,7 @@ fn boundaries<P: Scalar + 'static>(
         },
         exact,
         [exact[0], certificate[0], certificate[1]],
+        [failed_work, [failed_work[0], 0, 0]],
     )?;
     let contract = PiCoordinateContract::new(
         &plan.graph,
@@ -96,6 +102,7 @@ fn boundaries<P: Scalar + 'static>(
         },
         normalize,
         [3248, normalization[2], normalization[1]],
+        [[0; 3]; 2],
     )?;
     let normalized = heap.normalize_certified_reading(
         &source,
@@ -111,6 +118,7 @@ fn boundaries<P: Scalar + 'static>(
         },
         [177, restoration[0], restoration[1]],
         [177, restoration[2], restoration[1]],
+        [[0; 3]; 2],
     )?;
     assert_eq!(
         plan.contract.normalization().retained_payload_bytes()
@@ -131,14 +139,15 @@ fn boundary(
     mut attempt: impl FnMut(&LimitsOverride, &mut Budget) -> TestResult,
     child: [u64; 3],
     parent: [u64; 3],
+    failed_work: [[u64; 3]; 2],
 ) -> TestResult {
     let mut cumulative = parent;
     cumulative[0] += 17;
     let mut budget = prior(cumulative)?;
     attempt(&policy(child), &mut budget)?;
     assert_eq!(budget.usage().work, cumulative[0]);
-    for owner in 0..2 {
-        for resource in 0..3 {
+    for (owner, receipts) in failed_work.into_iter().enumerate() {
+        for (resource, spent) in receipts.into_iter().enumerate() {
             let mut child_limit = child;
             let mut parent_limit = cumulative;
             if owner == 0 {
@@ -152,7 +161,7 @@ fn boundary(
                 attempt(&policy(child_limit), &mut budget).is_err(),
                 "owner {owner}, resource {resource}"
             );
-            assert_eq!(budget.usage(), before);
+            assert_eq!(budget.usage().work, before.work + spent);
         }
     }
     Ok(())

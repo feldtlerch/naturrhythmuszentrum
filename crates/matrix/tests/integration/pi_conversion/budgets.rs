@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-//! Literal owner limits distinguish successful publication from atomic failed attempts.
+//! Literal owner limits distinguish monotone attempt spend from atomic publication.
 
 use super::{exact_policy, owner, pi};
 use crate::conversion_testing::{TestResult, shape};
@@ -7,7 +7,7 @@ use nrz_bindings::{Budget, Limits, readings::algebra::Location};
 use nrz_matrix::{ConversionContract, ConversionMode};
 use nrz_scalar::{ArithmeticContext, LiteralLimits, Scalar};
 
-/// Pi owner Work and logical storage succeed exactly at the limit and refuse atomically below it.
+/// Pi owner Work and storage succeed exactly at the limit; failed attempts retain admitted Work.
 /// ´test:integration:pi-conversion-constant-resource-boundaries´
 #[test]
 fn pi_conversion_constant_resource_boundaries() -> TestResult {
@@ -39,7 +39,8 @@ fn constant<P: Scalar + 'static>(work: u64, staged: u64, output: u64) -> TestRes
         let mut limited = ledger(limits)?;
         let before = limited.usage();
         assert!(pi::<P>(&context, &mut limited).is_err());
-        assert_eq!(limited.usage(), before);
+        let spent = if field == 0 { work - 1 } else { 0 };
+        assert_eq!(limited.usage().work, before.work + spent);
     }
     Ok(())
 }
@@ -77,7 +78,8 @@ fn coefficients<P: Scalar + 'static>(staged: u64, output: u64) -> TestResult {
                 .certify_pi(&circle, &exact_policy(), &context, &mut limited)
                 .is_err()
         );
-        assert_eq!(limited.usage(), before);
+        let spent = if field == 0 { 84_571 } else { 1 };
+        assert_eq!(limited.usage().work, before.work + spent);
         let mut complete = ledger(exact.clone())?;
         let usage = conversion.certify_pi(&circle, &exact_policy(), &context, &mut complete)?;
         assert_eq!(usage.work(), 84_572);
@@ -157,7 +159,7 @@ fn contract() -> TestResult<ConversionContract> {
     )?)
 }
 
-/// Every atomic test begins with an existing successful caller charge.
+/// Every attempt begins with an existing successful caller charge.
 fn ledger(limits: Limits) -> TestResult<Budget> {
     let mut result = Budget::new(limits)?;
     result.work(17, Location::new("prior caller work"))?;
@@ -219,6 +221,117 @@ fn cumulative<P: Scalar + 'static>(work: u64) -> TestResult {
             assert!(result?.reused());
             assert_eq!(complete.usage().work, work);
         }
+    }
+    Ok(())
+}
+
+/// Refused replacements retain lookup Work and never replace a previously published cache entry.
+/// ´test:integration:pi-conversion-failed-replacement-preserves-cache-and-spend´
+#[test]
+fn pi_conversion_failed_replacement_preserves_cache_and_spend() -> TestResult {
+    let context = ArithmeticContext::new()?;
+    let original = pi::<f64>(&context, &mut Budget::new(Limits::default())?)?;
+    let replacement = pi::<f64>(&context, &mut Budget::new(Limits::default())?)?;
+    let conversion = contract()?;
+    conversion.certify_pi(
+        &original,
+        &exact_policy(),
+        &context,
+        &mut Budget::new(Limits::default())?,
+    )?;
+    let mut budget = ledger(Limits {
+        work: 23,
+        ..Limits::default()
+    })?;
+    let exact = nrz_bindings::LimitsOverride {
+        work: Some(0),
+        ..exact_policy()
+    };
+    for expected in [19, 21] {
+        assert!(
+            conversion
+                .certify_pi(&replacement, &exact, &context, &mut budget)
+                .is_err()
+        );
+        assert_eq!(budget.usage().work, expected);
+    }
+    let hit = conversion.certify_pi(&original, &exact_policy(), &context, &mut budget)?;
+    assert!(hit.reused());
+    assert_eq!(hit.new_owned_bytes(), 0);
+    assert_eq!(budget.usage().work, 23);
+    assert!(
+        conversion
+            .certify_pi(&replacement, &exact, &context, &mut budget)
+            .is_err()
+    );
+    assert_eq!(budget.usage().work, 23);
+    Ok(())
+}
+
+/// Scalar success survives in the receipt when the following reciprocal reservation refuses.
+/// ´test:integration:pi-conversion-reciprocal-reservation-retains-complete-scalar-work´
+#[test]
+fn pi_conversion_reciprocal_reservation_retains_complete_scalar_work() -> TestResult {
+    let context = ArithmeticContext::new()?;
+    let mut budget = ledger(Limits {
+        work: 2071,
+        ..Limits::default()
+    })?;
+    let error = pi::<f64>(&context, &mut budget)
+        .err()
+        .ok_or("reciprocal admitted")?;
+    let Some(nrz_matrix::ConversionError::Map(_)) =
+        error.downcast_ref::<nrz_matrix::ConversionError>()
+    else {
+        return Err(format!("expected outer reciprocal Work refusal, got {error:?}").into());
+    };
+    assert_eq!(budget.usage().work, 2071);
+    Ok(())
+}
+
+/// Early tolerance preflight is free; late scalar refusals repeatedly exhaust the matrix parent.
+/// ´test:integration:pi-conversion-scalar-failure-receipts-bound-parent-retries´
+#[test]
+fn pi_conversion_scalar_failure_receipts_bound_parent_retries() -> TestResult {
+    let context = ArithmeticContext::new()?;
+    let limits = nrz_scalar::PiLimits {
+        work: 100_000,
+        steps: 100,
+        staged_bytes: 256,
+        output_bytes: 80,
+    };
+    let mut budget = ledger(Limits {
+        work: 7585,
+        ..Limits::default()
+    })?;
+    assert!(matches!(
+        nrz_matrix::PiConstant::new(
+            nrz_scalar::Finite::new(0.0_f64)?,
+            limits,
+            &context,
+            &mut budget
+        ),
+        Err(nrz_matrix::ConversionError::Pi(
+            nrz_scalar::PiError::InvalidTolerance
+        ))
+    ));
+    assert_eq!(budget.usage().work, 17);
+    for (expected, refusal) in [
+        (3801, nrz_scalar::PiError::ToleranceUnreachable),
+        (7585, nrz_scalar::PiError::ToleranceUnreachable),
+        (7585, nrz_scalar::PiError::WorkLimit),
+    ] {
+        let result = nrz_matrix::PiConstant::new(
+            nrz_scalar::Finite::new(f64::MIN_POSITIVE)?,
+            limits,
+            &context,
+            &mut budget,
+        );
+        let Err(nrz_matrix::ConversionError::Pi(error)) = result else {
+            return Err("expected unpublished scalar refusal".into());
+        };
+        assert_eq!(error, refusal);
+        assert_eq!(budget.usage().work, expected);
     }
     Ok(())
 }

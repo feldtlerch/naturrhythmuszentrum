@@ -198,7 +198,8 @@ fn boundaries<P: Scalar + 'static>(staged: u64, output: u64) -> TestResult {
                     .certify_pi(&circle, &exact_policy(), &context, &mut budget)
                     .is_err()
             );
-            assert_eq!(budget.usage(), before);
+            let spent = if resource == 0 { work - 1 } else { 1 };
+            assert_eq!(budget.usage().work, before.work + spent);
             let mut budget = prior(ceiling.clone())?;
             let cold = conversion.certify_pi(&circle, &exact_policy(), &context, &mut budget)?;
             assert_eq!(cold.work(), work);
@@ -221,7 +222,7 @@ fn boundaries<P: Scalar + 'static>(staged: u64, output: u64) -> TestResult {
     Ok(())
 }
 
-/// Distinct successful caller usage must remain identical after any refused attempt.
+/// Distinct prior caller usage remains part of every subsequent attempt receipt.
 fn prior(limits: Limits) -> TestResult<Budget> {
     let mut budget = Budget::new(limits)?;
     budget.work(
@@ -245,9 +246,13 @@ fn pi_coordinate_schema_unsupported_constants() -> TestResult {
     ];
     let context = ArithmeticContext::new()?;
     let numerical = pi::<f64>(&context, &mut Budget::new(Limits::default())?)?;
-    for value in values {
+    for (value, receipts) in
+        values
+            .into_iter()
+            .zip([[109_030, 77_332], [165_492, 132_027], [128_555, 88_997]])
+    {
         let exact = maps(&descriptor(Scale::Expression(value))?)?;
-        for conversion in contracts(&exact, 1)? {
+        for (conversion, spent) in contracts(&exact, 1)?.into_iter().zip(receipts) {
             let mut budget = prior(Limits::default())?;
             let before = budget.usage();
             assert!(matches!(
@@ -258,7 +263,7 @@ fn pi_coordinate_schema_unsupported_constants() -> TestResult {
                     )
                 ))
             ));
-            assert_eq!(budget.usage(), before);
+            assert_eq!(budget.usage().work, before.work + 1 + spent);
         }
     }
     Ok(())

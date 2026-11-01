@@ -33,7 +33,7 @@ impl<P: Scalar + 'static> PiConstant<P> {
     /// counts that owner and its reference-count header. No exact map is copied.
     /// # Errors
     /// Refuses invalid tolerance, resolution, arithmetic or resource exhaustion.
-    /// Every failure leaves the supplied cumulative ledger unchanged.
+    /// Every outcome retains consumed Work; failure publishes no owner.
     pub fn new(
         tolerance: Finite<P>,
         limits: PiLimits,
@@ -48,21 +48,20 @@ impl<P: Scalar + 'static> PiConstant<P> {
         super::check(budget, BudgetKind::StagedPayloadBytes, staged)?;
         super::check(budget, BudgetKind::OutputBytes, owned)?;
         let remaining = budget.limits().work.saturating_sub(budget.usage().work);
-        let work = remaining
-            .checked_sub(1)
-            .ok_or(ConversionError::ResourceLimit)?;
         let mut scalar = PiBudget::new(PiLimits {
-            work: limits.work.min(work),
+            work: limits.work.min(remaining),
             ..limits
         });
-        let pi = PiEnclosure::new(tolerance, context, &mut scalar)?;
+        let pi = PiEnclosure::new(tolerance, context, &mut scalar);
+        super::charge(budget, scalar.usage().work)?;
+        let pi = pi?;
+        super::charge(budget, 1)?;
         let reciprocal = Enclosure::singleton(Finite::ONE).div(pi.enclosure(), context)?;
         let result = Self(Rc::new(Region {
             pi,
             reciprocal,
             arithmetic: context.revision(),
         }));
-        super::charge(budget, pi.work_used() + 1)?;
         Ok(result)
     }
 

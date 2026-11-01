@@ -3,7 +3,7 @@
 
 use super::{ConversionError, PiConstant};
 use crate::coordinate_numeric::ConstantCoefficient;
-use nrz_bindings::PiFactor;
+use nrz_bindings::{Budget, PiFactor};
 use nrz_scalar::{ArithmeticContext, LiteralLimits, NumericLiteral, Scalar};
 
 /// Literal import and the admitted pi operation retain one complete numerical discrepancy.
@@ -12,34 +12,33 @@ pub(crate) fn decode<P: Scalar + 'static>(
     pi: &PiConstant<P>,
     literals: LiteralLimits,
     context: &ArithmeticContext,
-    available: u64,
+    budget: &mut Budget,
 ) -> Result<ConstantCoefficient<P>, ConversionError> {
     let (spelling, action, work) = factor;
-    let remaining = available
-        .checked_sub(work)
-        .ok_or(ConversionError::ResourceLimit)?;
+    let remaining = budget.limits().work.saturating_sub(budget.usage().work);
     let limits = LiteralLimits::new(
         literals.max_digits(),
         literals.max_exponent(),
         literals.max_work().min(remaining),
     );
-    let decoded = NumericLiteral::new(spelling, limits)?.decode::<P>(context)?;
+    let mut used = 0;
+    let decoded = NumericLiteral::new_with_work(spelling, limits, &mut used)
+        .and_then(|literal| literal.decode_with_work::<P>(context, &mut used));
+    super::charge(budget, used)?;
+    let decoded = decoded?;
     let work = work
         .checked_add(decoded.work_used())
         .ok_or(ConversionError::ResourceLimit)?;
     if action == PiFactor::Rational {
+        super::charge(budget, 1)?;
         return ConstantCoefficient::enclosed(
             decoded.enclosure(),
-            work.checked_add(1)
-                .filter(|work| *work <= available)
-                .ok_or(ConversionError::ResourceLimit)?,
+            work.checked_add(1).ok_or(ConversionError::ResourceLimit)?,
             context,
         );
     }
-    let work = work
-        .checked_add(2)
-        .filter(|work| *work <= available)
-        .ok_or(ConversionError::ResourceLimit)?;
+    super::charge(budget, 2)?;
+    let work = work.checked_add(2).ok_or(ConversionError::ResourceLimit)?;
     let factor = match action {
         PiFactor::Multiply => pi.pi().enclosure(),
         PiFactor::Divide => pi.reciprocal(),

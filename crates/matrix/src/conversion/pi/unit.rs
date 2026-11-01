@@ -31,7 +31,8 @@ impl<P: Scalar + 'static> CertifiedCoefficient<P> {
     /// structural expansion and turns no constant error into statistical uncertainty.
     /// # Errors
     /// Refuses rational-only coefficients, unsupported constants, mismatched arithmetic,
-    /// overflowing numerical bounds and exhausted Work or byte policies atomically.
+    /// overflowing bounds and resource exhaustion without publishing an owner.
+    /// Admitted exact and numerical Work remains consumed on every outcome.
     pub fn new(
         definition: &Rc<ExactCoefficient>,
         pi: &PiConstant<P>,
@@ -46,15 +47,9 @@ impl<P: Scalar + 'static> CertifiedCoefficient<P> {
             return Err(ConversionError::Contract);
         }
         reserve::<P>(pi, exact, budget)?;
-        let available = budget.limits().work.saturating_sub(budget.usage().work);
-        let mut policy = exact.clone();
-        policy.work = Some(
-            policy
-                .work
-                .unwrap_or_else(|| Limits::default().work)
-                .min(available),
-        );
-        let exported = ExactEnclosureExport::new(&definition.exact_map().scale, &policy)?;
+        let exported = super::exact_attempt(exact, budget, |policy, work| {
+            ExactEnclosureExport::new_with_work(&definition.exact_map().scale, policy, work)
+        })?;
         let value = super::coefficient::decode(
             (
                 exported.rational_factor(),
@@ -64,14 +59,13 @@ impl<P: Scalar + 'static> CertifiedCoefficient<P> {
             pi,
             literals,
             context,
-            available,
+            budget,
         )?;
         let result = Self(Rc::new(Owner {
             exact: Rc::clone(definition),
             value,
             pi: pi.clone(),
         }));
-        super::charge(budget, value.work_used())?;
         Ok(result)
     }
     /// Original typed exact definition, with its original irrational graph node.

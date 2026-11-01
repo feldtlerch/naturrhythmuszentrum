@@ -236,19 +236,22 @@ fn graph_and_direction<P: Scalar + 'static>() -> TestResult {
     Ok(())
 }
 
-/// Unsupported exact graphs retain the named numerical refusal without consuming caller Work.
+/// Unsupported graphs retain their named refusal and consumed authentication/recognition Work.
 /// ´test:integration:pi-live-coordinate-unsupported-constants-are-atomic´
 #[test]
 fn pi_live_coordinate_unsupported_constants_are_atomic() -> TestResult {
     let mut setup = ledger()?;
     let exact = ExactConstant::named(Constant::Pi, &mut setup)?;
-    for value in [
+    for (value, spent) in [
         ExactConstant::named(Constant::E, &mut setup)?,
         exact.mul(&exact, &mut setup)?,
-    ] {
+    ]
+    .into_iter()
+    .zip([205_253, 228_907])
+    {
         let plan = fixture::with_scale(Scale::Expression(value))?;
-        unsupported::<f32>(&plan)?;
-        unsupported::<f64>(&plan)?;
+        unsupported::<f32>(&plan, spent)?;
+        unsupported::<f64>(&plan, spent)?;
     }
     Ok(())
 }
@@ -280,7 +283,7 @@ fn pi_live_coordinate_sum_refuses_exact_map() -> TestResult {
 }
 
 /// Graph authentication cannot grant numerical authority to an unsupported coefficient grammar.
-fn unsupported<P: Scalar + 'static>(plan: &super::state_fixture::Plan) -> TestResult {
+fn unsupported<P: Scalar + 'static>(plan: &super::state_fixture::Plan, spent: u64) -> TestResult {
     let context = ArithmeticContext::new()?;
     let circle = pi::<P>(&context, &mut ledger()?)?;
     let mut budget = prior()?;
@@ -298,7 +301,7 @@ fn unsupported<P: Scalar + 'static>(plan: &super::state_fixture::Plan) -> TestRe
             nrz_bindings::MapError::Units(nrz_bindings::UnitError::UnsupportedExactConstantExport)
         )))
     ));
-    assert_eq!(budget.usage(), before);
+    assert_eq!(budget.usage().work, before.work + spent);
     Ok(())
 }
 

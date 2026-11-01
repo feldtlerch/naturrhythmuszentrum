@@ -101,11 +101,14 @@ fn certified_unit_coefficient_refusal_is_atomic() -> TestResult {
     let circle = pi::<f64>(&context, &mut Budget::new(Limits::default())?)?;
     let mut setup = Budget::new(Limits::default())?;
     let exact = ExactConstant::named(Constant::Pi, &mut setup)?;
-    for value in [
+    for (value, spent) in [
         ExactConstant::named(Constant::E, &mut setup)?,
         exact.add(&ExactConstant::one(), &mut setup)?,
         exact.mul(&exact, &mut setup)?,
-    ] {
+    ]
+    .into_iter()
+    .zip([77_332, 132_027, 88_997])
+    {
         let definition = Rc::new(ExactCoefficient::new(
             &Descriptor::ratio(),
             &Conversion {
@@ -131,7 +134,7 @@ fn certified_unit_coefficient_refusal_is_atomic() -> TestResult {
                 )
             ))
         ));
-        assert_eq!(budget.usage(), before);
+        assert_eq!(budget.usage().work, before.work + spent);
     }
     Ok(())
 }
@@ -144,7 +147,7 @@ fn certified_unit_coefficient_owner_boundaries() -> TestResult {
     boundaries::<f64>(82_120, 72)
 }
 
-/// Failed admission preserves caller usage; cloned successful owners retain the same allocation.
+/// Failed admission retains attempted Work; cloned successful owners retain the same allocation.
 fn boundaries<P: Scalar + 'static>(staged: u64, output: u64) -> TestResult {
     let definition = unit()?;
     let context = ArithmeticContext::new()?;
@@ -185,8 +188,71 @@ fn boundaries<P: Scalar + 'static>(staged: u64, output: u64) -> TestResult {
             assert!(coefficient.same_region(&coefficient.clone()));
         } else {
             assert!(result.is_err());
-            assert_eq!(budget.usage(), before);
+            let spent = if resource == 0 { 28_113 } else { 0 };
+            assert_eq!(budget.usage().work, before.work + spent);
         }
     }
+    Ok(())
+}
+
+/// Successful pi and failed literal decoding all debit the same finite parent ledger.
+/// ´test:integration:certified-unit-failed-lowering-exhausts-parent-after-pi-success´
+#[test]
+fn certified_unit_failed_lowering_exhausts_parent_after_pi_success() -> TestResult {
+    let definition = unit()?;
+    let context = ArithmeticContext::new()?;
+    let mut budget = Budget::new(Limits {
+        work: 58_292,
+        ..Limits::default()
+    })?;
+    budget.work(
+        17,
+        nrz_bindings::readings::algebra::Location::new("prior coefficient caller"),
+    )?;
+    let circle = pi::<f64>(&context, &mut budget)?;
+    assert_eq!(budget.usage().work, 2072);
+    let retained = circle.clone();
+    for expected in [30_182, 58_292, 58_292] {
+        let result = CertifiedCoefficient::new(
+            &definition,
+            &circle,
+            &exact_policy(),
+            LiteralLimits::new(1024, 4096, 8),
+            &context,
+            &mut budget,
+        );
+        assert!(result.is_err());
+        assert_eq!(budget.usage().work, expected);
+        assert!(circle.same_region(&retained));
+    }
+    Ok(())
+}
+
+/// A factor rejected after scan admission retains exact-export and literal-scan Work.
+/// ´test:integration:certified-unit-literal-construction-failure-retains-scan-work´
+#[test]
+fn certified_unit_literal_construction_failure_retains_scan_work() -> TestResult {
+    let context = ArithmeticContext::new()?;
+    let circle = pi::<f64>(&context, &mut Budget::new(Limits::default())?)?;
+    let mut budget = Budget::new(Limits::default())?;
+    budget.work(
+        17,
+        nrz_bindings::readings::algebra::Location::new("prior coefficient caller"),
+    )?;
+    let result = CertifiedCoefficient::new(
+        &unit()?,
+        &circle,
+        &exact_policy(),
+        LiteralLimits::new(0, 4096, 8),
+        &context,
+        &mut budget,
+    );
+    assert!(matches!(
+        result,
+        Err(nrz_matrix::ConversionError::Arithmetic(
+            nrz_scalar::ArithmeticFailure::ResourceLimit
+        ))
+    ));
+    assert_eq!(budget.usage().work, 28_127);
     Ok(())
 }

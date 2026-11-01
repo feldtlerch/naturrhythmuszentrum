@@ -60,7 +60,7 @@ impl ConversionContract {
     /// # Errors
     /// Refuses rational-only maps, unsupported constant expressions, mismatched
     /// arithmetic, unproved positive numerical scales and explicit resources.
-    /// A refused request changes neither the ledger nor the published cache entries.
+    /// A refused request retains admitted Work without changing published cache entries.
     pub fn certify_pi<P: Scalar + 'static>(
         &self,
         pi: &PiConstant<P>,
@@ -80,19 +80,20 @@ impl ConversionContract {
             .cache
             .try_borrow_mut()
             .map_err(|_| ConversionError::Contract)?;
+        super::check(
+            budget,
+            BudgetKind::StagedPayloadBytes,
+            size_of::<PiConversionUse>(),
+        )?;
+        super::check(
+            budget,
+            BudgetKind::OutputBytes,
+            size_of::<PiConversionUse>(),
+        )?;
+        let before = budget.usage().work;
         let lookup = cache.lookup_work()?;
+        super::charge(budget, lookup)?;
         if cache.find_pi(&self.map, pi, context).is_some() {
-            super::check(
-                budget,
-                BudgetKind::StagedPayloadBytes,
-                size_of::<PiConversionUse>(),
-            )?;
-            super::check(
-                budget,
-                BudgetKind::OutputBytes,
-                size_of::<PiConversionUse>(),
-            )?;
-            super::charge(budget, lookup)?;
             return Ok(PiConversionUse {
                 work: lookup,
                 bytes: 0,
@@ -106,20 +107,13 @@ impl ConversionContract {
         };
         let bytes = owned_bytes::<P>() - reused_slot;
         reserve(pi, exact, bytes, budget)?;
-        let remaining = budget.limits().work.saturating_sub(budget.usage().work);
-        let available = remaining
-            .checked_sub(lookup)
-            .ok_or(ConversionError::ResourceLimit)?;
-        let (map, work) = lower(self, pi, exact, context, available)?;
+        let map = lower(self, pi, exact, context, budget)?;
         let materialized = Rc::new(CertifiedMap {
             map: Rc::new(map),
             pi: pi.clone(),
         });
         let prepared = cache.stage_pi(&materialized)?;
-        let work = work
-            .checked_add(lookup)
-            .ok_or(ConversionError::ResourceLimit)?;
-        super::charge(budget, work)?;
+        let work = budget.usage().work - before;
         cache.commit_pi(prepared);
         Ok(PiConversionUse {
             work,
@@ -169,43 +163,33 @@ fn lower<P: Scalar + 'static>(
     pi: &PiConstant<P>,
     exact: &LimitsOverride,
     context: &ArithmeticContext,
-    available: u64,
-) -> Result<(LoweredMap<P>, u64), ConversionError> {
+    budget: &mut Budget,
+) -> Result<LoweredMap<P>, ConversionError> {
     let scale = coefficient(
         contract.map.scale(),
         pi,
         exact,
         contract.literals,
         context,
-        available,
+        budget,
     )?;
-    let remaining = available
-        .checked_sub(scale.work_used())
-        .ok_or(ConversionError::ResourceLimit)?;
     let shift = coefficient(
         contract.map.shift(),
         pi,
         exact,
         contract.literals,
         context,
-        remaining,
+        budget,
     )?;
     if scale.enclosure().lower().get() <= P::ZERO {
         return Err(nrz_scalar::ArithmeticFailure::ZeroInDivisor.into());
     }
-    let work = scale
-        .work_used()
-        .checked_add(shift.work_used())
-        .ok_or(ConversionError::ResourceLimit)?;
-    Ok((
-        LoweredMap {
-            exact: Rc::clone(&contract.map),
-            scale,
-            shift,
-            revision: context.revision(),
-        },
-        work,
-    ))
+    Ok(LoweredMap {
+        exact: Rc::clone(&contract.map),
+        scale,
+        shift,
+        revision: context.revision(),
+    })
 }
 
 /// Recognize the exact factor and enclose literal import and the admitted pi operation.
@@ -215,16 +199,11 @@ fn coefficient<P: Scalar + 'static>(
     exact: &LimitsOverride,
     literals: LiteralLimits,
     context: &ArithmeticContext,
-    available: u64,
+    budget: &mut Budget,
 ) -> Result<ConstantCoefficient<P>, ConversionError> {
-    let mut policy = exact.clone();
-    policy.work = Some(
-        policy
-            .work
-            .unwrap_or_else(|| Limits::default().work)
-            .min(available),
-    );
-    let exported = constant.enclosure_export(&policy)?;
+    let exported = super::exact_attempt(exact, budget, |policy, work| {
+        constant.enclosure_export_with_work(policy, work)
+    })?;
     super::coefficient::decode(
         (
             exported.rational_factor(),
@@ -234,6 +213,6 @@ fn coefficient<P: Scalar + 'static>(
         pi,
         literals,
         context,
-        available,
+        budget,
     )
 }

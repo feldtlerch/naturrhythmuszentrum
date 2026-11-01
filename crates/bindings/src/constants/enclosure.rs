@@ -51,10 +51,26 @@ impl DescriptorConstant {
         &self,
         limits: &LimitsOverride,
     ) -> Result<ConstantEnclosureExport<'_>, MapError> {
+        let mut work = 0;
+        self.enclosure_export_with_work(limits, &mut work)
+    }
+
+    /// Export with an attempt receipt, including exact Work consumed before refusal.
+    ///
+    /// Composite callers cap this child by their remaining Work and reconcile the
+    /// receipt once on every outcome. The receipt is reset before policy admission.
+    /// # Errors
+    /// Preserves `enclosure_export` refusals without publishing a partial spelling.
+    pub fn enclosure_export_with_work(
+        &self,
+        limits: &LimitsOverride,
+        work_used: &mut u64,
+    ) -> Result<ConstantEnclosureExport<'_>, MapError> {
         let (factor, pi, work, bytes) = export(
             self.exact(),
             size_of::<ConstantEnclosureExport<'_>>(),
             limits,
+            work_used,
         )?;
         Ok(ConstantEnclosureExport {
             definition: self,
@@ -89,7 +105,22 @@ impl<'a> ExactEnclosureExport<'a> {
     /// # Errors
     /// Refuses unsupported expressions by name and bounded exact Work or bytes.
     pub fn new(value: &'a ExactConstant, limits: &LimitsOverride) -> Result<Self, MapError> {
-        let (factor, pi, work, bytes) = export(value, size_of::<Self>(), limits)?;
+        let mut work = 0;
+        Self::new_with_work(value, limits, &mut work)
+    }
+
+    /// Recognize a coefficient and expose consumed exact Work on success or failure.
+    ///
+    /// The receipt is reset before policy admission. Outer numerical owners must
+    /// reconcile it even when no exported value is returned.
+    /// # Errors
+    /// Preserves `new` refusals, including unsupported factors after exact arithmetic.
+    pub fn new_with_work(
+        value: &'a ExactConstant,
+        limits: &LimitsOverride,
+        work_used: &mut u64,
+    ) -> Result<Self, MapError> {
+        let (factor, pi, work, bytes) = export(value, size_of::<Self>(), limits, work_used)?;
         Ok(Self {
             definition: value,
             factor,
@@ -130,8 +161,21 @@ fn export(
     value: &ExactConstant,
     metadata: usize,
     limits: &LimitsOverride,
+    work_used: &mut u64,
 ) -> Result<(String, PiFactor, u64, usize), MapError> {
+    *work_used = 0;
     let mut ledger = Budget::new(Limits::default().resolve(limits)?)?;
+    let result = export_in(value, metadata, &mut ledger);
+    *work_used = ledger.usage().work;
+    result
+}
+
+/// Keep the ledger alive after any fallible recognition, spelling or final byte check.
+fn export_in(
+    value: &ExactConstant,
+    metadata: usize,
+    ledger: &mut Budget,
+) -> Result<(String, PiFactor, u64, usize), MapError> {
     let retained =
         u64::try_from(metadata).map_err(|_| UnitError::UnsupportedExactConstantExport)?;
     let (factor, pi) = ledger.with_retained_payload(
