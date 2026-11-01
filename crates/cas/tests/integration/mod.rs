@@ -11,6 +11,7 @@ mod square_free;
 
 mod cases;
 mod contexts;
+mod endpoint_hypotheses;
 
 mod boundary;
 mod distributions;

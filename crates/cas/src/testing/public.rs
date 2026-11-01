@@ -323,3 +323,10 @@ pub(crate) mod trig_parity;
 )]
 #[path = "trig_parity_work.rs"]
 pub(crate) mod trig_parity_work;
+
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "shared endpoint provenance fixtures"
+)]
+#[path = "endpoint_hypotheses.rs"]
+pub(crate) mod endpoint_hypotheses;

@@ -57,6 +57,8 @@ struct Evidence {
     truth: Option<bool>,
     /// Explicit context keys used, in canonical order.
     hypotheses: BTreeSet<String>,
+    /// Exact introducing local frames and their one-based predicate slots.
+    qualified: BTreeSet<(LogicalId, u32)>,
 }
 
 /// A proof's reconstructed hypothesis class.
@@ -68,6 +70,8 @@ pub(crate) struct Conditions {
     pub(crate) residuals: BTreeSet<Obligation>,
     /// Context assumptions used by successful derivations.
     pub(crate) hypotheses: BTreeSet<String>,
+    /// Local provenance uses the existing qualified-hypothesis model.
+    pub(crate) qualified: BTreeSet<(LogicalId, u32)>,
 }
 
 /// Location shared by condition derivation failures.
@@ -111,6 +115,10 @@ impl Conditions {
         for key in &other.hypotheses {
             charge(self.hypotheses.len(), budget)?;
             self.hypotheses.insert(key.clone());
+        }
+        for reference in &other.qualified {
+            charge(self.qualified.len(), budget)?;
+            self.qualified.insert(*reference);
         }
         Ok(())
     }
@@ -234,12 +242,18 @@ impl Conditions {
                     status = ConditionStatus::Unknown;
                 }
                 Some(true) => {
-                    if !evidence.hypotheses.is_empty() && status != ConditionStatus::Unknown {
+                    if (!evidence.hypotheses.is_empty() || !evidence.qualified.is_empty())
+                        && status != ConditionStatus::Unknown
+                    {
                         status = ConditionStatus::Assumed;
                     }
                     for key in evidence.hypotheses {
                         charge(self.hypotheses.len(), budget)?;
                         self.hypotheses.insert(key);
+                    }
+                    for reference in evidence.qualified {
+                        charge(self.qualified.len(), budget)?;
+                        self.qualified.insert(reference);
                     }
                 }
             }
@@ -289,9 +303,49 @@ fn assumption(
                 return Ok(Evidence {
                     truth: Some(!negative),
                     hypotheses: BTreeSet::from([key.clone()]),
+                    qualified: BTreeSet::new(),
                 });
             }
         }
+    }
+    local_assumption(state, context, obligation, budget)
+}
+
+/// Only an exact retained predicate in the current ancestry supplies local authority.
+fn local_assumption(
+    state: &State,
+    context: LogicalId,
+    obligation: Obligation,
+    budget: &mut Budget,
+) -> Result<Evidence, Fault> {
+    let header = state.context(context)?.header_id;
+    let mut current = context;
+    while let Some(parent) = state.context(current)?.parent {
+        budget.condition(1, AT)?;
+        let frame = state.context(current)?;
+        budget.check(BudgetKind::HypothesisDepth, frame.depth, AT)?;
+        for (index, (_, id)) in frame.frame.iter().enumerate() {
+            budget.condition(1, AT)?;
+            let Vertex::Condition(predicate) = state.node(*id)? else {
+                return Err(Fault::invalid(InvalidCode::Reference, AT));
+            };
+            if predicate.header == header
+                && predicate.kind == obligation.kind.predicate()
+                && predicate.arguments == [obligation.term]
+            {
+                let slot = u32::try_from(index)
+                    .ok()
+                    .and_then(|slot| slot.checked_add(1))
+                    .ok_or_else(|| Fault::capacity(BudgetKind::ConditionAtoms, AT))?;
+                charge(0, budget)?;
+                return Ok(Evidence {
+                    truth: Some(true),
+                    hypotheses: BTreeSet::new(),
+                    qualified: BTreeSet::from([(current, slot)]),
+                });
+            }
+        }
+        current = parent;
     }
     Ok(Evidence::default())
 }
@@ -336,6 +390,7 @@ fn nonzero(
             let evidence = Evidence {
                 truth: Some(!value.is_zero()),
                 hypotheses: BTreeSet::new(),
+                qualified: BTreeSet::new(),
             };
             let (numerator, denominator) = value.component_bits();
             retained = retained
@@ -361,10 +416,16 @@ fn nonzero(
                 budget,
             )?
         };
-        let bytes = size(result.hypotheses.len(), AT)?
-            .checked_mul(budget.limits().name_bytes)
-            .and_then(|n| n.checked_add(256))
-            .ok_or_else(|| Fault::capacity(BudgetKind::StagedPayloadBytes, AT))?;
+        let bytes = size(
+            result
+                .hypotheses
+                .len()
+                .saturating_add(result.qualified.len()),
+            AT,
+        )?
+        .checked_mul(budget.limits().name_bytes)
+        .and_then(|n| n.checked_add(256))
+        .ok_or_else(|| Fault::capacity(BudgetKind::StagedPayloadBytes, AT))?;
         retained = retained
             .checked_add(bytes)
             .ok_or_else(|| Fault::capacity(BudgetKind::StagedPayloadBytes, AT))?;
@@ -452,6 +513,9 @@ fn intrinsic_nonzero(
         Operator::Neg | Operator::IntegerPower(_) => {
             let base = child(0)?;
             if base.truth == Some(true) {
+                if !base.qualified.is_empty() {
+                    charge(base.qualified.len(), budget)?;
+                }
                 result = base.clone();
             } else if matches!(operator, Operator::Neg | Operator::IntegerPower(1..)) {
                 result.truth = base.truth;
@@ -465,6 +529,10 @@ fn intrinsic_nonzero(
                 for key in a.hypotheses.iter().chain(&b.hypotheses) {
                     charge(result.hypotheses.len(), budget)?;
                     result.hypotheses.insert(key.clone());
+                }
+                for reference in a.qualified.iter().chain(&b.qualified) {
+                    charge(result.qualified.len(), budget)?;
+                    result.qualified.insert(*reference);
                 }
             } else if a.truth == Some(false)
                 || (matches!(operator, Operator::Mul) && b.truth == Some(false))

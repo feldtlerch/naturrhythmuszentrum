@@ -160,6 +160,8 @@ Formal primitive `ctx.close`, version 1. Closing a local frame preserves its con
 
 Formal primitive `ctx.hypothesis`, version 1. A qualified current or ancestor hypothesis holds under that exact frame. Required premises: No ordered proof premises; an exact introducing frame and predicate slot, or local membership slot zero. Standing: Lemma; instances are CAS-checked.
 
+Scalar endpoint checks also retain exact predicate slots from the current frame or its ancestors as qualified hypotheses. Matching includes the predicate kind, original expression identity and declaration frame. Local membership slot zero supplies no predicate authority. Closure consumes matching predicate facts or retains the undischarged predicates as residuals; root assumptions retain their existing representation.
+
 **Theorem (Primitive ctx.weaken)** · `thm:cas:primitive-ctx-weaken`
 
 Formal primitive `ctx.weaken`, version 1. A theorem remains valid under its checked restriction or semantic embedding. Required premises: The original theorem followed by exact subset or family projection evidence; every used assumption is retained or explicitly transported. Standing: Lemma; instances are CAS-checked.
@@ -1300,7 +1302,7 @@ The driven negative target and its positive twin introduce their actual source e
 
 **Example (Certified sign consequence costs)** · `ex:cas:decision-certified-sign-costs`
 
-From an admitted negative frame, the checked membership-to-nonzero proof costs 73,788 Work with a 50,224-byte staged threshold and 25,265-byte retained payload threshold; the complete original-reciprocal discharge costs 96,167 Work with thresholds 54,960 and 27,772. The positive twin costs 75,379 Work with thresholds 51,504 and 26,885, then 97,842 Work with thresholds 56,240 and 29,392. Fresh complete-witness import costs 284,574 Work, 54,384 staged bytes and 22,980 retained bytes for negative, or 294,810 Work, 55,664 staged bytes and 23,482 retained bytes for positive. In-store proof checking needs no `OutputBytes` allowance; import needs 800 for the replayed enclosure contract. These are allowance thresholds, distinct from portable witness lengths and allocator measurements (`test:integration:decision-certified-sign-boundaries`), (`rule:cas:decision-introduction-cost-owners`), (`ex:cas:decision-certified-reciprocal`).
+From an admitted negative frame, the checked membership-to-nonzero proof costs 73,788 Work with a 50,224-byte staged threshold and 25,265-byte retained payload threshold; the complete original-reciprocal discharge costs 96,169 Work with thresholds 54,960 and 27,772. The positive twin costs 75,379 Work with thresholds 51,504 and 26,885, then 97,844 Work with thresholds 56,240 and 29,392. Fresh complete-witness import costs 284,576 Work, 54,384 staged bytes and 22,980 retained bytes for negative, or 294,812 Work, 55,664 staged bytes and 23,482 retained bytes for positive. In-store proof checking needs no `OutputBytes` allowance; import needs 800 for the replayed enclosure contract. These are allowance thresholds, distinct from portable witness lengths and allocator measurements (`test:integration:decision-certified-sign-boundaries`), (`rule:cas:decision-introduction-cost-owners`), (`ex:cas:decision-certified-reciprocal`).
 
 **Rule (Declared native Integer results)** · `rule:cas:integer-case-results`
 

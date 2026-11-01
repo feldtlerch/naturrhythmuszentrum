@@ -136,4 +136,6 @@ mod trig_defined;
 mod trig_defined_work;
 mod trig_parity;
 
+mod endpoint_hypotheses;
+mod endpoint_hypotheses_work;
 mod trig_parity_work;

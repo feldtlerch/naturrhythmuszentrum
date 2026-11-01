@@ -321,7 +321,7 @@ fn scalar_hypotheses(
 ) -> Result<Vec<QualifiedHypothesis>, Fault> {
     let mut result = Vec::new();
     meter.reserve(&mut result, value.conditions.hypotheses.len(), budget)?;
-    if value.conditions.hypotheses.is_empty() {
+    if value.conditions.hypotheses.is_empty() && value.conditions.qualified.is_empty() {
         return Ok(result);
     }
     let context = root_frame(cas, value.context, budget)?;
@@ -331,6 +331,15 @@ fn scalar_hypotheses(
         let reference = HypothesisRef {
             context: cas.handle(context),
             slot,
+        };
+        result.push(reference.qualified(cas)?);
+    }
+    meter.reserve(&mut result, value.conditions.qualified.len(), budget)?;
+    for (frame, slot) in &value.conditions.qualified {
+        budget.work(1, AT)?;
+        let reference = HypothesisRef {
+            context: cas.handle(*frame),
+            slot: *slot,
         };
         result.push(reference.qualified(cas)?);
     }
