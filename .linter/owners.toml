@@ -1,10 +1,12 @@
 # SPDX-License-Identifier: CC0-1.0
-# Declares the repository owner over the root files, the declared surface and the documents; a package owner joins with its partition as the package lands.
+# NRZ owns the root files and declarations; DOCS owns the documents and guides. Package owners hold their declared partitions.
 namespace = "org.naturrhythmuszentrum.linter.owners"
 version = [1, 0, 0]
+root_owner = "NRZ"
 
 owners = [
   "NRZ",
+  "DOCS",
   "DOCGEN",
   "SCALAR",
   "ACCURACY",
@@ -16,8 +18,9 @@ owners = [
 
 partitions = [
   { name = "declared-surface", owner = "NRZ", pattern = '%s".linter" [ "/" *VCHAR ]' },
-  { name = "root-files", owner = "NRZ", pattern = '( %s".gitignore" / %s"CONTRIBUTING.md" / %s"templates/CONTRIBUTING.md.j2" / %s"Cargo.lock" / %s"Cargo.toml" / %s"LICENSE-CODE" / %s"LICENSE-DOCS" / %s"README.md" / %s"templates/README.md.j2" / %s"rust-toolchain.toml" )' },
-  { name = "documents", owner = "NRZ", pattern = '[ %s"templates/" ] %s"docs" [ "/" *VCHAR ]' },
+  { name = "root-files", owner = "NRZ", pattern = '( %s".gitignore" / %s"Cargo.lock" / %s"Cargo.toml" / %s"LICENSE-CODE" / %s"LICENSE-DOCS" / %s"rust-toolchain.toml" )' },
+  { name = "guides", owner = "DOCS", pattern = '( %s"CONTRIBUTING.md" / %s"templates/CONTRIBUTING.md.j2" / %s"README.md" / %s"templates/README.md.j2" )' },
+  { name = "documents", owner = "DOCS", pattern = '[ %s"templates/" ] %s"docs" [ "/" *VCHAR ]' },
   { name = "data", owner = "NRZ", pattern = '%s"data" [ "/" *VCHAR ]' },
   { name = "docgen", owner = "DOCGEN", pattern = '[ %s"templates/" ] %s"tools/docgen" [ "/" *VCHAR ]' },
   { name = "scalar", owner = "SCALAR", pattern = '[ %s"templates/" ] %s"crates/scalar" [ "/" *VCHAR ]' },
@@ -32,6 +35,14 @@ imports = [
 ]
 
 may_cite = [
+  { owner = "DOCS", target = "ORCHESTRATION" },
+  { owner = "DOCS", target = "NRZ" },
+  { owner = "DOCS", target = "DOCGEN" },
+  { owner = "DOCS", target = "SCALAR" },
+  { owner = "DOCS", target = "ACCURACY" },
+  { owner = "DOCS", target = "MATRIX" },
+  { owner = "DOCS", target = "BINDINGS" },
+  { owner = "DOCS", target = "CAS" },
   { owner = "NRZ", target = "ORCHESTRATION" },
   { owner = "DOCGEN", target = "ORCHESTRATION" },
   { owner = "SCALAR", target = "ORCHESTRATION" },

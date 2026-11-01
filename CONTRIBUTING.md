@@ -40,7 +40,7 @@ A citation is its label as a backtick span inside parentheses in running text, n
 
 **Rule (Check ownership and metadata)** · `rule:nrz:linter-and-ownership`
 
-Sources, inputs, templates, datasets, and renders carry the required metadata and pass the host linter's `check` and `fmt --check`. Ownership follows the declared subtree responsibility; root policy remains with its declared owner until an explicit partition update is committed. Use the actual linter configuration to resolve owner identities and envelope fields. This keeps generated and handwritten material within the same ownership and traceability rules (`dec:vision:labels-and-ownership`), (`rule:vision:metadata-and-licenses`), (`cav:vision:estate-schema-and-reproducibility`).
+Sources, inputs, templates, datasets, and renders carry the required metadata and pass the host linter's `check` and `fmt --check`. Ownership follows the declared subtree responsibility: NRZ owns the root files and declarations, while DOCS owns the design and engineering documents, README and this contributing guide, together with their templates. Package owners hold their declared partitions. Every owner may cite the root corpus; root prose cannot import a package premise. DOCS cites package statements through its declared imports. Use the actual linter configuration to resolve owner identities and envelope fields. This keeps generated and handwritten material within the same ownership and traceability rules (`dec:vision:labels-and-ownership`), (`rule:vision:metadata-and-licenses`), (`cav:vision:estate-schema-and-reproducibility`).
 
 ## Verification · `sec:nrz:contributing-verification`
 
