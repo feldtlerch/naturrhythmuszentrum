@@ -5,6 +5,7 @@ mod arithmetic;
 mod conversion;
 mod counts;
 mod execution;
+mod frequency;
 mod imports;
 mod lineage;
 #[expect(

@@ -134,6 +134,21 @@ impl QuantityContext {
         map: CheckedMap,
         budget: &mut Budget,
     ) -> Result<Quantity<P>, QuantityError<P>> {
+        let contract = self.conversion_contract(heap, input, map, budget)?;
+        let operation = OperationDraft::convert(vec![contract]).check(self.execution)?;
+        let mut output = self.execute(heap, operation, vec![input.binding().clone()], budget)?;
+        output.counts.clone_from(&input.counts);
+        Ok(output)
+    }
+
+    /// Both same-kind and explicit frequency maps use identical shape and version admission.
+    pub(super) fn conversion_contract<P: Scalar + 'static, R: QuantityRole>(
+        &self,
+        heap: &Heap,
+        input: &Quantity<P, R>,
+        map: CheckedMap,
+        budget: &mut Budget,
+    ) -> Result<ConversionContract, QuantityError<P>> {
         self.check_descriptor(input.descriptor())?;
         map.validate_snapshot(&self.declarations)
             .map_err(crate::OperationError::from)?;
@@ -151,17 +166,13 @@ impl QuantityContext {
             } else {
                 self.shape(target, extent)?
             };
-        let contract = ConversionContract::new(
+        Ok(ConversionContract::new(
             source_shape,
             target_shape,
             map,
             LiteralLimits::default(),
             ConversionMode::Deterministic,
-        )?;
-        let operation = OperationDraft::convert(vec![contract]).check(self.execution)?;
-        let mut output = self.execute(heap, operation, vec![input.binding().clone()], budget)?;
-        output.counts.clone_from(&input.counts);
-        Ok(output)
+        )?)
     }
 
     /// Keep distinct source/target scalar types while reusing the same precision transaction.

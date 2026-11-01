@@ -109,3 +109,4 @@ mod quantity_powers;
 mod quantity_products;
 
 mod quantity_covariance;
+mod quantity_frequency;

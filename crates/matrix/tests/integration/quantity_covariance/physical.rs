@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Physical quantity products retain declared kind relations as well as correlation.
 
+mod frequency;
 mod measurements;
 
 use super::{TestResult, append_pair};
@@ -113,7 +114,9 @@ fn quantity_root_covariance_lc_resonance() -> TestResult {
 }
 
 /// Register each physical relation, including the explicit radian product.
-fn resonance_context() -> TestResult<(QuantityContext, [nrz_bindings::Descriptor; 3])> {
+fn resonance_context(
+    frequency: bool,
+) -> TestResult<(QuantityContext, [nrz_bindings::Descriptor; 3])> {
     use nrz_bindings::readings::algebra::Rational as Exact;
     use nrz_bindings::{Descriptor, Kind, Measure, Role};
     let inductance = descriptor("inductance", [2, 1, -2, -2, 0, 0, 0], (1, 1))?;
@@ -121,7 +124,11 @@ fn resonance_context() -> TestResult<(QuantityContext, [nrz_bindings::Descriptor
     let squared_time = descriptor("squared time", [0, 0, 2, 0, 0, 0, 0], (1, 1))?;
     let time = descriptor("time", [0, 0, 1, 0, 0, 0, 0], (1, 1))?;
     let angle = Descriptor::new(Kind::Angle, Measure::coherent(), Role::Difference)?;
-    let mut registry = Registry::new(ExponentPolicy::Rational);
+    let mut registry = if frequency {
+        Registry::with_angle_frequency(ExponentPolicy::Rational)?
+    } else {
+        Registry::new(ExponentPolicy::Rational)
+    };
     let mut budget = Budget::new(Limits::default())?;
     registry.register_binary(
         BinaryOp::Multiply,
@@ -144,12 +151,23 @@ fn resonance_context() -> TestResult<(QuantityContext, [nrz_bindings::Descriptor
         Exact::from_ratio(-1, 1, &mut budget)?,
         Kind::rate()?,
     )?;
-    registry.register_binary(
-        BinaryOp::Multiply,
-        Kind::rate()?,
-        Kind::Angle,
-        Kind::angular_frequency()?,
-    )?;
+    if frequency {
+        let period = descriptor("period", [0, 0, 1, 0, 0, 0, 0], (1, 1))?;
+        let reciprocal = Exact::from_ratio(-1, 1, &mut budget)?;
+        registry.register_power(
+            Kind::frequency()?,
+            reciprocal.clone(),
+            period.kind().clone(),
+        )?;
+        registry.register_power(period.kind().clone(), reciprocal, Kind::frequency()?)?;
+    } else {
+        registry.register_binary(
+            BinaryOp::Multiply,
+            Kind::rate()?,
+            Kind::Angle,
+            Kind::angular_frequency()?,
+        )?;
+    }
     let context = QuantityContext::new(
         Rc::new(Context::with_real_symbols(registry, Limits::default(), &[])?.freeze()?),
         ShapeLimits::default(),
@@ -168,11 +186,20 @@ fn resonance_at<P: nrz_scalar::Scalar + 'static>(
     centers: [P; 2],
     covariance: [P; 3],
 ) -> TestResult<(QuantityContext, Heap, [nrz_matrix::Quantity<P>; 3])> {
+    resonance_at_with(centers, covariance, false)
+}
+
+/// The frequency fixture explicitly adds the full-cycle vocabulary; existing fixture costs stay fixed.
+fn resonance_at_with<P: nrz_scalar::Scalar + 'static>(
+    centers: [P; 2],
+    covariance: [P; 3],
+    frequency: bool,
+) -> TestResult<(QuantityContext, Heap, [nrz_matrix::Quantity<P>; 3])> {
     use nrz_matrix::{
         CompanionSetDraft, CovarianceBlock, Extent, JointLimits, JointModel, Source, SourceFactor,
         TargetMap,
     };
-    let (context, [inductance, capacitance, angle]) = resonance_context()?;
+    let (context, [inductance, capacitance, angle]) = resonance_context(frequency)?;
     let mut heap = Heap::new(HeapLimits::default())?;
     let descriptors = [&inductance, &capacitance, &angle];
     let handles = descriptors
