@@ -6,6 +6,46 @@ use crate::binding::NativeRecipe;
 use crate::{CheckedOperation, ExecutionLimits, Handle, Heap, JointLimits, OperationError, Value};
 use nrz_scalar::{ArithmeticContext, Scalar};
 
+/// Preserve ordinary resource admission while quantity statistics debit their original caller.
+pub(crate) enum PlanBudget<'a> {
+    /// Existing binding clients provide immutable payload ceilings.
+    Independent(&'a nrz_bindings::Budget),
+    /// Quantity clients retain one mutable cumulative Work ledger.
+    Quantity(&'a mut nrz_bindings::Budget),
+}
+
+impl PlanBudget<'_> {
+    /// Borrow the same payload and policy ceilings without changing any counter.
+    pub(crate) const fn resources(&self) -> &nrz_bindings::Budget {
+        match self {
+            Self::Independent(budget) => budget,
+            Self::Quantity(budget) => budget,
+        }
+    }
+
+    /// Reserve the conservative complete statistical phase before numerical capture.
+    fn admit_quantity(&mut self, work: usize) -> Result<(), OperationError> {
+        let Self::Quantity(budget) = self else {
+            return Err(StatisticsError::Contract.into());
+        };
+        let work = u64::try_from(work).map_err(|_| StatisticsError::ResourceLimit)?;
+        budget.work(
+            work,
+            nrz_bindings::readings::algebra::Location::new("quantity statistics"),
+        )?;
+        Ok(())
+    }
+}
+
+/// One caller-prepared derivative owner for the selected closed operation.
+#[derive(Debug)]
+pub(crate) enum PreparedDerivative<P: Scalar> {
+    /// Numerical reciprocal derivative already bound to its original sources.
+    Reciprocal(std::rc::Rc<crate::ReciprocalDerivativeEvaluation<P>>),
+    /// Exact quantity identity prepared on the caller's cumulative ledger.
+    Quantity(std::rc::Rc<nrz_bindings::CheckedSensitivity>),
+}
+
 /// Frozen statistical inputs and checked work allowance for one execution.
 #[derive(Debug)]
 pub(crate) struct Plan<P: Scalar> {
@@ -34,9 +74,14 @@ impl<P: Scalar + 'static> Plan<P> {
         handles: &[Handle<Value, P>],
         limits: ExecutionLimits,
         trace: &crate::execution::Trace,
-        budget: &nrz_bindings::Budget,
-        reciprocal: Option<std::rc::Rc<crate::ReciprocalDerivativeEvaluation<P>>>,
+        budget: &mut PlanBudget<'_>,
+        prepared: Option<PreparedDerivative<P>>,
     ) -> Result<Self, OperationError> {
+        let (reciprocal, quantity) = match prepared {
+            Some(PreparedDerivative::Reciprocal(value)) => (Some(value), None),
+            Some(PreparedDerivative::Quantity(value)) => (None, Some(value)),
+            None => (None, None),
+        };
         let joint = JointLimits::new(limits.scratch, limits.scratch, limits.work);
         let mut result = Self {
             inputs: Vec::new(),
@@ -72,6 +117,7 @@ impl<P: Scalar + 'static> Plan<P> {
                 contract.recipe,
                 crate::kernels::contract::Recipe::Quantity(_)
             )
+            && quantity.is_none()
         {
             return Err(StatisticsError::NonlinearStatistics.into());
         }
@@ -89,8 +135,15 @@ impl<P: Scalar + 'static> Plan<P> {
         result.work = phase_work(operation, lineage)?;
         limits.check(handles.len(), result.work)?;
         lineage.model.require(&lineage.columns, joint)?;
-        result.derivative = super::derivative::check(operation)?;
-        let run = super::inventory::Run::new::<Q>(bindings, Some(operation), trace, budget)?;
+        result.derivative = if let Some(proof) = quantity {
+            super::quantity::validate(operation, &proof)?;
+            budget.admit_quantity(result.work)?;
+            Some(proof)
+        } else {
+            super::derivative::check(operation)?
+        };
+        let run =
+            super::inventory::Run::new::<Q>(bindings, Some(operation), trace, budget.resources())?;
         if !matches!(operation.recipe, NativeRecipe::Solve(_)) {
             run.backend_allowance(result.work, size_of::<Q>())?;
         }
@@ -102,20 +155,28 @@ impl<P: Scalar + 'static> Plan<P> {
         super::structure::inputs(operation, &result.inputs, &context, joint, &run)?;
         result.points = super::operating::capture(heap, handles, &context, &run)?;
         result.inventory = Some(run);
-        result.classify(operation, &context)?;
-        result
-            .inventory
-            .as_ref()
-            .ok_or(StatisticsError::Contract)?
-            .law(
-                result
-                    .lineage
-                    .as_ref()
-                    .ok_or(StatisticsError::Contract)?
-                    .assurance,
-            );
+        result.record_law(operation, &context)?;
         Ok(result)
     }
+    /// Record the classified law on the same immutable allocation inventory.
+    fn record_law(
+        &mut self,
+        operation: &CheckedOperation,
+        context: &ArithmeticContext,
+    ) -> Result<(), OperationError> {
+        self.classify(operation, context)?;
+        let assurance = self
+            .lineage
+            .as_ref()
+            .ok_or(StatisticsError::Contract)?
+            .assurance;
+        self.inventory
+            .as_ref()
+            .ok_or(StatisticsError::Contract)?
+            .law(assurance);
+        Ok(())
+    }
+
     /// Require one model; union ordered source indices without inferring independence.
     fn merge(&mut self, incoming: &Lineage) -> Result<(), OperationError> {
         if let Some(lineage) = &mut self.lineage {
@@ -181,7 +242,7 @@ impl CheckedOperation {
         match &self.recipe {
             NativeRecipe::Reciprocal { .. } => false,
             NativeRecipe::Kernel(contract) => match &contract.recipe {
-                Recipe::Quantity(_) => false,
+                Recipe::Quantity(_) => contract.kind() == crate::KernelKind::ScalarQuantityProduct,
                 Recipe::Sum { .. }
                 | Recipe::Linear(_)
                 | Recipe::Transform(_)

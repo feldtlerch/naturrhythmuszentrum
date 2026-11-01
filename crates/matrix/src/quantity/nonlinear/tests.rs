@@ -19,7 +19,7 @@ use std::rc::Rc;
 fn quantity_kernel_evidence_pairing() -> TestResult {
     let quantity = operation(true)?;
     let ordinary = operation(false)?;
-    assert!(!quantity.carries_statistics());
+    assert!(quantity.carries_statistics());
     assert!(ordinary.carries_statistics());
     let evidence = run(&quantity, None)?.ok_or("quantity evidence")?;
     let RecipeEvidence::QuantityKernel(claim) = &evidence else {

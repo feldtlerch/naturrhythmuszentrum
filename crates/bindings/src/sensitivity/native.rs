@@ -246,9 +246,9 @@ pub(crate) fn coefficient(
             let doubled = graph.term(Operator::Mul, &[two, coherent])?;
             graph.term(Operator::Mul, &[doubled, scale])
         }
-        SensitivityRecipe::PositiveRoot | SensitivityRecipe::Solve { .. } => {
-            Err(SensitivityError::UnsupportedRecipe)
-        }
+        SensitivityRecipe::PositiveRoot
+        | SensitivityRecipe::QuantityProduct
+        | SensitivityRecipe::Solve { .. } => Err(SensitivityError::UnsupportedRecipe),
         SensitivityRecipe::Reciprocal => {
             let square = graph.term(Operator::Mul, &[coherent.clone(), coherent])?;
             let negative = graph.term(Operator::Neg, &[scale])?;
@@ -269,8 +269,8 @@ const fn kernel(
     match recipe {
         SensitivityRecipe::Square => Ok(SensitivityKernel::Square { coordinate }),
         SensitivityRecipe::Reciprocal => Ok(SensitivityKernel::Reciprocal { coordinate }),
-        SensitivityRecipe::PositiveRoot | SensitivityRecipe::Solve { .. } => {
-            Err(SensitivityError::UnsupportedRecipe)
-        }
+        SensitivityRecipe::PositiveRoot
+        | SensitivityRecipe::QuantityProduct
+        | SensitivityRecipe::Solve { .. } => Err(SensitivityError::UnsupportedRecipe),
     }
 }

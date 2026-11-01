@@ -6,14 +6,13 @@ use nrz_bindings::{Budget, Descriptor, Limits, Role, UnitError};
 use nrz_matrix::{Heap, HeapLimits, QuantityError};
 use nrz_scalar::{ArithmeticFailure, KernelError};
 
-/// Point roles and statistical companions refuse without numerical or heap publication.
+/// Point roles and unsupported uncertainty values refuse without publication.
 /// ´test:integration:quantity-products-semantic-refusals´
-/// ´claim:matrix:quantity-products-semantic-refusals´ Point multiplication and statistical nonlinear transport refuse while difference and deterministic twins succeed.
+/// ´claim:matrix:quantity-products-semantic-refusals´ Point multiplication and unsupported uncertainty-valued transport refuse while difference and plain-value twins succeed.
 #[test]
 fn quantity_products_semantic_refusals() -> TestResult {
     let (context, [voltage, current, _]) = fixture()?;
     let mut heap = Heap::new(HeapLimits::default())?;
-    let statistical = crate::statistics_testing::scalar::<f64>(&mut heap)?;
     let point = Descriptor::new(
         voltage.kind().clone(),
         voltage.measure().clone(),
@@ -37,20 +36,6 @@ fn quantity_products_semantic_refusals() -> TestResult {
         &right,
         &mut Budget::new(Limits::default())?,
     )?;
-    let statistical = context.capture(
-        &heap,
-        heap.symbol_binding(statistical.value())?,
-        &mut Budget::new(Limits::default())?,
-    )?;
-    let Err(fault) = context.multiply(
-        &mut heap,
-        &statistical,
-        &difference,
-        &mut Budget::new(Limits::default())?,
-    ) else {
-        panic!("statistical product must refuse");
-    };
-    assert!(matches!(fault, QuantityError::NonlinearStatistics));
     let standard = Descriptor::new(
         nrz_bindings::Kind::Uncertainty(
             nrz_bindings::UncertaintyMode::Standard,
@@ -315,9 +300,9 @@ fn quantity_products_shape_kind_refusals() -> TestResult {
     Ok(())
 }
 
-/// Rebinding a quantity recipe cannot bypass the named statistics refusal.
+/// Rebinding a quantity recipe cannot bypass explicit caller-budgeted sensitivity preparation.
 /// ´test:integration:quantity-products-statistical-rebinding´
-/// ´claim:matrix:quantity-products-statistical-rebinding´ Direct binding of a quantity recipe to a statistical operand returns `NonlinearStatistics` before evaluation and preserves heap provenance.
+/// ´claim:matrix:quantity-products-statistical-rebinding´ Direct binding without caller-budgeted sensitivity preparation returns `NonlinearStatistics` before evaluation and preserves heap provenance.
 #[test]
 fn quantity_products_statistical_rebinding() -> TestResult {
     let (context, _) = fixture()?;
@@ -344,7 +329,7 @@ fn quantity_products_statistical_rebinding() -> TestResult {
         &mut Budget::new(Limits::default())?,
     )?;
     let operation = result.operation_record(&heap)?.operation().clone();
-    assert!(!operation.carries_statistics());
+    assert!(operation.carries_statistics());
     let before = heap.provenance_usage();
     let Err(fault) = nrz_matrix::Binding::<f64, f64>::from_symbols(
         operation,

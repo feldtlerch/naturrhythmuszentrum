@@ -87,8 +87,8 @@ pub struct Binding<P: Scalar, Q: Scalar = P> {
     pub(crate) inputs: Vec<Handle<Value, P>>,
     /// Explicit work and private scratch limits.
     pub(crate) limits: ExecutionLimits,
-    /// Caller-evaluated reciprocal Jacobian, retaining its exact original point and sources.
-    pub(crate) reciprocal_statistics: Option<std::rc::Rc<crate::ReciprocalDerivativeEvaluation<P>>>,
+    /// Caller-prepared derivative evidence for the selected reciprocal or quantity recipe.
+    pub(crate) reciprocal_statistics: Option<crate::statistics::PreparedDerivative<P>>,
     /// Output scalar type, fixed independently of the input handle type.
     pub(crate) output: std::marker::PhantomData<Q>,
 }
@@ -150,24 +150,32 @@ impl<P: Scalar + 'static, Q: Scalar + 'static> Binding<P, Q> {
         heap: &'h mut Heap,
         budget: &nrz_bindings::Budget,
     ) -> Result<Bound<'h, P, Q>, OperationError> {
-        self.validate_inventory(heap, budget, None)
+        self.validate_inventory(
+            heap,
+            crate::statistics::PlanBudget::Independent(budget),
+            None,
+        )
     }
 
     /// Quantity outputs were completely declared on the caller's cumulative ledger.
     pub(crate) fn validate_quantity<'h>(
         self,
         heap: &'h mut Heap,
-        budget: &nrz_bindings::Budget,
+        budget: &mut nrz_bindings::Budget,
         symbols: Vec<nrz_bindings::BindingSymbols>,
     ) -> Result<Bound<'h, P, Q>, OperationError> {
-        self.validate_inventory(heap, budget, Some(symbols))
+        self.validate_inventory(
+            heap,
+            crate::statistics::PlanBudget::Quantity(budget),
+            Some(symbols),
+        )
     }
 
     /// Ordinary transactions and quantity transactions share every live and resource check.
     fn validate_inventory<'h>(
         self,
         heap: &'h mut Heap,
-        budget: &nrz_bindings::Budget,
+        mut budget: crate::statistics::PlanBudget<'_>,
         symbols: Option<Vec<nrz_bindings::BindingSymbols>>,
     ) -> Result<Bound<'h, P, Q>, OperationError> {
         match self.operation.recipe {
@@ -218,14 +226,14 @@ impl<P: Scalar + 'static, Q: Scalar + 'static> Binding<P, Q> {
             heap.validate_bound_shape(dependency.handle(), contract, slot)?;
         }
         let execution = ExecutionId(identity()?);
-        let resources = crate::execution::Lease::new(execution, budget)?;
+        let resources = crate::execution::Lease::new(execution, budget.resources())?;
         let statistics = crate::statistics::Plan::capture::<Q>(
             heap,
             &self.operation,
             &self.inputs,
             self.limits,
             &resources.trace,
-            budget,
+            &mut budget,
             self.reciprocal_statistics,
         )?;
         if !matches!(self.operation.recipe, NativeRecipe::Solve(_)) {

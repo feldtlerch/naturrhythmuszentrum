@@ -20,6 +20,21 @@ impl QuantityContext {
         self.finish(heap, binding, budget)
     }
 
+    /// Retain a caller-prepared quantity identity through ordinary binding and moment publication.
+    pub(super) fn execute_with_sensitivity<P: Scalar + 'static>(
+        &self,
+        heap: &mut Heap,
+        operation: CheckedOperation,
+        inputs: Vec<ValueBinding<P>>,
+        derivative: Option<std::rc::Rc<nrz_bindings::CheckedSensitivity>>,
+        budget: &mut Budget,
+    ) -> Result<Quantity<P>, QuantityError<P>> {
+        let mut binding = Binding::from_symbols(operation, inputs, self.execution);
+        binding.reciprocal_statistics =
+            derivative.map(crate::statistics::PreparedDerivative::Quantity);
+        self.finish(heap, binding, budget)
+    }
+
     /// Keep a newly frozen schema private until the complete numerical transaction succeeds.
     pub(super) fn finish<P: Scalar + 'static, Q: Scalar + 'static>(
         &self,
@@ -118,7 +133,14 @@ impl QuantityContext {
         charge(budget, 1)?;
         allocation::<Q>(budget)?;
         super::nonlinear::configure(&mut binding.operation, budget)?;
+        let statistical_quantity = matches!(
+            &binding.reciprocal_statistics,
+            Some(crate::statistics::PreparedDerivative::Quantity(_))
+        );
         let bound = binding.validate_quantity(heap, budget, symbols)?;
+        if statistical_quantity {
+            admit_arithmetic(&bound, budget)?;
+        }
         let result = bound
             .result_bindings()
             .first()
@@ -144,7 +166,18 @@ impl QuantityContext {
                 .unwrap_or(0),
             Err(failure) => match failure.cause() {
                 crate::OperationError::Kernel(crate::KernelError::Quantity { work, .. }) => *work,
-                _ => 0,
+                _ => failure
+                    .record()
+                    .historical_evidence()
+                    .iter()
+                    .find_map(|claim| {
+                        if let crate::RecipeEvidence::QuantityKernel(claim) = claim {
+                            Some(claim.usage().work)
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or(0),
             },
         };
         if work != 0 {
@@ -157,4 +190,22 @@ impl QuantityContext {
         bound.publish(candidate)?;
         Ok(result)
     }
+}
+
+/// Admit the complete scalar schedule after the statistical phase was reserved before capture.
+fn admit_arithmetic<P: Scalar + 'static, Q: Scalar + 'static>(
+    bound: &crate::Bound<'_, P, Q>,
+    budget: &Budget,
+) -> Result<(), QuantityError<P>> {
+    if let crate::binding::NativeRecipe::Kernel(contract) = &bound.operation.recipe {
+        budget.check(
+            nrz_bindings::readings::algebra::limits::BudgetKind::Work,
+            budget
+                .usage()
+                .work
+                .saturating_add(u64::try_from(contract.work).unwrap_or(u64::MAX)),
+            nrz_bindings::readings::algebra::Location::new("quantity statistical arithmetic"),
+        )?;
+    }
+    Ok(())
 }

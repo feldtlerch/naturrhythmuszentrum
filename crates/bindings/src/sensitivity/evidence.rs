@@ -153,7 +153,7 @@ pub struct CheckedSensitivity {
     pub(crate) auxiliary: Vec<String>,
     /// Input descriptors in their declared coordinates.
     pub(crate) inputs: Vec<Descriptor>,
-    /// Output descriptors in coherent coordinates.
+    /// Exact output descriptors; quantity products retain their composed coordinate measures.
     pub(crate) outputs: Vec<Descriptor>,
     /// Inspected and replayed scalar relation derivatives.
     pub(crate) jacobian: JacobianEvidence,

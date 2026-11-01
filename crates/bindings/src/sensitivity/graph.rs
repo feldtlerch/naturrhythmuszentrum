@@ -41,6 +41,12 @@ pub(crate) struct Graph<'a> {
     limits: LimitsOverride,
     /// Completed coverage shared only within this immutable graph owner and construction phase.
     covered: Vec<CoveredRecord>,
+    /// Quantity requests debit their disjoint generation and replay work to this ledger.
+    cumulative: bool,
+    /// Prior caller work excludes unrelated preparation from the construction receipt.
+    initial_work: u64,
+    /// Service work is excluded from the graph-construction counter.
+    service_work: u64,
 }
 
 impl<'a> Graph<'a> {
@@ -59,7 +65,27 @@ impl<'a> Graph<'a> {
             limits: limits.clone(),
             work: SensitivityWork::default(),
             covered: Vec::new(),
+            cumulative: false,
+            initial_work: 0,
+            service_work: 0,
         })
+    }
+
+    /// Borrow the caller's accounting state for one complete quantity derivative phase.
+    pub(crate) fn cumulative(
+        builder: &'a Context,
+        ledger: &mut Budget,
+    ) -> Result<Self, SensitivityError> {
+        let mut graph = Self::new(builder, &LimitsOverride::default())?;
+        std::mem::swap(&mut graph.budget, ledger);
+        graph.cumulative = true;
+        graph.initial_work = graph.budget.usage().work;
+        Ok(graph)
+    }
+
+    /// Return the exact consumed accounting state on success and every refusal.
+    pub(crate) const fn return_ledger(&mut self, ledger: &mut Budget) {
+        std::mem::swap(&mut self.budget, ledger);
     }
 
     /// Refuse excessive schedules before allocating cells or iterating their product.
@@ -215,6 +241,24 @@ impl<'a> Graph<'a> {
         )
     }
 
+    /// Differentiate an admitted quantity law in its exact stored-coordinate measure.
+    pub(crate) fn coordinate_partial(
+        &mut self,
+        original: &CheckedExpression,
+        coordinate: &str,
+    ) -> Result<VerifiedWitness, SensitivityError> {
+        let input = self.cover(&original.original().syntax, &original.original().syntax)?;
+        self.request(
+            Task::Differentiate {
+                coordinate: coordinate.into(),
+                order: 1,
+                layer: nrz_cas::domain::Layer::Pointwise,
+                domain: self.domain.clone(),
+            },
+            vec![input],
+        )
+    }
+
     /// Prove equality to a fixed native coefficient; callers cannot supply this formula.
     pub(crate) fn equal(
         &mut self,
@@ -239,15 +283,36 @@ impl<'a> Graph<'a> {
         task: Task,
         inputs: Vec<CoveredInput>,
     ) -> Result<VerifiedWitness, SensitivityError> {
+        let mut limits = self.limits.clone();
+        if self.cumulative {
+            let remaining = self
+                .budget
+                .limits()
+                .work
+                .saturating_sub(self.budget.usage().work);
+            limits.work = Some(remaining / 2);
+            limits.replay_work =
+                Some((remaining - remaining / 2).min(self.budget.limits().replay_work));
+        }
         let request = Request {
             task,
             context: self.context.clone(),
             inputs,
             premises: Vec::new(),
-            limits: self.limits.clone(),
+            limits,
         };
-        self.work.construction = self.budget.usage().work;
+        self.work.construction = self.budget.usage().work - self.initial_work - self.service_work;
         let outcome = self.cas.run(&request);
+        if self.cumulative {
+            let work =
+                super::quantity::service_work(&outcome, request.limits.replay_work.unwrap_or(0))?;
+            self.budget
+                .work(work, Location::new("quantity sensitivity service"))?;
+            self.service_work = self
+                .service_work
+                .checked_add(work)
+                .ok_or(SensitivityError::ResourceLimit)?;
+        }
         if let nrz_cas::request::Outcome::Proved { result, usage, .. } = &outcome {
             self.work.generation = self.work.generation.max(usage.work);
             self.work.replay = self.work.replay.max(result.replay_usage.work);
@@ -256,6 +321,14 @@ impl<'a> Graph<'a> {
                 .requests
                 .checked_add(1)
                 .ok_or(SensitivityError::ResourceLimit)?;
+        }
+        if self.cumulative
+            && let nrz_cas::request::Outcome::Exhausted { fault, .. } = &outcome
+        {
+            return Err(SensitivityError::Exhausted {
+                fault: *fault,
+                outcome: Box::new(outcome),
+            });
         }
         super::replay::completed(outcome)
     }

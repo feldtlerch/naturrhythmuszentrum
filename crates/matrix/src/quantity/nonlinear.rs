@@ -91,7 +91,7 @@ impl<P: Scalar + 'static, R: QuantityRole> Quantity<P, R> {
 impl QuantityContext {
     /// Multiply scalar quantities with exact composed measures and certified full-box bounds.
     /// # Errors
-    /// Refuses points, unsupported kinds, nonscalar inputs, statistical companions or exhausted resources.
+    /// Refuses points, unsupported kinds, nonscalar inputs, incomplete statistical evidence or exhausted resources.
     pub fn multiply<P: Scalar + 'static, L: QuantityRole, R: QuantityRole>(
         &self,
         heap: &mut Heap,
@@ -135,10 +135,11 @@ impl QuantityContext {
             budget,
         )?;
         self.check_descriptor(&descriptor)?;
-        let inputs = vec![
-            self.nonlinear_operand(heap, left, budget)?,
-            self.nonlinear_operand(heap, right, budget)?,
-        ];
+        let (left_contract, left_statistics) =
+            self.nonlinear_operand(heap, left, operation == BinaryOp::Multiply, budget)?;
+        let (right_contract, right_statistics) =
+            self.nonlinear_operand(heap, right, operation == BinaryOp::Multiply, budget)?;
+        let inputs = vec![left_contract, right_contract];
         let recipe = ScalarQuantityRecipe {
             operation: if operation == BinaryOp::Multiply {
                 ScalarQuantityOp::Product
@@ -148,11 +149,19 @@ impl QuantityContext {
             allowance: 0,
         };
         let operation = self.nonlinear_contract(inputs, &descriptor, recipe)?;
+        let derivative = if left_statistics || right_statistics {
+            Some(crate::statistics::prepare_quantity(
+                heap, &operation, budget,
+            )?)
+        } else {
+            None
+        };
         let counts = lineage::merge(&left.counts, &right.counts, budget)?;
-        let mut result = self.execute(
+        let mut result = self.execute_with_sensitivity(
             heap,
             operation,
             vec![left.binding().clone(), right.binding().clone()],
+            derivative,
             budget,
         )?;
         result.counts = counts;
@@ -206,8 +215,9 @@ impl QuantityContext {
         &self,
         heap: &Heap,
         input: &Quantity<P, R>,
+        statistics: bool,
         budget: &mut Budget,
-    ) -> Result<RegionContract, QuantityError<P>> {
+    ) -> Result<(RegionContract, bool), QuantityError<P>> {
         let shape = self.input_shape(heap, input)?;
         if shape.extent().rows() != 1 || shape.extent().columns() != 1 {
             return Err(QuantityError::NonlinearExtent);
@@ -231,12 +241,13 @@ impl QuantityContext {
             .records
             .iter()
             .any(|record| record.targets.iter().any(|target| target.stamp() == stamp));
-        if joint || moments {
+        let present = joint || moments;
+        if present && !statistics {
             return Err(QuantityError::NonlinearStatistics);
         }
         let mut contract = RegionContract::check(shape)?;
         contract.quantity = input.descriptor().clone();
-        Ok(contract)
+        Ok((contract, present))
     }
 }
 

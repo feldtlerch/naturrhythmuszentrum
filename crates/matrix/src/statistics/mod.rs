@@ -34,14 +34,16 @@ mod operating;
 mod plan;
 mod product;
 mod publish;
+mod quantity;
 pub(crate) mod reciprocal;
 pub(crate) mod store;
 mod structure;
 
 pub use access::{MomentView, ParameterView};
 pub use error::StatisticsError;
-pub(crate) use plan::Plan;
+pub(crate) use plan::{Plan, PlanBudget, PreparedDerivative};
 pub(crate) use publish::{PreparedMoments, prepare};
+pub(crate) use quantity::prepare as prepare_quantity;
 pub use store::{MomentAssurance, MomentRef};
 pub(crate) use store::{MomentPayload, Store};
 

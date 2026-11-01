@@ -38,6 +38,24 @@ impl CheckedDeclarations {
         }
     }
 
+    /// Compare every retained symbolic ceiling except cumulative caller Work.
+    pub(crate) fn matches_symbolic_policy(
+        &self,
+        budget: &mut crate::Budget,
+    ) -> Result<bool, Fault> {
+        /// Fixed-width copies and comparison of the complete policy.
+        const POLICY_WORK: u64 = (size_of::<crate::Limits>() / size_of::<u64>()) as u64;
+        budget.work(
+            3 * POLICY_WORK,
+            nrz_cas::Location::new("quantity sensitivity policy"),
+        )?;
+        let mut retained = self.context.cas_limits.clone();
+        let mut requested = budget.limits().clone();
+        retained.work = 0;
+        requested.work = 0;
+        Ok(retained == requested)
+    }
+
     /// Exact identity retained by every check in this snapshot.
     #[must_use]
     pub const fn id(&self) -> &SnapshotId {

@@ -4,7 +4,7 @@
 use std::cell::{Ref, RefCell, RefMut};
 
 use nrz_cas::domain::{AmbientDomain, ContextDraft, HeaderDraft, RegionDraft, RegionExpr};
-use nrz_cas::limits::{Limits, LimitsOverride};
+use nrz_cas::limits::{Budget, Limits, LimitsOverride};
 use nrz_cas::request::Outcome;
 use nrz_cas::source::{OriginalForm, ParseError, ParseFailure, parse_original};
 use nrz_cas::syntax::{AtomicSort, Declaration, Draft, Environment, Field, Sort};
@@ -97,7 +97,7 @@ impl Context {
             });
         }
         let mut cas = Cas::new(cas_limits.clone())?;
-        let semantic = semantic_context(&mut cas, environment)?;
+        let semantic = semantic_context(&mut cas, environment, &mut budget()?)?;
         Ok(Self {
             cas: RefCell::new(cas),
             semantic,
@@ -108,6 +108,52 @@ impl Context {
             declarations: std::collections::BTreeMap::new(),
             functions: std::collections::BTreeMap::new(),
         })
+    }
+
+    /// Construct the closed quantity proof owner on its original caller ledger.
+    pub(crate) fn quantity_context(
+        registry: Registry,
+        keys: &[&str],
+        ledger: &mut Budget,
+    ) -> Result<Self, Fault> {
+        let mut environment = Environment::default();
+        for key in keys {
+            environment.declarations.push(Declaration {
+                key: (*key).into(),
+                display_name: (*key).into(),
+                sort: Sort::Value(AtomicSort::Scalar(Field::Real)),
+            });
+        }
+        let limits = ledger.limits().clone();
+        let mut cas = Cas::new(limits.clone())?;
+        let semantic = semantic_context(&mut cas, environment, ledger)?;
+        Ok(Self {
+            cas: RefCell::new(cas),
+            semantic,
+            registry,
+            limits: limits.clone(),
+            cas_limits: limits,
+            revision: 0,
+            declarations: std::collections::BTreeMap::new(),
+            functions: std::collections::BTreeMap::new(),
+        })
+    }
+
+    /// Parse a quantity proof original without creating a new independent allowance.
+    pub(crate) fn parse_cumulative(
+        &self,
+        key: &str,
+        text: &str,
+        ledger: &mut Budget,
+    ) -> Result<OriginalForm, Diagnostic> {
+        let mut cas = self
+            .engine()
+            .map_err(|error| Diagnostic::declaration(error.into()))?;
+        let header = cas
+            .context_header(&self.semantic)
+            .map_err(|error| Diagnostic::declaration(error.into()))?;
+        parse_original(&mut cas, key, text, &header, ledger)
+            .map_err(|error| parse_diagnostic(error, text))
     }
 
     /// Borrow the owning CAS for read-only witness and original-syntax inspection.
@@ -165,7 +211,11 @@ impl Context {
 }
 
 /// Admit a single root context, its ambient region and its semantic header atomically.
-fn semantic_context(cas: &mut Cas, environment: Environment) -> Result<Handle, Fault> {
+fn semantic_context(
+    cas: &mut Cas,
+    environment: Environment,
+    ledger: &mut Budget,
+) -> Result<Handle, Fault> {
     let handles = cas.admit(
         &[
             Draft::Header(HeaderDraft::Core(environment)),
@@ -181,7 +231,7 @@ fn semantic_context(cas: &mut Cas, environment: Environment) -> Result<Handle, F
                 assumptions: Vec::new(),
             }),
         ],
-        &mut budget()?,
+        ledger,
     )?;
     handles
         .get(2)

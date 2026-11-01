@@ -4,7 +4,7 @@
 /// A refused statistical propagation or covariance materialization.
 #[derive(Clone, Debug, thiserror::Error)]
 pub enum StatisticsError {
-    /// Scalar quantity nonlinear laws have no statistical companion propagation contract.
+    /// The quantity recipe has no prepared checked statistical propagation contract.
     #[error("nonlinear quantity statistics are unsupported")]
     NonlinearStatistics,
     /// Bindings could not establish a complete native derivative identity.

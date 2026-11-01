@@ -76,6 +76,30 @@ pub(crate) fn derivative(
     }
 }
 
+/// Bind a quantity partial to its original stored-coordinate expression and domain.
+pub(crate) fn coordinate_derivative(
+    graph: &Graph<'_>,
+    witness: &VerifiedWitness,
+    original: &CheckedExpression,
+    key: &str,
+) -> Result<Handle, SensitivityError> {
+    scope(witness, &graph.context)?;
+    match &witness.judgment().statement {
+        Statement::DerivativeOn {
+            function,
+            derivative,
+            coordinate,
+            domain,
+        } if function == &original.original().syntax
+            && coordinate == key
+            && domain == &graph.domain =>
+        {
+            Ok(derivative.clone())
+        }
+        _ => Err(SensitivityError::WitnessMismatch),
+    }
+}
+
 /// Check the actual assembled source column, then explicitly transpose cell enumeration.
 pub(crate) fn jacobian_cells(
     graph: &mut Graph<'_>,

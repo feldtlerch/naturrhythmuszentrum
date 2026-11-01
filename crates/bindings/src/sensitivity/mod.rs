@@ -17,6 +17,7 @@ mod evidence;
 mod graph;
 mod implicit;
 mod native;
+mod quantity;
 mod replay;
 mod root;
 mod solve;
@@ -34,6 +35,8 @@ pub use evidence::{
 /// The closed native operation families admitted by sensitivity checking.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SensitivityRecipe {
+    /// Product in the exact composed quantity coordinate measure.
+    QuantityProduct,
     /// Elementwise square of a declared continuous difference input.
     Square,
     /// Elementwise reciprocal of a declared continuous difference input.
@@ -51,11 +54,17 @@ pub enum SensitivityRecipe {
 
 /// One entry in a fixed numerical schedule, never an arbitrary expression evaluator.
 ///
-/// Input coordinates use their declared measures; outputs use coherent measures.
+/// Input coordinates use their declared measures. Quantity products retain the composed
+/// output measure; the other native schedules use coherent outputs.
 /// Let `s` be the input's exact measure scale and `c = s*x`. Each indicated
 /// operation must be evaluated with numerical error bounds by the numerical owner.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SensitivityKernel {
+    /// Read the other product operand in its retained coordinate measure.
+    QuantityProduct {
+        /// Index of the other operand in the ordered input inventory.
+        coordinate: usize,
+    },
     /// Formal derivative zero with the entry's output/input pairing descriptor.
     Zero,
     /// Evaluate `(2*c)*s` in that order for the named input coordinate.
@@ -127,6 +136,14 @@ pub enum SensitivityError {
     /// A request did not produce a complete, discharged replayed theorem.
     #[error("CAS did not prove the requested sensitivity relation")]
     Evidence(Box<Outcome>),
+    /// Quantity proof preparation exhausted a named resource, retaining its complete outcome.
+    #[error("sensitivity resource exhaustion: {fault}")]
+    Exhausted {
+        /// Exact exhausted resource, allowance, attempted amount and location.
+        fault: Fault,
+        /// Original generation and replay receipts and any checked partial result.
+        outcome: Box<Outcome>,
+    },
     /// Only the specified native original syntax is executable.
     #[error("original expression is outside the selected native recipe")]
     UnsupportedRecipe,

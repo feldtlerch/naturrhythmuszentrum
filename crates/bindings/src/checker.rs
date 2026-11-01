@@ -56,6 +56,51 @@ impl Context {
         })
     }
 
+    /// Run the ordinary physical walk while retaining every charge on a quantity caller's ledger.
+    pub(crate) fn check_cumulative(
+        &self,
+        expression: &OriginalForm,
+        ledger: &mut Budget,
+    ) -> Result<CheckedExpression, Diagnostic> {
+        let mut cas = self
+            .engine()
+            .map_err(|error| Diagnostic::declaration(error.into()))?;
+        let mut state = State::new(self, &mut cas)?;
+        std::mem::swap(&mut state.budget, ledger);
+        let result = (|| {
+            let (value, _) = state.walk(expression, 1)?;
+            let coordinates = state.publish(&value.coordinates)?;
+            Ok(CheckedExpression {
+                snapshot: self.snapshot_id(),
+                original: expression.clone(),
+                descriptor: value.descriptor,
+                nodes: std::mem::take(&mut state.nodes),
+                coordinates,
+                declarations: std::mem::take(&mut state.declarations),
+                output: None,
+                companion: value.companion,
+            })
+        })();
+        std::mem::swap(&mut state.budget, ledger);
+        result
+    }
+
+    /// Check all original declarations using the same cumulative quantity ledger.
+    pub(crate) fn check_all_cumulative(
+        &self,
+        ledger: &mut Budget,
+    ) -> Result<BTreeMap<String, CheckedExpression>, Diagnostic> {
+        let mut result = BTreeMap::new();
+        for (name, declaration) in &self.declarations {
+            if declaration.descriptor().is_some() {
+                let original =
+                    self.parse_cumulative(&format!("bindings:probe:{name}"), name, ledger)?;
+                result.insert(name.clone(), self.check_cumulative(&original, ledger)?);
+            }
+        }
+        Ok(result)
+    }
+
     /// Check an original expression against an explicit output descriptor.
     ///
     /// TODO ´todo:code:compare-declared-output-axes-and-companion´: compare declared output axes and companion extents before exposing converted matrix results under rule:nrz:shape-data-time-evidence.

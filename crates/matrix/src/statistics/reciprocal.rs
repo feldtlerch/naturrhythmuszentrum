@@ -48,7 +48,8 @@ impl<P: Scalar + 'static> Binding<P> {
                 derivative: evaluation.contract().clone(),
             }),
         };
-        self.reciprocal_statistics = Some(Rc::new(evaluation));
+        self.reciprocal_statistics =
+            Some(super::PreparedDerivative::Reciprocal(Rc::new(evaluation)));
         Ok(self)
     }
 }

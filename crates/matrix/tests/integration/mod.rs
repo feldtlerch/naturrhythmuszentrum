@@ -107,3 +107,5 @@ mod quantity_counts;
 
 mod quantity_powers;
 mod quantity_products;
+
+mod quantity_covariance;

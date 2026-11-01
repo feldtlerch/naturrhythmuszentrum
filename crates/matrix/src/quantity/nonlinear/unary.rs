@@ -71,7 +71,7 @@ impl QuantityContext {
         budget: &mut Budget,
     ) -> Result<Quantity<P>, QuantityError<P>> {
         self.check_descriptor(descriptor)?;
-        let inputs = vec![self.nonlinear_operand(heap, input, budget)?];
+        let inputs = vec![self.nonlinear_operand(heap, input, false, budget)?.0];
         let recipe = ScalarQuantityRecipe {
             operation,
             allowance: 0,
