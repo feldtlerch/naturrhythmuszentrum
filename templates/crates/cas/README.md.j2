@@ -900,6 +900,14 @@ The public modules organize the graph-to-proof flow:
 
 Detailed source grammar and coverage contracts are in `src/source.rs`; proof/domain/replay contracts are in `src/proof.rs`, `src/domain.rs` and `src/wire_answer.rs`. Solving contracts live with the corresponding coefficient, family, tower, elementary and Real modules under `src/solving/`. `src/request.rs` describes search and calculus outcomes; the design arguments are in `docs/design/cas-design.md`, `docs/design/cas-piecewise-design.md` and `docs/design/cas-solving-design.md`.
 
+**Requirement (Solve problem root)** · `req:cas:solve-problem-root`
+
+`SolveProblemData::predicate` must reference a `Condition`, constructed with `Draft::Condition`; even a Boolean `Expression` is not a valid problem root. During `Cas::admit` of `Draft::Solve(SolveDraft::SolveProblem(...))`, the predicate-kind check refuses a non-Condition root with `FaultKind::Invalid(InvalidCode::Sort)` at `solving object admission`. This is the typed graph construction boundary (`sec:cas:concepts`), before certificate checking. Together with (`req:cas:conjunction-children`), it gives a solving problem a Condition root over Boolean structure while preserving the sorts of the original scalar operands (`sec:cas:guarantees`).
+
+**Requirement (Conjunction children)** · `req:cas:conjunction-children`
+
+Every child of `PredicateKind::And` must be an `Expression` with `Sort::Value(AtomicSort::Boolean)`. To construct an exact-linear residual system, admit each equality as an expression with `Operator::Predicate(PredicateKind::Equal)` and Boolean result sort, then use those expression references as the arguments of a `Draft::Condition` with `kind: PredicateKind::And` for the problem root (`req:cas:solve-problem-root`). A nested conjunction uses `Operator::Predicate(PredicateKind::And)` with the same Boolean child and result sorts. During `Cas::admit`, condition and expression validation first look up each child as an expression: a Condition child refuses with `FaultKind::Invalid(InvalidCode::Reference)` at `expression lookup`; an expression child with a non-Boolean sort refuses with `FaultKind::Invalid(InvalidCode::Sort)` at `draft validation`. These are syntax and sort refusals under (`sec:cas:guarantees`), not certificate refusals or judgments about whether the residual system has a solution.
+
 ## Checked selections and reading maps · `sec:cas:readings`
 
 `readings::EntrySelection` checks a finite literal matrix selection against its source rectangle. Entry, ordered list, row, column and block requests retain their exact index sequence; lists may explicitly require column or row order. Bounds, duplicate entries, malformed shapes and violated order contracts have distinct named refusals. Logical shaped coordinates use column order, independently of the row-major storage of an explicit `Operator::Matrix` constructor.
