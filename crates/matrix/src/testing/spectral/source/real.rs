@@ -16,6 +16,16 @@ pub(crate) fn context(
     with_outputs: bool,
     budget: &mut Budget,
 ) -> TestResult<Handle> {
+    context_with_declarations(source, with_outputs, Vec::new(), budget)
+}
+
+/// Additional source declarations belong only to the separate mapped-source fixture.
+pub(crate) fn context_with_declarations(
+    source: &mut Fixture,
+    with_outputs: bool,
+    extra: Vec<Declaration>,
+    budget: &mut Budget,
+) -> TestResult<Handle> {
     let mut declarations: Vec<_> = ["L", "C"]
         .into_iter()
         .map(|key| Declaration {
@@ -25,6 +35,7 @@ pub(crate) fn context(
         })
         .collect();
     declarations.extend(super::super::declarations::inventory());
+    declarations.extend(extra);
     if with_outputs {
         declarations.extend(super::super::outputs::inventory());
     }

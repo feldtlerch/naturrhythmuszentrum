@@ -52,7 +52,9 @@ pub use relation::ReadingRelation;
 pub use representation::{Representation, RepresentationDefinition, RepresentationKind};
 pub use roots::{RootCoverage, RootProblem, RootReplayUsage};
 pub use shape::{ReadingAxis, ReadingShape};
-pub use sources::{JointSources, ReadingSource, SourceEdge, SourceError, SourceKnowledge};
+pub use sources::{
+    JointSources, ReadingSource, ReadingSourceMap, SourceEdge, SourceError, SourceKnowledge,
+};
 pub use spectral::{
     LcAngularFrequencyDefinition, LcAngularFrequencySymbols, LcFrequencyDefinition,
     LcFrequencySymbols, LcRootJacobian, LcSpectralLaw, LcSpectralResultDefinition,

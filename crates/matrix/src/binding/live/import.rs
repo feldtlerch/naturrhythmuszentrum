@@ -63,7 +63,7 @@ impl Heap {
         budget: &mut Budget,
     ) -> Result<ReadingImport<P>, LiveBindingError> {
         super::companions::check(&coverage, &companions, regions, budget)?;
-        let copies = super::admission::universe(&coverage, &companions, regions, budget)?;
+        let copies = super::admission::universe(&graph, &coverage, &companions, regions, budget)?;
         let plan = self
             .descriptors
             .prepare(regions.len(), self.limits.descriptors)?;

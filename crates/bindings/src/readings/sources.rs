@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Explicit source relations retain ordered CAS identities and never infer independence.
 
+mod map;
+pub use map::ReadingSourceMap;
+
 use super::{CompanionReading, CompanionReadingKind, PhysicalReading, ReadingError, support};
 use nrz_cas::{
     Cas, Handle, Rational,

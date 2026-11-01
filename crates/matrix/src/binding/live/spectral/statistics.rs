@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! One native joint declaration and one evaluated original Jacobian supply root covariance.
 
-mod numeric;
+pub(super) mod numeric;
 use super::{AT, Heap, HeapError, LcSpectrum, SpectralError as Error};
 use crate::{CompanionRef, JointLimits, ModelId, ReciprocalDerivativeEvaluation, SourceId};
 use nrz_bindings::{

@@ -25,6 +25,7 @@ pub(super) fn charge<T>(count: usize, budget: &mut Budget) -> Result<(), LiveBin
 
 /// Neither a caller's opaque universe nor a no-storage reading can omit a float.
 pub(super) fn universe<P: Scalar>(
+    graph: &nrz_bindings::readings::algebra::Cas,
     coverage: &ReadingCoverage<usize>,
     companions: &[crate::CompanionAdapter<usize>],
     regions: &[ReadingRegion<P>],
@@ -58,11 +59,12 @@ pub(super) fn universe<P: Scalar>(
             return Err(crate::ReadingAdapterError::Coverage.into());
         }
     }
-    representations(coverage, companions, regions, budget)
+    representations(graph, coverage, companions, regions, budget)
 }
 
 /// Expanded numerical families require their supported complete block reconstruction.
 fn representations<P: Scalar>(
+    graph: &nrz_bindings::readings::algebra::Cas,
     coverage: &ReadingCoverage<usize>,
     companions: &[crate::CompanionAdapter<usize>],
     regions: &[ReadingRegion<P>],
@@ -104,7 +106,7 @@ fn representations<P: Scalar>(
                         .all(|entry| whole.entries().contains(entry))
             });
             if !covered {
-                return Err(HeapError::MissingCoverage.into());
+                super::expanded::check(graph, coverage, companions, regions, adapter, budget)?;
             }
         }
     }

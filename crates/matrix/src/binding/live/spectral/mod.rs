@@ -14,9 +14,11 @@ mod moments;
 mod numeric;
 mod plan;
 mod publication;
+mod sources;
 mod statistics;
 pub use plan::LcSpectrum;
 pub use publication::{LcSpectralPublication, PublishedLcSpectrum};
+pub use sources::{LcSourceBinding, LcSourceStatistics};
 
 use super::LiveBindingError;
 use crate::{Coverage, Heap, HeapError};

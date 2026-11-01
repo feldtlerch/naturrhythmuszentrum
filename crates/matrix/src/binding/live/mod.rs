@@ -5,6 +5,7 @@ mod admission;
 mod bounded;
 pub(crate) mod companions;
 pub(crate) mod coordinates;
+mod expanded;
 mod mapped;
 pub use mapped::{MappedReading, ReadingSelection};
 mod parameters;
@@ -22,8 +23,9 @@ pub use phasor::{
 };
 pub use spectral::{
     LcAngularFrequencyParameter, LcAngularFrequencyPublication, LcFrequencyPublication,
-    LcSpectralEvaluation, LcSpectralPublication, LcSpectrum, PublishedLcAngularFrequency,
-    PublishedLcFrequency, PublishedLcSpectrum, SpectralError, SpectralValue,
+    LcSourceBinding, LcSourceStatistics, LcSpectralEvaluation, LcSpectralPublication, LcSpectrum,
+    PublishedLcAngularFrequency, PublishedLcFrequency, PublishedLcSpectrum, SpectralError,
+    SpectralValue,
 };
 mod derivatives;
 pub use derivatives::{

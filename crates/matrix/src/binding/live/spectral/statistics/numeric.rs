@@ -21,7 +21,7 @@ pub(super) fn evaluate<P: Scalar + 'static>(
     )
     .map_err(|_| HeapError::ExtentOverflow)?;
     budget.check(BudgetKind::StagedPayloadBytes, scratch, AT)?;
-    let partials = partials(heap, input, constants, context, budget)?;
+    let partials = partials(heap, &input.derivative, constants, context, budget)?;
     let view = heap.statistical(input.companion)?;
     let terms = match view.model().representation() {
         CovarianceRepresentation::Factor(factor) => factor.columns().max(1),
@@ -51,15 +51,15 @@ pub(super) fn evaluate<P: Scalar + 'static>(
 }
 
 /// Differentiate the checked positive characteristic root using the evaluated operator partials.
-fn partials<P: Scalar + 'static>(
+pub(in crate::binding::live::spectral) fn partials<P: Scalar + 'static>(
     heap: &Heap,
-    input: &Input<P>,
+    derivative: &crate::ReciprocalDerivativeEvaluation<P>,
     constants: &[DecodedLiteral<P>; 3],
     context: &ArithmeticContext,
     budget: &mut Budget,
 ) -> Result<[Enclosure<P>; 2], Error> {
-    let point = input.derivative.operating_point(heap, context, budget)?;
-    let values = input.derivative.values(heap, context, budget)?;
+    let point = derivative.operating_point(heap, context, budget)?;
+    let values = derivative.values(heap, context, budget)?;
     let [inductance, capacitance] = point else {
         return Err(Error::Identity);
     };

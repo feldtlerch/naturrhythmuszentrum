@@ -31,6 +31,7 @@ mod root_statistics;
 mod root_support;
 mod root_work;
 mod selected_joint;
+mod source_composition;
 mod state;
 #[allow(
     dead_code,

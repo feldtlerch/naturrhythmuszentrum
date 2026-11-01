@@ -9,6 +9,8 @@ mod declarations;
 mod exact;
 #[path = "inputs.rs"]
 mod inputs;
+#[path = "mapped/mod.rs"]
+mod mapped;
 #[path = "outputs.rs"]
 mod outputs;
 pub(crate) use construction::construction;
