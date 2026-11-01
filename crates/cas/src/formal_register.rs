@@ -42,7 +42,7 @@ const fn named(
 /// Every native and solving primitive in the same ASCII key order as `PRIMITIVES`.
 ///
 /// Unavailable schemas remain represented assumptions and cannot certify an application.
-pub static PRIMITIVE_SCHEMAS: [PrimitiveSchema; 85] = [
+pub static PRIMITIVE_SCHEMAS: [PrimitiveSchema; 86] = [
     named(
         Primitive::CaseCongruence,
         "thm:cas:primitive-case-congruence",
@@ -542,6 +542,12 @@ pub static PRIMITIVE_SCHEMAS: [PrimitiveSchema; 85] = [
         "One checked original half-Pi witness in the identical context and domain; exact arbitrary-precision residue recomputation retains every original condition.",
     ),
     named(
+        Primitive::TrigDefined,
+        "thm:cas:primitive-trig-defined",
+        "A closed Real sine, cosine or arctangent is defined throughout the exact region of its original defined operand.",
+        "One ordered original `DomainGuard` in the identical context, scope and domain; every original child obligation remains attached.",
+    ),
+    named(
         Primitive::HalfPiWitness,
         "thm:cas:primitive-trig-half-pi-witness",
         "The original Real operand equals the exact named Pi times half its retained concrete integer. The coefficient check accepts literal Mul(Pi, q) operand order; producers reach other spellings through checked equality.",
@@ -563,8 +569,9 @@ impl Primitive {
             Self::AtanOne => &PRIMITIVE_SCHEMAS[80],
             Self::AtanZero => &PRIMITIVE_SCHEMAS[81],
             Self::CosHalfPi => &PRIMITIVE_SCHEMAS[82],
-            Self::HalfPiWitness => &PRIMITIVE_SCHEMAS[83],
-            Self::SinHalfPi => &PRIMITIVE_SCHEMAS[84],
+            Self::TrigDefined => &PRIMITIVE_SCHEMAS[83],
+            Self::HalfPiWitness => &PRIMITIVE_SCHEMAS[84],
+            Self::SinHalfPi => &PRIMITIVE_SCHEMAS[85],
             Self::Solve(schema) => solving(schema),
             Self::CaseCongruence => &PRIMITIVE_SCHEMAS[0],
             Self::CaseDomain => &PRIMITIVE_SCHEMAS[1],

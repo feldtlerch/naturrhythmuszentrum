@@ -6,7 +6,7 @@ use nrz_cas::proof::PRIMITIVES;
 use nrz_cas::request::CostPolicy;
 
 /// Complete independent expected weights for all registered semantic-version-one schemas.
-const EXPECTED: [(&str, u64); 85] = [
+const EXPECTED: [(&str, u64); 86] = [
     ("case.congruence", 4),
     ("case.domain", 2),
     ("case.eliminate", 4),
@@ -90,6 +90,7 @@ const EXPECTED: [(&str, u64); 85] = [
     ("trig.atan-one", 2),
     ("trig.atan-zero", 2),
     ("trig.cos-half-pi", 2),
+    ("trig.defined", 2),
     ("trig.half-pi-witness", 2),
     ("trig.sin-half-pi", 2),
 ];
@@ -99,7 +100,7 @@ const EXPECTED: [(&str, u64); 85] = [
 #[test]
 fn active_policy_complete_manifest() -> TestResult {
     let policy = CostPolicy::default();
-    assert_eq!(policy.version, 12);
+    assert_eq!(policy.version, 13);
     assert_eq!(PRIMITIVES.len(), EXPECTED.len());
     let actual: Vec<_> = PRIMITIVES
         .iter()

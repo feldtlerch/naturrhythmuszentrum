@@ -72,3 +72,7 @@ mod strict_sign;
 mod trig;
 mod trig_values;
 mod trig_values_work;
+
+mod trig_defined;
+
+mod trig_defined_work;

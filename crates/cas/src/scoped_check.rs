@@ -109,6 +109,7 @@ fn rule_conditions(
 ) -> Result<(ScopedConditions, Option<crate::scalar_model::CheckedStep>), Fault> {
     let mut scalar_view = None;
     let conditions = match draft.rule {
+        Primitive::TrigDefined => crate::trig::defined::check(cas, draft, premises, budget)?,
         Primitive::HalfPiWitness => crate::trig::check(cas, draft, premises, budget)?,
         Primitive::SinHalfPi | Primitive::CosHalfPi | Primitive::AtanZero | Primitive::AtanOne => {
             crate::trig::value_check(cas, draft, premises, budget)?

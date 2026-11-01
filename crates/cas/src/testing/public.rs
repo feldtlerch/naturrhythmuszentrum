@@ -5,6 +5,13 @@
 //!
 //! Inline unit tests never import this harness. Crate-only fixture sources are not included.
 
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "shared public totality fixtures"
+)]
+#[path = "trig_defined.rs"]
+pub(crate) mod trig_defined;
+
 #[expect(clippy::redundant_pub_crate, reason = "shared public replay fixtures")]
 #[path = "trig_replay.rs"]
 pub(crate) mod trig_replay;
@@ -295,3 +302,10 @@ pub(crate) mod half_pi_limits;
     reason = "shared half-Pi resource fixtures"
 )]
 pub(crate) mod half_pi_work;
+
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "shared totality resource fixtures"
+)]
+#[path = "trig_defined_work.rs"]
+pub(crate) mod trig_defined_work;

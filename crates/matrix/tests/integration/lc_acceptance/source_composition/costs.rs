@@ -15,8 +15,8 @@ fn lc_source_composition_literal_owner_boundaries() -> TestResult {
     let mut budget = shared::policy()?;
     let mut fixture = Fixture::with_mapped_sources(budget.limits().clone())?;
     let contract = shared::derivative(&mut fixture, &mut budget)?;
-    boundaries::<f32>(&fixture, &contract, [171_882, 1_944])?;
-    boundaries::<f64>(&fixture, &contract, [172_906, 2_616])
+    boundaries::<f32>(&fixture, &contract, [171_982, 1_944])?;
+    boundaries::<f64>(&fixture, &contract, [173_006, 2_616])
 }
 
 /// Every budget dimension varies alone; consumed Work is never refunded after refusal.
@@ -28,10 +28,10 @@ fn boundaries<P: Scalar + 'static>(
     for full in [false, true] {
         let case = mapped::prepare::<P>(fixture, full, true)?;
         let binding = mapped::binding(fixture, contract, &case, [1, 5], &mut ledger()?)?;
-        assert_eq!(binding.retained_payload_bytes(), 169_542);
+        assert_eq!(binding.retained_payload_bytes(), 169_642);
         let context = ArithmeticContext::new()?;
         for (stage, required) in [
-            (false, [5_228, 169_542, 169_542]),
+            (false, [5_248, 169_642, 169_642]),
             (
                 true,
                 [

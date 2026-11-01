@@ -424,6 +424,14 @@ impl Runner<'_> {
 
     /// Totality is a definedness fact on the requested region, with the complete cover recorded.
     fn coverage(&mut self, function: &Handle, region: &Handle) -> Result<Handle, Fault> {
+        if matches!(
+            self.cas.state.expression(function.logical_id())?.operator,
+            crate::model::Operator::Sine
+                | crate::model::Operator::Cosine
+                | crate::model::Operator::Arctangent
+        ) {
+            return self.trig_coverage(function, region);
+        }
         if crate::solving::family::local(self.cas, function.logical_id())? {
             for id in &self.cas.state.expression(function.logical_id())?.arms {
                 let arm = self.cas.state.arm(*id)?;
@@ -485,6 +493,70 @@ impl Runner<'_> {
             },
             &[domain_proof, cover],
         )
+    }
+
+    /// Peel closed unary nodes without recursive stack growth, then cite each totality law.
+    fn trig_coverage(&mut self, function: &Handle, region: &Handle) -> Result<Handle, Fault> {
+        let at = Location::new("trigonometric coverage");
+        let mut count = 0_usize;
+        let mut current = function.clone();
+        loop {
+            self.generation
+                .work(1, Location::new("trigonometric coverage"))?;
+            let expression = self.cas.state.expression(current.logical_id())?;
+            if !matches!(
+                expression.operator,
+                crate::model::Operator::Sine
+                    | crate::model::Operator::Cosine
+                    | crate::model::Operator::Arctangent
+            ) {
+                break;
+            }
+            let [child] = expression.operands.as_slice() else {
+                return Err(invalid());
+            };
+            count = count.checked_add(1).ok_or_else(invalid)?;
+            current = self.cas.handle(*child);
+        }
+        let bytes = crate::solving::coefficients::storage::product(
+            crate::graph::size(count, at)?,
+            crate::graph::size(std::mem::size_of::<LogicalId>(), at)?,
+        )?;
+        self.generation.work(crate::graph::size(count, at)?, at)?;
+        let previous = self.generation.reserve_temporary(bytes, at)?;
+        let result = (|| {
+            let mut nodes = Vec::new();
+            nodes
+                .try_reserve_exact(count)
+                .map_err(|_| Fault::allocation(at))?;
+            let mut node = function.logical_id();
+            for _ in 0..count {
+                nodes.push(node);
+                node = *self
+                    .cas
+                    .state
+                    .expression(node)?
+                    .operands
+                    .first()
+                    .ok_or_else(invalid)?;
+            }
+            let mut proof = self.coverage(&current, region)?;
+            for node in nodes.into_iter().rev() {
+                let node = self.cas.handle(node);
+                let predicate = crate::trig::defined::predicate(self.cas, &node, self.generation)?;
+                proof = self.push(
+                    Primitive::TrigDefined,
+                    Statement::PredicateFact {
+                        region: region.clone(),
+                        predicate,
+                    },
+                    &[proof],
+                )?;
+            }
+            Ok(proof)
+        })();
+        self.generation.restore_limits(previous);
+        result
     }
 
     /// Refinement is scheduled lazily; its complete cover remains an explicit premise.

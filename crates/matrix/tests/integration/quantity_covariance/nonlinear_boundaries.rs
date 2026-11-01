@@ -16,8 +16,8 @@ enum Recipe {
 
 /// Minimum cold allowance, actual charge and warm charge for each recipe.
 const COSTS: [(Recipe, u64, u64, u64); 2] = [
-    (Recipe::Quotient, 1_908_381, 1_675_001, 10_991),
-    (Recipe::Root, 1_345_683, 1_255_122, 9_632),
+    (Recipe::Quotient, 1_908_527, 1_675_177, 10_991),
+    (Recipe::Root, 1_345_799, 1_255_298, 9_632),
 ];
 
 /// Literal cold and warm retained provenance totals.
