@@ -5,6 +5,10 @@
 //!
 //! Inline unit tests never import this harness. Crate-only fixture sources are not included.
 
+#[expect(clippy::redundant_pub_crate, reason = "shared public replay fixtures")]
+#[path = "trig_replay.rs"]
+pub(crate) mod trig_replay;
+
 #[expect(
     clippy::redundant_pub_crate,
     reason = "shared test helpers stay crate-visible inside the private harness"
@@ -257,3 +261,9 @@ pub(crate) mod jacobian_composition;
     reason = "shared public strict sign fixtures"
 )]
 pub(crate) mod strict_sign;
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "shared structural trigonometric fixtures"
+)]
+#[path = "trig.rs"]
+pub(crate) mod trig;

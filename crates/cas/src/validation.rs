@@ -764,12 +764,15 @@ fn operator_sorts(
             leaf_sort(operator, result, scope, environment, budget)? && children.is_empty()
         }
         Operator::Constant(_) => constant_sort(result, children),
-        Operator::PositivePower | Operator::ClampFloor => {
-            children.len() == 2 && same && *result == Sort::Value(AtomicSort::Scalar(Field::Real))
-        }
-        Operator::NaturalLog | Operator::Exponential | Operator::Sigmoid | Operator::Tanh => {
-            children.len() == 1 && same && *result == Sort::Value(AtomicSort::Scalar(Field::Real))
-        }
+        Operator::PositivePower
+        | Operator::ClampFloor
+        | Operator::Sine
+        | Operator::Cosine
+        | Operator::Arctangent
+        | Operator::NaturalLog
+        | Operator::Exponential
+        | Operator::Sigmoid
+        | Operator::Tanh => real_operator_sorts(operator, result, children),
         Operator::Neg
         | Operator::Add
         | Operator::Sub
@@ -819,6 +822,18 @@ fn operator_sorts(
         | Operator::Entrywise(_) => matrix_sorts(operator, result, children, budget)?,
     };
     if valid { Ok(()) } else { Err(sort_error()) }
+}
+
+/// Closed Real constructors preserve their exact unary or binary arity.
+fn real_operator_sorts(operator: &Operator, result: &Sort, children: &[&Expression]) -> bool {
+    let arity = if matches!(operator, Operator::PositivePower | Operator::ClampFloor) {
+        2
+    } else {
+        1
+    };
+    children.len() == arity
+        && *result == Sort::Value(AtomicSort::Scalar(Field::Real))
+        && children.iter().all(|child| child.sort == *result)
 }
 
 /// Named constants remain operand-free values in a real or complex scalar field.

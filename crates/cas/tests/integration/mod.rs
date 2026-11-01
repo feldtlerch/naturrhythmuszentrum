@@ -65,3 +65,4 @@ mod jacobian_matrices;
 mod jacobian_composition;
 
 mod strict_sign;
+mod trig;

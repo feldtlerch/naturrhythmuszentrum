@@ -328,6 +328,12 @@ pub enum Operator {
     IntegerPower(i64),
     /// A general power with an expression-valued exponent.
     GeneralPower(Branch),
+    /// Closed sine of a Real radian coordinate, without an evaluation rule.
+    Sine,
+    /// Closed cosine of a Real radian coordinate, without an evaluation rule.
+    Cosine,
+    /// Closed arctangent of a Real scalar, returning a Real radian coordinate.
+    Arctangent,
     /// Real natural logarithm, defined only for a strictly positive operand.
     NaturalLog,
     /// Real exponential with a finite, independently checked enclosure law.

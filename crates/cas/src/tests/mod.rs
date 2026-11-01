@@ -59,3 +59,4 @@ mod work_trace;
 mod wire_memo;
 
 mod reading_memo;
+mod trig;

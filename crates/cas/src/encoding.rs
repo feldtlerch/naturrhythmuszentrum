@@ -303,6 +303,9 @@ pub(crate) fn predicate(value: &PredicateKind, out: &mut Encoder<'_>) -> Result<
 const fn operator_tag(value: &Operator) -> u8 {
     match value {
         Operator::NaturalLog => 51,
+        Operator::Sine => 58,
+        Operator::Cosine => 59,
+        Operator::Arctangent => 60,
         Operator::Exponential => 52,
         Operator::Sigmoid => 53,
         Operator::Tanh => 54,
@@ -388,10 +391,7 @@ pub(crate) fn operator(value: &Operator, out: &mut Encoder<'_>) -> Result<(), Fa
             out.unsigned(u64::from(*depth))?;
             out.unsigned(u64::from(*slot))
         }
-        Operator::Constant(value) => out.byte(match value {
-            crate::model::Constant::Pi => 0,
-            crate::model::Constant::E => 1,
-        }),
+        Operator::Constant(value) => out.byte(constant_tag(*value)),
         Operator::IntegerPower(value) => {
             out.byte(u8::from(value.is_negative()))?;
             out.unsigned(value.unsigned_abs())
@@ -434,7 +434,10 @@ pub(crate) fn operator(value: &Operator, out: &mut Encoder<'_>) -> Result<(), Fa
             crate::model::ScalarOperation::Multiply => 1,
             crate::model::ScalarOperation::Divide => 2,
         }),
-        Operator::NaturalLog
+        Operator::Sine
+        | Operator::Cosine
+        | Operator::Arctangent
+        | Operator::NaturalLog
         | Operator::Exponential
         | Operator::Sigmoid
         | Operator::Tanh
@@ -464,6 +467,14 @@ pub(crate) fn operator(value: &Operator, out: &mut Encoder<'_>) -> Result<(), Fa
         | Operator::TestMultiply
         | Operator::TestApply
         | Operator::RegularAction => Ok(()),
+    }
+}
+
+/// Stable named-constant tags are independent of enum layout.
+const fn constant_tag(value: crate::model::Constant) -> u8 {
+    match value {
+        crate::model::Constant::Pi => 0,
+        crate::model::Constant::E => 1,
     }
 }
 
@@ -518,5 +529,42 @@ fn root_selection(value: &RootSelection, out: &mut Encoder<'_>) -> Result<(), Fa
             out.byte(2)?;
             out.name(name)
         }
+    }
+}
+
+#[cfg(test)]
+mod trig_tests {
+    use super::{Encoder, Operator, operator, operator_tag};
+    use crate::error::{FaultKind, InvalidCode, Location};
+    use crate::limits::{Budget, Limits};
+    use crate::wire_read::Reader;
+
+    /// Closed trigonometric tags are payload-free and never reuse an existing inventory slot.
+    /// ´test:unit:trig-wire-tags´
+    /// ´claim:cas:trig-wire-tags´ The three closed Real constructors have distinct canonical single-byte operator encodings.
+    #[test]
+    fn trig_wire_tags() -> Result<(), Box<dyn std::error::Error>> {
+        for (value, tag) in [
+            (Operator::Sine, 58),
+            (Operator::Cosine, 59),
+            (Operator::Arctangent, 60),
+        ] {
+            assert_eq!(operator_tag(&value), tag);
+            let mut budget = Budget::new(Limits::default())?;
+            let mut encoder = Encoder::new(&mut budget, Location::new("trig wire test"));
+            operator(&value, &mut encoder)?;
+            let bytes = encoder.finish();
+            assert_eq!(bytes, [tag]);
+            let mut reader = Reader::new(&bytes, &mut budget)?;
+            assert_eq!(reader.operator()?, value);
+            reader.finished()?;
+        }
+        for bytes in [&[][..], &[61][..], &[255][..]] {
+            let mut budget = Budget::new(Limits::default())?;
+            let mut reader = Reader::new(bytes, &mut budget)?;
+            let fault = reader.operator().err().ok_or("unknown tag admitted")?;
+            assert_eq!(fault.kind, FaultKind::Invalid(InvalidCode::Encoding));
+        }
+        Ok(())
     }
 }

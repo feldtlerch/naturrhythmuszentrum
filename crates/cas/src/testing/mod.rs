@@ -121,3 +121,8 @@ pub(crate) mod work_trace;
     reason = "agreement tests share the independent exclusion oracle"
 )]
 pub(crate) mod exclusion_oracle;
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "shared structural trigonometric fixtures"
+)]
+pub(crate) mod trig;
