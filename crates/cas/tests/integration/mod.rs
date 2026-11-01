@@ -66,5 +66,6 @@ mod jacobian_matrices;
 
 mod jacobian_composition;
 
+mod half_pi;
 mod strict_sign;
 mod trig;
