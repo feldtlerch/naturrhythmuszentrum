@@ -9,6 +9,10 @@
 #[path = "trig_replay.rs"]
 pub(crate) mod trig_replay;
 
+#[expect(clippy::redundant_pub_crate, reason = "shared graph resource ceilings")]
+#[path = "trig_limits.rs"]
+pub(crate) mod trig_limits;
+
 #[expect(
     clippy::redundant_pub_crate,
     reason = "shared test helpers stay crate-visible inside the private harness"
