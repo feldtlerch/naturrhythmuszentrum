@@ -138,3 +138,9 @@ pub(crate) mod trig;
 #[expect(clippy::redundant_pub_crate, reason = "shared half-Pi fixtures")]
 #[expect(dead_code, reason = "public and private fixtures use different fields")]
 pub(crate) mod half_pi;
+
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "shared half-Pi resource fixtures"
+)]
+pub(crate) mod half_pi_limits;

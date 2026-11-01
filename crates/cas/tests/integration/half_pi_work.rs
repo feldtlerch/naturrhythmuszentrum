@@ -1,0 +1,92 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+//! Literal operation boundaries retain successful charge prefixes and atomic publication.
+
+use crate::testing::common::TestResult;
+use crate::testing::half_pi_limits::{KINDS, verify};
+use crate::testing::half_pi_work::{Operation, attempt, success};
+use nrz_cas::limits::BudgetKind;
+
+/// Costs and failed prefixes exclude 37 prior Work; staging includes 19 caller bytes.
+/// Each cold and warm row is a separate complete-operation server measurement.
+const COSTS: [(Operation, bool, [u64; 18], [u64; 18]); 4] = [
+    // Export, cold: complete reservation prepays Work; all failures retain only prior usage.
+    (
+        Operation::Export,
+        false,
+        [735, 0, 0, 0, 754, 0, 735, 735, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    ),
+    // Export, warm: complete reservation prepays Work; all failures retain only prior usage.
+    (
+        Operation::Export,
+        true,
+        [735, 0, 0, 0, 754, 0, 735, 735, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    ),
+    // Replay, cold: positive prefixes retain prior successful charges; zero prefixes are initial preflights.
+    (
+        Operation::Replay,
+        false,
+        [
+            64_824, 87, 17, 2, 17_971, 8_276, 735, 0, 64_824, 17, 36, 17, 36, 3, 1, 20, 0, 0,
+        ],
+        [
+            64_762, 64_649, 33_059, 17_626, 59_609, 33_653, 263, 0, 64_762, 33_653, 33_653, 33_653,
+            33_653, 275, 18_022, 550, 0, 0,
+        ],
+    ),
+    // Replay, warm: positive prefixes retain prior successful charges; zero prefixes are initial preflights.
+    (
+        Operation::Replay,
+        true,
+        [
+            64_824, 87, 17, 2, 18_099, 210, 735, 0, 64_824, 16, 2, 17, 36, 3, 1, 20, 0, 0,
+        ],
+        [
+            64_762, 64_649, 33_059, 17_626, 59_609, 33_413, 263, 0, 64_762, 618, 10_996, 8_982,
+            8_982, 275, 18_022, 550, 0, 0,
+        ],
+    ),
+];
+
+/// Every positive ceiling has a typed one-below refusal; zero ceilings execute successfully.
+/// ´test:integration:half-pi-portable-boundaries´
+#[test]
+fn half_pi_portable_boundaries() -> TestResult {
+    for (operation, warm, costs, prefixes) in COSTS {
+        verify(
+            &KINDS,
+            |kind| success(operation, warm, kind, costs[0]),
+            &costs,
+            &prefixes,
+            |kind, amount| attempt(operation, warm, kind, amount),
+        )?;
+    }
+    Ok(())
+}
+
+/// Operation, warmth, complete Work, bit ceilings and failed Work prefixes.
+type BitRow = (Operation, bool, u64, [u64; 2], [u64; 2]);
+
+/// Bit refusals retain the literal successful prefix for each independently measured row.
+const BITS: [BitRow; 2] = [
+    (Operation::Replay, false, 64824, [65, 66], [1, 31_944]),
+    (Operation::Replay, true, 64824, [65, 66], [1, 31_944]),
+];
+
+/// Concrete integer components and exact arithmetic refuse before oversized allocation.
+/// ´test:integration:half-pi-portable-bits´
+#[test]
+fn half_pi_portable_bits() -> TestResult {
+    let kinds = [BudgetKind::ComponentBits, BudgetKind::IntermediateBits];
+    for (operation, warm, work, costs, prefixes) in BITS {
+        verify(
+            &kinds,
+            |kind| success(operation, warm, kind, work),
+            &costs,
+            &prefixes,
+            |kind, amount| attempt(operation, warm, kind, amount),
+        )?;
+    }
+    Ok(())
+}

@@ -5,7 +5,7 @@ use super::common::{TestResult, default_budget};
 use super::half_pi::{original, prepared, term};
 use super::half_pi_limits::ceiling;
 use crate::test_api::limits::{Budget, BudgetKind};
-use crate::test_api::proof::ApplicationDraft;
+use crate::test_api::proof::{ApplicationDraft, Judgment, VerifiedWitness};
 use crate::test_api::syntax::Operator;
 use crate::test_api::{Cas, Fault, FaultKind, Handle, Location, Rational};
 
@@ -13,16 +13,22 @@ use crate::test_api::{Cas, Fault, FaultKind, Handle, Location, Rational};
 pub(crate) enum Operation {
     Check,
     Guarded,
+    Export,
+    Replay,
 }
 
 enum Action {
     Check(Handle, Vec<ApplicationDraft>),
+    Export(VerifiedWitness),
+    Replay(Vec<u8>, Judgment),
 }
 
 impl Action {
     fn run(&self, cas: &mut Cas, budget: &mut Budget) -> Result<(), Fault> {
         match self {
             Self::Check(context, steps) => cas.check_proof(context, steps, budget).map(|_| ()),
+            Self::Export(witness) => cas.export_witness(witness, budget).map(|_| ()),
+            Self::Replay(bytes, expected) => cas.replay(bytes, expected, budget).map(|_| ()),
         }
     }
 }
@@ -55,6 +61,24 @@ fn fixture(operation: Operation, warm: bool) -> TestResult<(Cas, Action)> {
     }
     let (mut cas, action) = match operation {
         Operation::Check | Operation::Guarded => (f.cas, Action::Check(f.context, f.steps)),
+        Operation::Export | Operation::Replay => {
+            let proof = f
+                .cas
+                .check_proof(&f.context, &f.steps, &mut default_budget()?)?;
+            if matches!(operation, Operation::Export) {
+                (f.cas, Action::Export(proof))
+            } else {
+                let bytes = f.cas.export_witness(&proof, &mut default_budget()?)?;
+                // The receiving fixture constructs expectations without a destination proof check.
+                let destination = prepared(
+                    "18446744073709551617",
+                    "18446744073709551617/2",
+                    false,
+                    true,
+                )?;
+                (destination.cas, Action::Replay(bytes, destination.expected))
+            }
+        }
     };
     if warm {
         action.run(&mut cas, &mut default_budget()?)?;
@@ -87,13 +111,16 @@ pub(crate) fn attempt(
         assert_eq!(cas.counts(), counts);
         assert_eq!(cas.canonical_snapshot(&mut default_budget()?)?, before);
     }
+    if matches!(operation, Operation::Export) {
+        assert_eq!(cas.canonical_snapshot(&mut default_budget()?)?, before);
+    }
     Ok((result.is_ok(), budget.usage().work))
 }
 
 /// Successful receipts at narrowed ceilings differ where existing charges use policy bounds.
 /// The literal checker charges the component ceiling; declaration comparison and admission charge the name ceiling.
 /// Each cold and warm entry was measured separately, including the coupled intermediate policy.
-const RECEIPTS: [(Operation, bool, BudgetKind, u64); 6] = [
+const RECEIPTS: [(Operation, bool, BudgetKind, u64); 8] = [
     (Operation::Guarded, false, BudgetKind::NameBytes, 97_022),
     (Operation::Guarded, true, BudgetKind::NameBytes, 97_022),
     (Operation::Guarded, false, BudgetKind::ComponentBits, 83_006),
@@ -110,6 +137,8 @@ const RECEIPTS: [(Operation, bool, BudgetKind, u64); 6] = [
         BudgetKind::IntermediateBits,
         83_006,
     ),
+    (Operation::Replay, false, BudgetKind::NameBytes, 64_588),
+    (Operation::Replay, true, BudgetKind::NameBytes, 64_588),
 ];
 
 pub(crate) fn success(operation: Operation, warm: bool, kind: BudgetKind, ordinary: u64) -> u64 {
