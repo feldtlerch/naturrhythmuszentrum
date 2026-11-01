@@ -134,3 +134,6 @@ mod trig_work;
 
 mod trig_defined;
 mod trig_defined_work;
+mod trig_parity;
+
+mod trig_parity_work;

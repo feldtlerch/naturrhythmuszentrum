@@ -17,6 +17,7 @@ use crate::proof_model::{
 use crate::rule::Primitive;
 
 pub(crate) mod defined;
+pub(crate) mod parity;
 
 /// Recompute the nonnegative residue without narrowing the original integer.
 fn residue(k: &Rational, budget: &mut Budget) -> Result<Rational, Fault> {

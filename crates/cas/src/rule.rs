@@ -4,6 +4,12 @@
 /// A compiled checker whose mathematical meaning is fixed by its semantic version.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Primitive {
+    /// Oddness of sine on its original defined Real operand.
+    SinOdd,
+    /// Evenness of cosine on its original defined Real operand.
+    CosEven,
+    /// Oddness of arctangent on its original defined Real operand.
+    AtanOdd,
     /// Totality of closed Real trigonometric nodes from original definedness.
     TrigDefined,
     /// Exact sine from the checked original half-Pi witness.
@@ -252,6 +258,9 @@ impl Primitive {
         matches!(
             self,
             Self::Solve(_)
+                | Self::SinOdd
+                | Self::CosEven
+                | Self::AtanOdd
                 | Self::TrigDefined
                 | Self::HalfPiWitness
                 | Self::SinHalfPi
@@ -294,6 +303,9 @@ impl Primitive {
     #[must_use]
     pub const fn specification(self) -> RuleSpec {
         let (key, weight) = match self {
+            Self::SinOdd => ("trig.sin-odd", 2),
+            Self::CosEven => ("trig.cos-even", 2),
+            Self::AtanOdd => ("trig.atan-odd", 2),
             Self::TrigDefined => ("trig.defined", 2),
             Self::HalfPiWitness => ("trig.half-pi-witness", 2),
             Self::SinHalfPi => ("trig.sin-half-pi", 2),
@@ -460,6 +472,9 @@ impl Primitive {
             | Self::DifferentiateQuotient
             | Self::DerivativeTransport => PremiseShape::Exact(2),
             Self::Symmetry
+            | Self::SinOdd
+            | Self::CosEven
+            | Self::AtanOdd
             | Self::TrigDefined
             | Self::SinHalfPi
             | Self::CosHalfPi
@@ -507,7 +522,7 @@ impl Primitive {
 }
 
 /// Every registered primitive, in ASCII key order; availability is separate metadata.
-pub const PRIMITIVES: [Primitive; 86] = [
+pub const PRIMITIVES: [Primitive; 89] = [
     Primitive::CaseCongruence,
     Primitive::CaseDomain,
     Primitive::CaseEliminate,
@@ -588,10 +603,13 @@ pub const PRIMITIVES: [Primitive; 86] = [
     Primitive::Solve(crate::solving::SolveSchema::TotalPredicateSplit),
     Primitive::Solve(crate::solving::SolveSchema::SolutionTransport),
     Primitive::SumCaseSplit,
+    Primitive::AtanOdd,
     Primitive::AtanOne,
     Primitive::AtanZero,
+    Primitive::CosEven,
     Primitive::CosHalfPi,
     Primitive::TrigDefined,
     Primitive::HalfPiWitness,
     Primitive::SinHalfPi,
+    Primitive::SinOdd,
 ];

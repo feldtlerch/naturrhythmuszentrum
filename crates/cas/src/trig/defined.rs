@@ -15,7 +15,7 @@ use crate::rule::Primitive;
 const AT: Location = Location::new("trigonometric totality");
 
 /// Inspect the closed discriminator before copying any input-controlled metadata.
-fn operand(cas: &Cas, function: &Handle, budget: &mut Budget) -> Result<Handle, Fault> {
+pub(super) fn operand(cas: &Cas, function: &Handle, budget: &mut Budget) -> Result<Handle, Fault> {
     budget.work(1, AT)?;
     let value = cas.state.expression(cas.checked(function)?)?;
     if !matches!(

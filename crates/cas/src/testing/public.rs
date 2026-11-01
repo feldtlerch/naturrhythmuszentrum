@@ -309,3 +309,17 @@ pub(crate) mod half_pi_work;
 )]
 #[path = "trig_defined_work.rs"]
 pub(crate) mod trig_defined_work;
+
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "shared original parity fixtures"
+)]
+#[path = "trig_parity.rs"]
+pub(crate) mod trig_parity;
+
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "shared measured parity fixtures"
+)]
+#[path = "trig_parity_work.rs"]
+pub(crate) mod trig_parity_work;

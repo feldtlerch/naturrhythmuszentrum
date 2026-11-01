@@ -13,8 +13,8 @@ fn lc_source_retained_root_literal_boundaries() -> TestResult {
     let mut fixture = Fixture::with_mapped_sources(budget.limits().clone())?;
     let contract = shared::derivative(&mut fixture, &mut budget)?;
     for full in [false, true] {
-        boundaries::<f32>(&fixture, &contract, full, [172_630, 1_944])?;
-        boundaries::<f64>(&fixture, &contract, full, [173_686, 2_616])?;
+        boundaries::<f32>(&fixture, &contract, full, [172_940, 1_944])?;
+        boundaries::<f64>(&fixture, &contract, full, [173_996, 2_616])?;
     }
     Ok(())
 }

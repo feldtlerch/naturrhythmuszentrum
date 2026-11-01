@@ -74,5 +74,8 @@ mod trig_values;
 mod trig_values_work;
 
 mod trig_defined;
+mod trig_parity;
 
 mod trig_defined_work;
+
+mod trig_parity_work;
