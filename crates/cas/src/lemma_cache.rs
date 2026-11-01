@@ -26,6 +26,8 @@ pub const ANONYMOUS_LEMMA_SCHEMA: crate::proof::LemmaSchema = crate::proof::Lemm
 /// ordered premises, representation and the used primitive revisions. A different
 /// proof is a different key even when its theorem, shape, name or cost is equal.
 /// A receiving store checks its own entry; portable equality never imports handles.
+/// Rollback invalidates hit eligibility without dropping sealed bytes. Entries in
+/// older or saturated namespaces remain charged and require independent replay.
 #[derive(Debug, Default)]
 pub struct AnonymousLemmaCache {
     /// Sealed results with exact portable expected judgments.
@@ -37,6 +39,10 @@ pub struct AnonymousLemmaCache {
 /// A private entry can be minted only after independent replay succeeds.
 #[derive(Debug)]
 struct Entry {
+    /// Strong receiving-owner identity prevents a copied store from inheriting reuse authority.
+    owner: std::sync::Arc<()>,
+    /// The namespace in which the retained proof root was independently checked.
+    epoch: u64,
     /// Collision-free canonical expected theorem.
     expected: Vec<u8>,
     /// Canonical proof bytes complete the key and seal its local result.
@@ -75,6 +81,8 @@ impl AnonymousLemmaCache {
     ///
     /// Key construction, comparisons and retained storage remain metered. A hit
     /// performs no rule checking or publication. An error never creates an entry.
+    /// This replay commits its own cache entry; a later enclosing graph rollback
+    /// keeps that entry owned but invalidates its generation before identifiers recur.
     /// # Errors
     /// Refuses invalid or foreign judgments, altered proof bytes, false rules and
     /// exhausted caller/store limits with the ordinary replay error.
@@ -131,8 +139,13 @@ impl AnonymousLemmaCache {
                 .saturating_add(size(entry.witness.bytes.len().max(bytes.len()), AT)?)
                 .saturating_add(1);
             budget.work(work, AT)?;
+            let owned = std::sync::Arc::ptr_eq(&entry.owner, &cas.memo_owner);
+            let current = entry.epoch == cas.memo_epoch;
+            let reusable = cas.memo_epoch != u64::MAX;
             let local = cas.checked(entry.witness.proof()).is_ok();
-            if local && entry.expected == key && entry.witness.bytes == bytes {
+            let same_key = entry.expected == key;
+            let same_proof = entry.witness.bytes == bytes;
+            if owned && current && reusable && local && same_key && same_proof {
                 return Ok(Some(index));
             }
         }
@@ -174,6 +187,8 @@ impl AnonymousLemmaCache {
         })?;
         let index = self.entries.len();
         self.entries.push(Entry {
+            owner: std::sync::Arc::clone(&cas.memo_owner),
+            epoch: cas.memo_epoch,
             expected: key,
             witness,
         });

@@ -310,4 +310,56 @@ fn lemma_cache_schema_is_documented() {
     }
 }
 
+/// A graph rollback invalidates cache authority before another proof can reuse its serial.
+/// ´test:unit:lemma-cache-recycled-proof-refusal´
+#[test]
+fn lemma_cache_recycled_proof_refusal() -> TestResult {
+    let mut cas = Cas::new(budget()?.limits().clone())?;
+    frame(&mut cas, Change::None)?;
+    let mut cache = AnonymousLemmaCache::new();
+    let mut original = None;
+    let mut retained = None;
+    let result: Result<(), crate::Fault> = cas.transaction(&mut budget()?, |cas, ledger| {
+        let witness = proof(cas, Change::None).expect("fixture proof");
+        retained = Some(
+            cache
+                .replay(cas, &witness.bytes, witness.judgment(), ledger)?
+                .proof()
+                .clone(),
+        );
+        original = Some(witness);
+        Err(crate::Fault::invalid(
+            crate::InvalidCode::Reference,
+            super::AT,
+        ))
+    });
+    assert!(result.is_err());
+    let original = original.ok_or("rolled-back witness")?;
+    proof(&mut cas, Change::Relation)?;
+    let changed = proof(&mut cas, Change::Declarations)?;
+    assert_eq!(
+        retained.ok_or("cached root")?.logical_id(),
+        changed.proof().logical_id()
+    );
+    let (result, rows) = crate::testing::work_trace::measured(|| {
+        cache
+            .replay(
+                &mut cas,
+                &original.bytes,
+                original.judgment(),
+                &mut budget().expect("ledger"),
+            )
+            .map(|witness| witness.proof().clone())
+    })?;
+    let proof = result?;
+    assert!(
+        rows.iter().any(|row| row.rule != "replay"),
+        "recycled serial returned a warm cache hit"
+    );
+    assert_ne!(&proof, changed.proof());
+    Ok(())
+}
+
+mod lifecycle;
 mod limits;
+mod literals;
