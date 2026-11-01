@@ -554,7 +554,7 @@ pub(crate) fn encode_certificate(
 
 #[cfg(test)]
 mod tests {
-    use super::value_term;
+    use super::{residue, value_term};
     use crate::budget::{Budget, BudgetKind, Limits};
     use crate::domain_model::HeaderDraft;
     use crate::graph::{Cas, Draft, ExpressionDraft, Reference};
@@ -641,6 +641,76 @@ mod tests {
         }
         // The metered measuring buffer fits; prepayment refuses before any scope clone.
         assert_eq!(scope_attempt(BudgetKind::Work, 27_534)?, (false, 13_892));
+        Ok(())
+    }
+
+    fn attempt(
+        input: &str,
+        expected: i64,
+        kind: BudgetKind,
+        amount: u64,
+    ) -> Result<(bool, u64), Box<dyn std::error::Error>> {
+        let mut setup = Budget::new(Limits::default())?;
+        let value = Rational::parse(input, &mut setup)?;
+        let original = value.clone();
+        let output = Rational::from_ratio(expected, 1, &mut setup)?;
+        let mut limits = Limits::default();
+        match kind {
+            BudgetKind::Work => limits.work = amount,
+            BudgetKind::ArithmeticSteps => limits.arithmetic_steps = amount,
+            BudgetKind::ComponentBits => limits.component_bits = amount,
+            BudgetKind::IntermediateBits => {
+                limits.intermediate_bits = amount;
+                limits.component_bits = amount.min(limits.component_bits);
+            }
+            _ => return Err("residue resource".into()),
+        }
+        let mut budget = Budget::new(limits)?;
+        budget.work(7, Location::new("prior residue Work"))?;
+        let result = residue(&value, &mut budget);
+        match &result {
+            Ok(actual) => assert_eq!(*actual, output),
+            Err(fault) => assert!(
+                matches!(fault.kind,FaultKind::Exhausted {budget,..} if budget==kind || (kind==BudgetKind::IntermediateBits && budget==BudgetKind::ComponentBits)),
+                "{fault:?}"
+            ),
+        }
+        assert_eq!(value, original);
+        Ok((result.is_ok(), budget.usage().work - 7))
+    }
+
+    /// Exact Euclidean division includes construction, division, floor, product and subtraction.
+    /// Arithmetic adapters prepay each step; a refusal retains completed earlier steps.
+    /// ´test:unit:trig-residue-resource-boundaries´
+    #[test]
+    fn residue_resource_boundaries() -> Result<(), Box<dyn std::error::Error>> {
+        let kinds = [
+            BudgetKind::Work,
+            BudgetKind::ArithmeticSteps,
+            BudgetKind::ComponentBits,
+            BudgetKind::IntermediateBits,
+        ];
+        for (input, expected, costs, prefixes) in [
+            ("0", 0, [1664, 52, 3, 3], [1632, 1632, 128, 0]),
+            (
+                "18446744073709551617",
+                1,
+                [2480, 55, 65, 66],
+                [2448, 2448, 0, 568],
+            ),
+            (
+                "-18446744073709551617",
+                3,
+                [2512, 56, 65, 66],
+                [2480, 2480, 0, 568],
+            ),
+        ] {
+            for ((kind, cost), prefix) in kinds.into_iter().zip(costs).zip(prefixes) {
+                let amount = cost + if kind == BudgetKind::Work { 7 } else { 0 };
+                assert_eq!(attempt(input, expected, kind, amount)?, (true, costs[0]));
+                assert_eq!(attempt(input, expected, kind, amount - 1)?, (false, prefix));
+            }
+        }
         Ok(())
     }
 }
