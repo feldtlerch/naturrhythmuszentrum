@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! A sealed original LC output joins the existing positive-rate law to an explicit radian relation.
 
-mod check;
+pub(super) mod check;
 use super::{AT, LcSpectralLaw, ReadingError, SpectralLawError as Error};
 use crate::readings::{CompanionReading, EntryMeaning, ParameterErrorReading, Representation};
 use crate::{BinaryOp, Descriptor, Kind, Measure, Registry, Role};

@@ -179,25 +179,7 @@ fn commit<P: Scalar + 'static>(
     context: &ArithmeticContext,
     budget: &mut Budget,
 ) -> Result<PublishedLcAngularFrequency<P>, Error> {
-    budget.work(9, AT)?;
-    let rate = evaluation.imaginary_rates(heap, context)?[0];
-    let partials = evaluation
-        .root_partials(heap, context)?
-        .ok_or(Error::Identity)?[1];
-    let covariance = parameter(
-        evaluation
-            .root_covariance(heap, context)?
-            .ok_or(Error::Identity)?[1][1],
-        context,
-    )?;
-    let jacobian = [
-        parameter(partials[0], context)?,
-        parameter(partials[1], context)?,
-    ];
-    let point = evaluation
-        .plan()
-        .statistical_operating_point(heap, context, budget)?;
-    let point = <[P; 2]>::try_from(point).map_err(|_| Error::Identity)?;
+    let (evidence, rate, covariance) = pack(heap, evaluation, context, budget)?;
     let regions = [
         rate.center,
         rate.total,
@@ -213,12 +195,8 @@ fn commit<P: Scalar + 'static>(
         })
     })
     .collect::<Result<Vec<_>, HeapError>>()?;
-    let coverage = evaluation.coverage();
-    let evidence = Rc::new(Evidence {
-        evaluation,
-        point,
-        jacobian,
-    });
+    let coverage = evidence.evaluation.coverage();
+    let evidence = Rc::new(evidence);
     let origin = Rc::new(Origin::new(plan.definition.clone(), &evidence));
     let provenance = crate::binding::live::import::ImportProvenance {
         definition: crate::binding::live::ResultDefinition::AngularFrequency(Rc::clone(&origin)),
@@ -258,4 +236,48 @@ fn produced<P: Scalar>(plan: &Plan<P>) -> Result<u64, Error> {
             value.checked_add(super::super::statistics::output_bytes(&plan.spectrum).ok()?)
         })
         .ok_or_else(|| HeapError::ExtentOverflow.into())
+}
+
+/// Existing angular evidence and its value/covariance parameters are packed without publication.
+type Packed<P> = (
+    Evidence<P>,
+    SpectralValue<P>,
+    LcAngularFrequencyParameter<P>,
+);
+
+/// Reuse the existing angular packing schedule with an already evaluated native root.
+pub(in crate::binding::live::spectral) fn pack<P: Scalar + 'static>(
+    heap: &Heap,
+    evaluation: LcSpectralEvaluation<P>,
+    context: &ArithmeticContext,
+    budget: &mut Budget,
+) -> Result<Packed<P>, Error> {
+    budget.work(9, AT)?;
+    let rate = evaluation.imaginary_rates(heap, context)?[0];
+    let partials = evaluation
+        .root_partials(heap, context)?
+        .ok_or(Error::Identity)?[1];
+    let covariance = parameter(
+        evaluation
+            .root_covariance(heap, context)?
+            .ok_or(Error::Identity)?[1][1],
+        context,
+    )?;
+    let jacobian = [
+        parameter(partials[0], context)?,
+        parameter(partials[1], context)?,
+    ];
+    let point = evaluation
+        .plan()
+        .statistical_operating_point(heap, context, budget)?;
+    let point = <[P; 2]>::try_from(point).map_err(|_| Error::Identity)?;
+    Ok((
+        Evidence {
+            evaluation,
+            point,
+            jacobian,
+        },
+        rate,
+        covariance,
+    ))
 }

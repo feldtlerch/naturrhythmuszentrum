@@ -53,14 +53,15 @@ pub use live::{
     CompanionEvaluation, CompanionExecution, CompanionExecutionError, CompanionExecutionUsage,
     CoordinateContract, CoordinateError, CoordinateNorm, CoordinateReading, CopyDiscrepancy,
     DependencyPolicy, LcAngularFrequencyParameter, LcAngularFrequencyPublication,
-    LcSpectralEvaluation, LcSpectralPublication, LcSpectrum, LiveBindingError, MappedReading,
-    PhasorAllocation, PhasorAllocationChannel, PhasorAllocationStage, PhasorError,
-    PhasorEvaluation, PhasorInventory, PhasorOperand, PhasorProduct, PhasorPublication,
-    PhasorSolve, PhasorSolveCertificate, PhasorSolveEvaluation, PhasorSolvePublication,
-    PhasorStatistics, PhasorTransferBounds, PhasorTransferredResidual, PiCoordinateContract,
-    PublishedLcAngularFrequency, PublishedLcSpectrum, PublishedPhasor, PublishedPhasorSolve,
-    ReadingBinding, ReadingImport, ReadingRegion, ReadingSelection, ReciprocalDerivativeContract,
-    ReciprocalDerivativeError, ReciprocalDerivativeEvaluation, SpectralError, SpectralValue,
+    LcFrequencyPublication, LcSpectralEvaluation, LcSpectralPublication, LcSpectrum,
+    LiveBindingError, MappedReading, PhasorAllocation, PhasorAllocationChannel,
+    PhasorAllocationStage, PhasorError, PhasorEvaluation, PhasorInventory, PhasorOperand,
+    PhasorProduct, PhasorPublication, PhasorSolve, PhasorSolveCertificate, PhasorSolveEvaluation,
+    PhasorSolvePublication, PhasorStatistics, PhasorTransferBounds, PhasorTransferredResidual,
+    PiCoordinateContract, PublishedLcAngularFrequency, PublishedLcFrequency, PublishedLcSpectrum,
+    PublishedPhasor, PublishedPhasorSolve, ReadingBinding, ReadingImport, ReadingRegion,
+    ReadingSelection, ReciprocalDerivativeContract, ReciprocalDerivativeError,
+    ReciprocalDerivativeEvaluation, SpectralError, SpectralValue,
 };
 pub(crate) use operation::NativeRecipe;
 pub use operation::{CheckedOperation, OperationDraft, RegionContract};

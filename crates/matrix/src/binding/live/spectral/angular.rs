@@ -5,6 +5,7 @@ mod plan;
 mod publication;
 pub use plan::LcAngularFrequencyPublication;
 pub use publication::PublishedLcAngularFrequency;
+pub(super) use publication::pack;
 
 use super::{AT, SpectralError as Error};
 use nrz_scalar::{ArithmeticContext, Enclosure, Scalar};
@@ -19,7 +20,7 @@ pub struct LcAngularFrequencyParameter<P: Scalar> {
 }
 
 /// Keep the existing outward parameter enclosure and explicitly record its finite candidate.
-fn parameter<P: Scalar>(
+pub(super) fn parameter<P: Scalar>(
     value: Enclosure<P>,
     context: &ArithmeticContext,
 ) -> Result<LcAngularFrequencyParameter<P>, Error> {
@@ -75,11 +76,11 @@ impl Origin {
 
 /// Typed immutable numerical provenance is shared by the heap group and returned result.
 #[derive(Debug)]
-struct Evidence<P: Scalar> {
+pub(super) struct Evidence<P: Scalar> {
     /// Original evaluated positive-root theorem, source model and every input version.
-    evaluation: crate::LcSpectralEvaluation<P>,
+    pub(super) evaluation: crate::LcSpectralEvaluation<P>,
     /// Original represented physical coordinates defining the local model.
-    point: [P; 2],
+    pub(super) point: [P; 2],
     /// Ordered physical source derivative candidates and numerical errors.
-    jacobian: [LcAngularFrequencyParameter<P>; 2],
+    pub(super) jacobian: [LcAngularFrequencyParameter<P>; 2],
 }

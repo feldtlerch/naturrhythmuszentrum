@@ -3,6 +3,8 @@
 
 mod angular;
 pub use angular::{LcAngularFrequencyDefinition, LcAngularFrequencySymbols};
+mod frequency;
+pub use frequency::{LcFrequencyDefinition, LcFrequencySymbols};
 mod hypotheses;
 mod jacobian;
 pub use jacobian::LcRootJacobian;

@@ -53,6 +53,10 @@ impl SelectedReading {
         {
             return Err(HeapError::UnavailableSymbol);
         }
+        if let Some(super::ResultDefinition::Frequency(origin)) = &self.group.result_definition {
+            origin.validate(heap)?;
+            self.validate_bundle(heap)?;
+        }
         let adapter = self
             .group
             .coverage
@@ -89,6 +93,23 @@ impl SelectedReading {
             }
         }
         super::companions::validate_native(&self.group, heap)?;
+        Ok(())
+    }
+
+    /// A sealed connected frequency result lends no channel after any member version changes.
+    fn validate_bundle(&self, heap: &Heap) -> Result<(), HeapError> {
+        if self
+            .group
+            .states
+            .iter()
+            .any(|state| state.get() != SymbolState::Published)
+        {
+            return Err(HeapError::UnavailableSymbol);
+        }
+        self.validate_entries(heap, self.group.coverage.entries())?;
+        for companion in &self.group.companions {
+            self.validate_entries(heap, companion.entries())?;
+        }
         Ok(())
     }
 

@@ -54,8 +54,9 @@ pub use roots::{RootCoverage, RootProblem, RootReplayUsage};
 pub use shape::{ReadingAxis, ReadingShape};
 pub use sources::{JointSources, ReadingSource, SourceEdge, SourceError, SourceKnowledge};
 pub use spectral::{
-    LcAngularFrequencyDefinition, LcAngularFrequencySymbols, LcRootJacobian, LcSpectralLaw,
-    LcSpectralResultDefinition, SpectralLawError,
+    LcAngularFrequencyDefinition, LcAngularFrequencySymbols, LcFrequencyDefinition,
+    LcFrequencySymbols, LcRootJacobian, LcSpectralLaw, LcSpectralResultDefinition,
+    SpectralLawError,
 };
 pub use value::{PhysicalReading, ReadingDefinition};
 

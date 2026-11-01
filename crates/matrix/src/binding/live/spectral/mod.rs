@@ -6,6 +6,9 @@ pub(crate) use angular::Origin as AngularFrequencyOrigin;
 pub use angular::{
     LcAngularFrequencyParameter, LcAngularFrequencyPublication, PublishedLcAngularFrequency,
 };
+mod frequency;
+pub(crate) use frequency::Origin as FrequencyOrigin;
+pub use frequency::{LcFrequencyPublication, PublishedLcFrequency};
 mod input;
 mod moments;
 mod numeric;

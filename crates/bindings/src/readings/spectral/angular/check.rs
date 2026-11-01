@@ -18,15 +18,26 @@ pub(super) fn symbols(
     symbols: &LcAngularFrequencySymbols,
     budget: &mut Budget,
 ) -> Result<(), Error> {
-    let value = symbols.value.reading();
-    let error = symbols.covariance_error_value.reading();
     let expected = Descriptor::new(
         Kind::angular_frequency().map_err(ReadingError::from)?,
         Measure::coherent(),
         Role::Difference,
     )
     .map_err(ReadingError::from)?;
-    identity(&symbols.value, &expected, budget)?;
+    channel(cas, law, symbols, &expected, budget)
+}
+
+/// Shared scalar channel checks preserve the angular path's exact admission schedule.
+pub(in crate::readings::spectral) fn channel(
+    cas: &Cas,
+    law: &LcSpectralLaw,
+    symbols: &LcAngularFrequencySymbols,
+    expected: &Descriptor,
+    budget: &mut Budget,
+) -> Result<(), Error> {
+    let value = symbols.value.reading();
+    let error = symbols.covariance_error_value.reading();
+    identity(&symbols.value, expected, budget)?;
     super::super::output_context::check(cas, law, value.family().context(), budget)?;
     if value.family().context() != error.family().context()
         || value.family().root() == error.family().root()
@@ -54,7 +65,7 @@ pub(super) fn symbols(
 }
 
 /// A defined scalar view reads exactly one original coherent coordinate with coefficient one.
-fn identity(
+pub(in crate::readings::spectral) fn identity(
     output: &Representation,
     descriptor: &Descriptor,
     budget: &mut Budget,
@@ -109,7 +120,10 @@ fn companions(symbols: &LcAngularFrequencySymbols, budget: &mut Budget) -> Resul
 }
 
 /// Every parameter expression in this closed one-coordinate route has an exact identity map.
-fn unit_map(map: &AffineMap, budget: &mut Budget) -> Result<(), Error> {
+pub(in crate::readings::spectral) fn unit_map(
+    map: &AffineMap,
+    budget: &mut Budget,
+) -> Result<(), Error> {
     budget.work(1, AT)?;
     if map.inputs() != 1
         || map.outputs() != 1

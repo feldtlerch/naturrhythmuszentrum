@@ -61,27 +61,7 @@ pub(crate) fn proposed_descriptor(
     budget: &mut Budget,
 ) -> TestResult<Proposed> {
     let (context, symbols) = declarations(graph, budget)?;
-    let value = representation(
-        graph,
-        &context,
-        [&symbols[0], &symbols[1]],
-        descriptor,
-        budget,
-    )?;
-    let companions = companions(graph, &context, &value, &symbols, budget)?;
-    let covariance_error =
-        ParameterErrorReading::define(graph, &symbols[9], &symbols[8], &companions[2], budget)?;
-    let error_descriptor = covariance_error.units()[0]
-        .uncertainty_descriptor()
-        .ok_or("parameter error units")?
-        .clone();
-    let covariance_error_value = representation(
-        graph,
-        &context,
-        [&symbols[8], &symbols[10]],
-        error_descriptor,
-        budget,
-    )?;
+    let channel = channel(graph, &context, &symbols, descriptor, budget)?;
     let angle = Descriptor::new(Kind::Angle, Measure::coherent(), Role::Difference)?;
     let radian = EntryMeaning::new(
         angle.clone(),
@@ -97,12 +77,7 @@ pub(crate) fn proposed_descriptor(
         Kind::angular_frequency()?,
     )?;
     Ok(Proposed {
-        symbols: LcAngularFrequencySymbols {
-            value,
-            companions,
-            covariance_error,
-            covariance_error_value,
-        },
+        symbols: channel,
         radian,
         registry,
     })
@@ -182,7 +157,7 @@ fn declarations(graph: &mut Cas, budget: &mut Budget) -> TestResult<(Handle, Vec
 }
 
 /// The declared scalar reads and reconstructs exactly one original coordinate with unit scale.
-fn representation(
+pub(crate) fn representation(
     graph: &mut Cas,
     context: &Handle,
     symbols: [&Handle; 2],
@@ -257,4 +232,41 @@ fn companions(
     result
         .try_into()
         .map_err(|_| "three output companions".into())
+}
+
+/// Construct one complete scalar channel inside a caller's predeclared shared output context.
+pub(crate) fn channel(
+    graph: &mut Cas,
+    context: &Handle,
+    symbols: &[Handle],
+    descriptor: Descriptor,
+    budget: &mut Budget,
+) -> TestResult<LcAngularFrequencySymbols> {
+    let value = representation(
+        graph,
+        context,
+        [&symbols[0], &symbols[1]],
+        descriptor,
+        budget,
+    )?;
+    let companions = companions(graph, context, &value, symbols, budget)?;
+    let covariance_error =
+        ParameterErrorReading::define(graph, &symbols[9], &symbols[8], &companions[2], budget)?;
+    let error_descriptor = covariance_error.units()[0]
+        .uncertainty_descriptor()
+        .ok_or("parameter error units")?
+        .clone();
+    let covariance_error_value = representation(
+        graph,
+        context,
+        [&symbols[8], &symbols[10]],
+        error_descriptor,
+        budget,
+    )?;
+    Ok(LcAngularFrequencySymbols {
+        value,
+        companions,
+        covariance_error,
+        covariance_error_value,
+    })
 }
