@@ -94,3 +94,87 @@ fn verify(
     assert_eq!(proof.outputs(), std::slice::from_ref(value.descriptor()));
     Ok(())
 }
+
+/// Conversion factors remain part of source composition rather than the local coordinate law.
+/// ´test:integration:quantity-nonlinear-covariance-measures´
+/// ´claim:matrix:quantity-nonlinear-covariance-measures´ Noncoherent powers, roots and quotients retain exact composed measures and independently checked source factors from scales two and four, with rational variances `9/4`, `1/512` and `29/8192`.
+#[test]
+fn quantity_nonlinear_covariance_measures() -> TestResult {
+    let ratio = Descriptor::ratio();
+    let first = scaled("twice", 2)?;
+    let second = scaled("fourfold", 4)?;
+    let context = QuantityContext::new(
+        crate::kernel_testing::owner()?,
+        ShapeLimits::default(),
+        ExecutionLimits::default(),
+    );
+    let mut case = append_pair(
+        context,
+        Heap::new(HeapLimits::default())?,
+        [&ratio, &ratio],
+        [6.0_f64, 16.0],
+    )?;
+    let left = case.context.convert(
+        &mut case.heap,
+        &case.values[0],
+        &first,
+        &mut Budget::new(Limits::default())?,
+    )?;
+    let right = case.context.convert(
+        &mut case.heap,
+        &case.values[1],
+        &second,
+        &mut Budget::new(Limits::default())?,
+    )?;
+    let square = case.context.integer_power(
+        &mut case.heap,
+        &left,
+        2,
+        &mut Budget::new(Limits::default())?,
+    )?;
+    verify(&case.heap, &square, &[(6, 1)], &[(3, 1)], (9, 4))?;
+    let root =
+        case.context
+            .square_root(&mut case.heap, &right, &mut Budget::new(Limits::default())?)?;
+    verify(&case.heap, &root, &[(1, 4)], &[(1, 16)], (1, 512))?;
+    let quotient = case.context.divide(
+        &mut case.heap,
+        &left,
+        &right,
+        &mut Budget::new(Limits::default())?,
+    )?;
+    let a = Rational::new(1, 8)?;
+    let b = Rational::new(-3, 64)?;
+    let variance = a
+        .multiply(a)?
+        .multiply(Rational::new(1, 4)?)?
+        .add(b.multiply(b)?.multiply(Rational::new(1, 2)?)?)?
+        .add(a.multiply(b)?.multiply(Rational::new(1, 4)?)?)?;
+    verify(
+        &case.heap,
+        &quotient,
+        &[(1, 4), (-3, 16)],
+        &[(1, 8), (-3, 64)],
+        (variance.numerator, variance.denominator),
+    )?;
+    assert_eq!((variance.numerator, variance.denominator), (29, 8192));
+    let registry = case.context.declarations().registry();
+    assert_eq!(
+        square.descriptor(),
+        &registry.coordinate_integer_power(&first, 2, &mut Budget::new(Limits::default())?)?
+    );
+    assert_eq!(
+        root.descriptor(),
+        &registry.coordinate_square_root(&second, &mut Budget::new(Limits::default())?)?
+    );
+    assert_eq!(
+        quotient.descriptor(),
+        &registry.coordinate_binary(
+            nrz_bindings::BinaryOp::Divide,
+            &first,
+            &second,
+            &mut Budget::new(Limits::default())?
+        )?
+    );
+    Ok(())
+}

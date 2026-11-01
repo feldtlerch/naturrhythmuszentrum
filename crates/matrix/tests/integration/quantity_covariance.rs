@@ -4,10 +4,13 @@
 mod boundaries;
 mod domains;
 mod measures;
+mod nonlinear_boundaries;
 mod physical;
 mod power_boundaries;
 mod powers;
+mod quotients;
 mod refusals;
+mod roots;
 
 use crate::kernel_oracle::Rational;
 use crate::kernel_testing::{TestResult, owner};

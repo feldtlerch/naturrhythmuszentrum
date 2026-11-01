@@ -6,19 +6,13 @@ use nrz_bindings::{Budget, Descriptor, ExponentPolicy, Limits, Role, UnitError};
 use nrz_matrix::{Heap, HeapLimits, QuantityError};
 use nrz_scalar::{ArithmeticFailure, KernelError};
 
-/// Points and attached statistics refuse before any unary output publication.
+/// Point roles refuse before any unary output publication.
 /// ´test:integration:quantity-powers-semantic-refusals´
-/// ´claim:matrix:quantity-powers-semantic-refusals´ Integer powers and roots reject point roles, and unsupported root statistics refuse while deterministic difference twins succeed.
+/// ´claim:matrix:quantity-powers-semantic-refusals´ Integer powers and roots reject point roles while deterministic difference twins succeed.
 #[test]
 fn quantity_powers_semantic_refusals() -> TestResult {
     let (context, [length, _, _]) = fixture(ExponentPolicy::Rational)?;
     let mut heap = Heap::new(HeapLimits::default())?;
-    let statistical = crate::statistics_testing::scalar::<f64>(&mut heap)?;
-    let statistical = context.capture(
-        &heap,
-        heap.symbol_binding(statistical.value())?,
-        &mut Budget::new(Limits::default())?,
-    )?;
     let point = Descriptor::new(length.kind().clone(), length.measure().clone(), Role::Point)?;
     let point = bounded(&context, &mut heap, &point, 3.0_f64, 0.0, 0.0)?;
     let plain = bounded(&context, &mut heap, &length, 3.0_f64, 0.0, 0.0)?;
@@ -34,18 +28,6 @@ fn quantity_powers_semantic_refusals() -> TestResult {
             panic!("unary point arithmetic must refuse");
         };
         assert!(matches!(fault, QuantityError::Units(UnitError::AffineRole)));
-        if matches!(operation, Unary::Root) {
-            let Err(fault) = execute(
-                &context,
-                &mut heap,
-                &statistical,
-                Unary::Root,
-                &mut Budget::new(Limits::default())?,
-            ) else {
-                panic!("unary statistical propagation must refuse");
-            };
-            assert!(matches!(fault, QuantityError::NonlinearStatistics));
-        }
         assert_eq!(heap.provenance_usage(), before);
         execute(
             &context,

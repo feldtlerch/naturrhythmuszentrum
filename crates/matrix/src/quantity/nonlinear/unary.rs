@@ -37,7 +37,7 @@ impl QuantityContext {
 
     /// Take a square root with an exact half-dimensional measure and positive-box certificates.
     /// # Errors
-    /// Refuses points, counts, unsupported exponent policies or scales, statistics and nonpositive boxes.
+    /// Refuses points, counts, unsupported exponent policies or scales, incomplete statistical evidence and nonpositive boxes.
     pub fn square_root<P: Scalar + 'static, R: QuantityRole>(
         &self,
         heap: &mut crate::Heap,
@@ -71,9 +71,7 @@ impl QuantityContext {
         budget: &mut Budget,
     ) -> Result<Quantity<P>, QuantityError<P>> {
         self.check_descriptor(descriptor)?;
-        let supported = matches!(operation, ScalarQuantityOp::IntegerPower(_));
-        let (input_contract, statistics) =
-            self.nonlinear_operand(heap, input, supported, budget)?;
+        let (input_contract, statistics) = self.nonlinear_operand(heap, input, true, budget)?;
         let inputs = vec![input_contract];
         let recipe = ScalarQuantityRecipe {
             operation,

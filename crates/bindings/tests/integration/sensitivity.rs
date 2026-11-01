@@ -238,3 +238,68 @@ fn quantity_power_sensitivity_oracle() -> TestResult {
     }
     Ok(())
 }
+
+/// Polynomial partials remain tied to the root placeholder and original coordinate.
+/// ´test:integration:quantity-root-sensitivity-oracle´
+/// ´claim:bindings:quantity-root-sensitivity-oracle´ A quantity positive-root identity retains its original root and polynomial relation, checked partials four and minus one at the exact root point, and its undischarged numerical positivity obligation.
+#[test]
+fn quantity_root_sensitivity_oracle() -> TestResult {
+    let registry = nrz_bindings::Registry::new(nrz_bindings::ExponentPolicy::Rational);
+    let proof = nrz_bindings::CheckedSensitivity::quantity_positive_root(
+        &registry,
+        &Descriptor::ratio(),
+        &mut Budget::new(Limits::default())?,
+    )?;
+    let cas = proof.declarations().cas()?;
+    for (entry, expected) in proof.jacobian().entries().iter().zip([(4, 1), (-1, 1)]) {
+        equal_fraction(
+            coefficient(&cas, entry.expression(), &[("x", 4), ("t", 2)])?,
+            expected,
+        )?;
+        assert!(entry.identity().is_discharged());
+    }
+    assert_eq!(
+        proof.obligations(),
+        &[nrz_bindings::SensitivityObligation::PositiveRoot {
+            coordinate: 0,
+            output: 0
+        }]
+    );
+    proof
+        .declarations()
+        .validate_checked(&proof.originals()[0])?;
+    proof
+        .declarations()
+        .validate_checked(&proof.jacobian().originals()[0])?;
+    Ok(())
+}
+
+/// Both quotient coordinates are proved independently under one retained divisor premise.
+/// ´test:integration:quantity-quotient-sensitivity-oracle´
+/// ´claim:bindings:quantity-quotient-sensitivity-oracle´ Quantity quotient proofs retain their physical original, ordered coordinate partials one half and minus three quarters and the numerical nonzero-divisor obligation.
+#[test]
+fn quantity_quotient_sensitivity_oracle() -> TestResult {
+    let registry = nrz_bindings::Registry::new(nrz_bindings::ExponentPolicy::Rational);
+    let ratio = Descriptor::ratio();
+    let proof = nrz_bindings::CheckedSensitivity::quantity_quotient(
+        &registry,
+        [&ratio, &ratio],
+        &mut Budget::new(Limits::default())?,
+    )?;
+    let cas = proof.declarations().cas()?;
+    for (entry, expected) in proof.jacobian().entries().iter().zip([(1, 2), (-3, 4)]) {
+        equal_fraction(
+            coefficient(&cas, entry.expression(), &[("x", 3), ("y", 2)])?,
+            expected,
+        )?;
+        assert!(entry.identity().is_discharged());
+    }
+    assert_eq!(
+        proof.obligations(),
+        &[nrz_bindings::SensitivityObligation::Nonzero { coordinate: 1 }]
+    );
+    proof
+        .declarations()
+        .validate_checked(&proof.originals()[0])?;
+    Ok(())
+}

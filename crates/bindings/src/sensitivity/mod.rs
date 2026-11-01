@@ -37,11 +37,15 @@ pub use evidence::{
 pub enum SensitivityRecipe {
     /// Product in the exact composed quantity coordinate measure.
     QuantityProduct,
+    /// Quotient in the exact composed quantity measure, with a separated divisor.
+    QuantityQuotient,
     /// Exact signed integer power in its composed quantity measure.
     QuantityIntegerPower {
         /// Original signed integer exponent.
         exponent: i64,
     },
+    /// Positive root in its exact composed quantity coordinate measure.
+    QuantityPositiveRoot,
     /// Elementwise square of a declared continuous difference input.
     Square,
     /// Elementwise reciprocal of a declared continuous difference input.
@@ -70,11 +74,18 @@ pub enum SensitivityKernel {
         /// Index of the other operand in the ordered input inventory.
         coordinate: usize,
     },
+    /// Evaluate `1/y` or `-x/(y*y)` in the exact quantity coordinate measures.
+    QuantityQuotient {
+        /// Zero selects the numerator derivative; one selects the divisor derivative.
+        coordinate: usize,
+    },
     /// Evaluate `n*x^(n-1)` at the represented quantity coordinate.
     QuantityIntegerPower {
         /// Original signed integer exponent, with explicit zero and one cases.
         exponent: i64,
     },
+    /// Evaluate `1/(2*sqrt(x))` in the retained quantity coordinate measure.
+    QuantityPositiveRoot,
     /// Formal derivative zero with the entry's output/input pairing descriptor.
     Zero,
     /// Evaluate `(2*c)*s` in that order for the named input coordinate.

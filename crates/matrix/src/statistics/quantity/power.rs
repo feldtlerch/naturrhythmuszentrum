@@ -26,25 +26,39 @@ pub(super) fn map<P: Scalar + 'static, Q: Scalar + 'static>(
     let domain = point.entry(0, 0)?;
     let center: Q =
         crate::conversion::same_format(*point.centers.first().ok_or(StatisticsError::Contract)?)?;
-    let (
-        SensitivityRecipe::QuantityIntegerPower { exponent },
-        SensitivityKernel::QuantityIntegerPower { exponent: actual },
-    ) = (proof.recipe(), entry.kernel())
-    else {
-        return Err(StatisticsError::Contract.into());
-    };
-    if actual != exponent {
-        return Err(StatisticsError::Contract.into());
-    }
-    let contains_zero = domain.lower().get() <= P::ZERO && domain.upper().get() >= P::ZERO;
-    if exponent <= 0 && contains_zero {
-        return Err(StatisticsError::Domain {
-            function: crate::Elementwise::Reciprocal,
-            entry: 0,
+    let (candidate, truth) = match (proof.recipe(), entry.kernel()) {
+        (
+            SensitivityRecipe::QuantityIntegerPower { exponent },
+            SensitivityKernel::QuantityIntegerPower { exponent: actual },
+        ) if actual == exponent => {
+            if exponent <= 0 && domain.lower().get() <= P::ZERO && domain.upper().get() >= P::ZERO {
+                return Err(StatisticsError::Domain {
+                    function: crate::Elementwise::Reciprocal,
+                    entry: 0,
+                }
+                .into());
+            }
+            coefficient(center, exponent, context)?
         }
-        .into());
-    }
-    let (candidate, truth) = coefficient(center, exponent, context)?;
+        (SensitivityRecipe::QuantityPositiveRoot, SensitivityKernel::QuantityPositiveRoot) => {
+            if domain.lower().get() <= P::ZERO {
+                return Err(StatisticsError::Domain {
+                    function: crate::Elementwise::SquareRoot,
+                    entry: 0,
+                }
+                .into());
+            }
+            let two = Q::from_u8(2);
+            (
+                Q::ONE / (two * center.sqrt()),
+                singleton(Q::ONE)?.div(
+                    singleton(two)?.mul(singleton(center)?.sqrt(context)?, context)?,
+                    context,
+                )?,
+            )
+        }
+        _ => return Err(StatisticsError::Contract.into()),
+    };
     let mut result = Affine {
         jacobian: run.matrix_at(Role::Jacobian, 0, Extent::new(1, 1)?)?,
         offsets: run.matrix_at(Role::Offsets, 0, Extent::new(1, 1)?)?,

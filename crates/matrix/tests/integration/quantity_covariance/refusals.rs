@@ -99,16 +99,39 @@ fn incomplete(missing: Missing) -> TestResult<Pair<f64>> {
 /// ´claim:matrix:quantity-product-covariance-source-refusals´ Missing operand sources, unrelated models and unknown cross blocks refuse atomically with their exact named causes; complete correlated twins publish in fresh stores.
 #[test]
 fn quantity_product_covariance_source_refusals() -> TestResult {
+    source_refusals(false)
+}
+
+/// Division requires the same explicit shared-source evidence as multiplication.
+/// ´test:integration:quantity-quotient-covariance-source-refusals´
+/// ´claim:matrix:quantity-quotient-covariance-source-refusals´ Missing quotient operand sources, unrelated models and unknown cross blocks refuse with named causes and no publication while fresh complete correlated twins succeed.
+#[test]
+fn quantity_quotient_covariance_source_refusals() -> TestResult {
+    source_refusals(true)
+}
+
+/// Exercise each precise omission against a fresh complete shared model.
+fn source_refusals(quotient: bool) -> TestResult {
     for missing in [Missing::Source, Missing::Model, Missing::Cross] {
         let mut case = incomplete(missing)?;
         let before = case.heap.provenance_usage();
         let mut budget = Budget::new(Limits::default())?;
-        let Err(fault) = case.context.multiply(
-            &mut case.heap,
-            &case.values[0],
-            &case.values[1],
-            &mut budget,
-        ) else {
+        let result = if quotient {
+            case.context.divide(
+                &mut case.heap,
+                &case.values[0],
+                &case.values[1],
+                &mut budget,
+            )
+        } else {
+            case.context.multiply(
+                &mut case.heap,
+                &case.values[0],
+                &case.values[1],
+                &mut budget,
+            )
+        };
+        let Err(fault) = result else {
             panic!("incomplete quantity covariance must refuse");
         };
         let QuantityError::Operation(fault) = fault else {
@@ -132,12 +155,21 @@ fn quantity_product_covariance_source_refusals() -> TestResult {
         assert!(budget.usage().work > 0);
         let ratio = Descriptor::ratio();
         let mut twin = pair::<f64>([&ratio, &ratio])?;
-        twin.context.multiply(
-            &mut twin.heap,
-            &twin.values[0],
-            &twin.values[1],
-            &mut Budget::new(Limits::default())?,
-        )?;
+        if quotient {
+            twin.context.divide(
+                &mut twin.heap,
+                &twin.values[0],
+                &twin.values[1],
+                &mut Budget::new(Limits::default())?,
+            )?;
+        } else {
+            twin.context.multiply(
+                &mut twin.heap,
+                &twin.values[0],
+                &twin.values[1],
+                &mut Budget::new(Limits::default())?,
+            )?;
+        }
     }
     Ok(())
 }

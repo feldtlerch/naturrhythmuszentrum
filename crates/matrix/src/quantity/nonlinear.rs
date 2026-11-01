@@ -104,7 +104,7 @@ impl QuantityContext {
 
     /// Divide scalar quantities after certifying the entire divisor enclosure excludes zero.
     /// # Errors
-    /// Refuses points, unsupported kinds, statistical companions, zero-containing divisors or exhausted resources.
+    /// Refuses points, unsupported kinds, incomplete statistical evidence, zero-containing divisors or exhausted resources.
     pub fn divide<P: Scalar + 'static, L: QuantityRole, R: QuantityRole>(
         &self,
         heap: &mut Heap,
@@ -135,10 +135,9 @@ impl QuantityContext {
             budget,
         )?;
         self.check_descriptor(&descriptor)?;
-        let (left_contract, left_statistics) =
-            self.nonlinear_operand(heap, left, operation == BinaryOp::Multiply, budget)?;
+        let (left_contract, left_statistics) = self.nonlinear_operand(heap, left, true, budget)?;
         let (right_contract, right_statistics) =
-            self.nonlinear_operand(heap, right, operation == BinaryOp::Multiply, budget)?;
+            self.nonlinear_operand(heap, right, true, budget)?;
         let inputs = vec![left_contract, right_contract];
         let recipe = ScalarQuantityRecipe {
             operation: if operation == BinaryOp::Multiply {

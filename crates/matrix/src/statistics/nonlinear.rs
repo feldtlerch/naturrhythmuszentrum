@@ -32,7 +32,9 @@ pub(crate) fn map<P: Scalar + 'static, Q: Scalar + 'static>(
     if let NativeRecipe::Kernel(contract) = &operation.recipe {
         match contract.kind() {
             crate::KernelKind::ScalarQuantityProduct
-            | crate::KernelKind::ScalarQuantityIntegerPower => {
+            | crate::KernelKind::ScalarQuantityQuotient
+            | crate::KernelKind::ScalarQuantityIntegerPower
+            | crate::KernelKind::ScalarQuantitySquareRoot => {
                 return super::quantity::map(points, derivative, context, run);
             }
             crate::KernelKind::Product => {

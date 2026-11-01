@@ -14,6 +14,7 @@ use nrz_bindings::{
 use nrz_scalar::{ArithmeticContext, Scalar};
 
 mod power;
+mod quotient;
 use std::rc::Rc;
 
 /// Prepare or reuse the exact derivative while every symbolic phase shares caller Work.
@@ -38,6 +39,14 @@ pub(crate) fn prepare(
             ],
             budget,
         ),
+        SensitivityRecipe::QuantityQuotient => CheckedSensitivity::quantity_quotient(
+            registry,
+            [
+                first.descriptor(),
+                inputs.get(1).ok_or(StatisticsError::Contract)?.descriptor(),
+            ],
+            budget,
+        ),
         SensitivityRecipe::QuantityIntegerPower { exponent } => {
             CheckedSensitivity::quantity_integer_power(
                 registry,
@@ -45,6 +54,9 @@ pub(crate) fn prepare(
                 exponent,
                 budget,
             )
+        }
+        SensitivityRecipe::QuantityPositiveRoot => {
+            CheckedSensitivity::quantity_positive_root(registry, first.descriptor(), budget)
         }
         _ => return Err(StatisticsError::NonlinearStatistics.into()),
     }
@@ -126,11 +138,13 @@ fn recipe(operation: &CheckedOperation) -> Result<SensitivityRecipe, OperationEr
     };
     match contract.kind() {
         KernelKind::ScalarQuantityProduct => Ok(SensitivityRecipe::QuantityProduct),
+        KernelKind::ScalarQuantityQuotient => Ok(SensitivityRecipe::QuantityQuotient),
         KernelKind::ScalarQuantityIntegerPower => Ok(SensitivityRecipe::QuantityIntegerPower {
             exponent: operation
                 .quantity_integer_exponent()
                 .ok_or(StatisticsError::Contract)?,
         }),
+        KernelKind::ScalarQuantitySquareRoot => Ok(SensitivityRecipe::QuantityPositiveRoot),
         _ => Err(StatisticsError::NonlinearStatistics.into()),
     }
 }
@@ -148,9 +162,12 @@ pub(super) fn map<P: Scalar + 'static, Q: Scalar + 'static>(
     run: &super::inventory::Run,
 ) -> Result<Affine<Q>, OperationError> {
     let proof = derivative.ok_or(StatisticsError::Contract)?;
+    if proof.recipe() == SensitivityRecipe::QuantityQuotient {
+        return quotient::map(points, proof, context, run);
+    }
     if matches!(
         proof.recipe(),
-        SensitivityRecipe::QuantityIntegerPower { .. }
+        SensitivityRecipe::QuantityIntegerPower { .. } | SensitivityRecipe::QuantityPositiveRoot
     ) {
         return power::map(points, proof, context, run);
     }

@@ -248,7 +248,9 @@ pub(crate) fn coefficient(
         }
         SensitivityRecipe::PositiveRoot
         | SensitivityRecipe::QuantityProduct
+        | SensitivityRecipe::QuantityQuotient
         | SensitivityRecipe::QuantityIntegerPower { .. }
+        | SensitivityRecipe::QuantityPositiveRoot
         | SensitivityRecipe::Solve { .. } => Err(SensitivityError::UnsupportedRecipe),
         SensitivityRecipe::Reciprocal => {
             let square = graph.term(Operator::Mul, &[coherent.clone(), coherent])?;
@@ -272,7 +274,9 @@ const fn kernel(
         SensitivityRecipe::Reciprocal => Ok(SensitivityKernel::Reciprocal { coordinate }),
         SensitivityRecipe::PositiveRoot
         | SensitivityRecipe::QuantityProduct
+        | SensitivityRecipe::QuantityQuotient
         | SensitivityRecipe::QuantityIntegerPower { .. }
+        | SensitivityRecipe::QuantityPositiveRoot
         | SensitivityRecipe::Solve { .. } => Err(SensitivityError::UnsupportedRecipe),
     }
 }

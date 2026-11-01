@@ -101,3 +101,70 @@ fn quantity_power_covariance_zero_point() -> TestResult {
     }
     Ok(())
 }
+
+/// Statistical moments cannot relax the strict scalar root domain.
+/// ´test:integration:quantity-root-covariance-domain-refusals´
+/// ´claim:matrix:quantity-root-covariance-domain-refusals´ Statistical roots refuse nonpositive and zero-touching complete boxes without publication, retain spent Work and accept a fresh strictly positive-box twin.
+#[test]
+fn quantity_root_covariance_domain_refusals() -> TestResult {
+    for (center, radius) in [(-1.0, 0.0), (0.0, 0.0), (1.0, 1.0)] {
+        let (context, mut heap, input) = fixture(center, radius)?;
+        let before = heap.provenance_usage();
+        let mut budget = Budget::new(Limits::default())?;
+        let Err(QuantityError::Execution(failure)) =
+            context.square_root(&mut heap, &input, &mut budget)
+        else {
+            panic!("nonpositive complete root box must refuse");
+        };
+        assert!(matches!(
+            failure.cause(),
+            nrz_matrix::OperationError::Kernel(nrz_matrix::KernelError::Quantity {
+                cause: nrz_scalar::KernelError::PositiveRoot,
+                ..
+            })
+        ));
+        assert_eq!(heap.provenance_usage(), before);
+        assert!(budget.usage().work > 0);
+        let (context, mut heap, input) = fixture(2.0, 0.25)?;
+        context.square_root(&mut heap, &input, &mut Budget::new(Limits::default())?)?;
+    }
+    Ok(())
+}
+
+/// Quotients retain the original separated-divisor obligation.
+/// ´test:integration:quantity-quotient-covariance-domain-refusals´
+/// ´claim:matrix:quantity-quotient-covariance-domain-refusals´ Statistical quotients reject zero-containing complete boxes atomically, retain spent Work and accept fresh boxes of either separated sign.
+#[test]
+fn quantity_quotient_covariance_domain_refusals() -> TestResult {
+    for (center, radius) in [(0.0, 0.0), (1.0, 1.0), (-1.0, 1.0)] {
+        let (context, mut heap, input) = fixture(center, radius)?;
+        let before = heap.provenance_usage();
+        let mut budget = Budget::new(Limits::default())?;
+        let Err(QuantityError::Execution(failure)) =
+            context.divide(&mut heap, &input, &input, &mut budget)
+        else {
+            panic!("zero-containing original divisor must refuse");
+        };
+        assert!(matches!(
+            failure.cause(),
+            nrz_matrix::OperationError::Kernel(nrz_matrix::KernelError::Quantity {
+                cause: nrz_scalar::KernelError::Arithmetic(
+                    nrz_scalar::ArithmeticFailure::ZeroInDivisor
+                ),
+                ..
+            })
+        ));
+        assert_eq!(heap.provenance_usage(), before);
+        assert!(budget.usage().work > 0);
+        for center in [-2.0, 2.0] {
+            let (context, mut heap, input) = fixture(center, 0.25)?;
+            context.divide(
+                &mut heap,
+                &input,
+                &input,
+                &mut Budget::new(Limits::default())?,
+            )?;
+        }
+    }
+    Ok(())
+}

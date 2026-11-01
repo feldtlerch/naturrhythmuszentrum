@@ -2,6 +2,8 @@
 //! Quantity coordinate derivatives retain physical originals and composed output measures.
 
 mod power;
+mod quotient;
+mod root;
 
 use super::{
     CheckedSensitivity, JacobianEntry, JacobianEvidence, SensitivityEntry, SensitivityError,

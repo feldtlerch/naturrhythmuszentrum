@@ -250,7 +250,9 @@ impl CheckedOperation {
                 Recipe::Quantity(_) => matches!(
                     contract.kind(),
                     crate::KernelKind::ScalarQuantityProduct
+                        | crate::KernelKind::ScalarQuantityQuotient
                         | crate::KernelKind::ScalarQuantityIntegerPower
+                        | crate::KernelKind::ScalarQuantitySquareRoot
                 ),
                 Recipe::Sum { .. }
                 | Recipe::Linear(_)

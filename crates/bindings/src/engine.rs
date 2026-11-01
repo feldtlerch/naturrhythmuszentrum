@@ -116,7 +116,35 @@ impl Context {
         keys: &[&str],
         ledger: &mut Budget,
     ) -> Result<Self, Fault> {
+        Self::quantity_environment(registry, keys, false, ledger)
+    }
+
+    /// Root proofs add only their one named scalar function to the exact environment.
+    pub(crate) fn quantity_root_context(
+        registry: Registry,
+        ledger: &mut Budget,
+    ) -> Result<Self, Fault> {
+        Self::quantity_environment(registry, &["x", "t"], true, ledger)
+    }
+
+    /// Admit the minimal fixed declarations without unrelated standard functions.
+    fn quantity_environment(
+        registry: Registry,
+        keys: &[&str],
+        root: bool,
+        ledger: &mut Budget,
+    ) -> Result<Self, Fault> {
         let mut environment = Environment::default();
+        if root {
+            environment.declarations.push(Declaration {
+                key: "sqrt".into(),
+                display_name: "sqrt".into(),
+                sort: Sort::Function {
+                    inputs: vec![AtomicSort::Scalar(Field::Real)],
+                    output: AtomicSort::Scalar(Field::Real),
+                },
+            });
+        }
         for key in keys {
             environment.declarations.push(Declaration {
                 key: (*key).into(),
