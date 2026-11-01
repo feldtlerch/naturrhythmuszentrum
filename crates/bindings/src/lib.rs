@@ -81,12 +81,12 @@ pub use constants::{
     ReferenceDefinition,
 };
 pub use decision::{
-    AxisPhaseAttempt, AxisPhaseAttempts, AxisPhaseCase, AxisPhaseOutcome, AxisPhaseSpec,
-    CountDescriptor, CountEvidence, DecisionAttachment, DecisionCoordinate, DecisionError,
-    DecisionExpression, DecisionInputs, DecisionOperand, IntegerDecisionCase, IntegerDecisionSpec,
-    LatticeAttachment, LatticeAxis, LatticeCoordinate, LatticeDecisionCase, LatticeDecisionSpec,
-    LatticeIndexKind, LatticeInputs, LatticeMetric, LatticePreparationUsage, LatticeSite,
-    SelectedDecision, SelectedLattice,
+    AxisPhaseAttempt, AxisPhaseAttempts, AxisPhaseCase, AxisPhaseImpedance, AxisPhaseOutcome,
+    AxisPhaseSpec, CountDescriptor, CountEvidence, DecisionAttachment, DecisionCoordinate,
+    DecisionError, DecisionExpression, DecisionInputs, DecisionOperand, IntegerDecisionCase,
+    IntegerDecisionSpec, LatticeAttachment, LatticeAxis, LatticeCoordinate, LatticeDecisionCase,
+    LatticeDecisionSpec, LatticeIndexKind, LatticeInputs, LatticeMetric, LatticePreparationUsage,
+    LatticeSite, SelectedDecision, SelectedLattice,
 };
 pub use declaration::{Companion, Context, Declaration, Evidence, FunctionSignature, Observable};
 pub use descriptor::{Descriptor, Role, uncertainty};

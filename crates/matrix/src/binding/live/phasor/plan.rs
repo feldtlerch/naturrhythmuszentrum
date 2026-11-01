@@ -41,6 +41,31 @@ impl<P: Scalar> PhasorOperand<P> {
     }
 }
 
+impl<P: Scalar + 'static> PhasorOperand<P> {
+    /// Capture both repeated components and all original per-copy radius channels.
+    pub(crate) fn axis_coordinates(
+        &self,
+        heap: &Heap,
+        budget: &mut Budget,
+    ) -> Result<([[P; 3]; 4], crate::Coverage), PhasorError> {
+        heap.validate_reading(self.whole())?;
+        for copy in self.copies() {
+            heap.validate_reading(copy)?;
+        }
+        let (values, coverage) = input::capture(heap, self, budget)?;
+        Ok((
+            std::array::from_fn(|index| {
+                [
+                    values.centers[index],
+                    values.totals[index],
+                    values.errors[index],
+                ]
+            }),
+            coverage,
+        ))
+    }
+}
+
 /// Exact correspondence and complete ordered source inventory prepared before execution.
 #[derive(Clone, Debug)]
 pub struct PhasorProduct<P: Scalar>(Rc<Plan<P>>);

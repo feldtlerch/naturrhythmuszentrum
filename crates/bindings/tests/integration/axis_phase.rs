@@ -39,6 +39,7 @@ fn bindings_lc_axis_phase_outcomes() -> TestResult {
                 result.phase(),
                 Some(&source.case.phases()[usize::from(expected == AxisPhaseOutcome::Positive)])
             );
+            exact_phase(&source, &result, expected == AxisPhaseOutcome::Positive)?;
             let reciprocal = result.reciprocal().ok_or("original reciprocal discharge")?;
             assert!(reciprocal.is_discharged());
             assert!(!reciprocal.is_unconditional());
@@ -110,5 +111,29 @@ fn bindings_lc_axis_phase_original_refusals() -> TestResult {
         attempts.attempt(&enclosure(&source, "-301/4", "-299/4")?, &mut ledger()?),
         Err(DecisionError::Attempts)
     ));
+    Ok(())
+}
+
+/// Independent constant construction checks the exact selected expression, not only its handle.
+fn exact_phase(
+    source: &fixture::Fixture,
+    result: &nrz_bindings::AxisPhaseAttempt,
+    positive: bool,
+) -> TestResult {
+    use nrz_bindings::readings::algebra::{ExactConstant, Rational, syntax::Constant};
+    let mut budget = ledger()?;
+    let graph = source.graph.lock().map_err(|_| "graph poisoned")?;
+    let actual =
+        ExactConstant::from_expression(&graph, result.phase().ok_or("exact phase")?, &mut budget)?;
+    drop(graph);
+    let pi = ExactConstant::named(Constant::Pi, &mut budget)?;
+    let two = Rational::from_ratio(2, 1, &mut budget)?;
+    let expected = pi.div(&ExactConstant::from(two), &mut budget)?;
+    let expected = if positive {
+        expected
+    } else {
+        expected.negated(&mut budget)?
+    };
+    assert_eq!(actual, expected);
     Ok(())
 }

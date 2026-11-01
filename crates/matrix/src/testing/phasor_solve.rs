@@ -147,12 +147,45 @@ pub(crate) fn case_in_heap<P: Scalar + 'static>(
     reactance: P,
     radius: P,
     rounded: bool,
+    heap: Heap,
+    budget: &mut Budget,
+) -> TestResult<Case<P>> {
+    build(reactance, radius, rounded, heap, None, budget)
+}
+
+/// The fixed LC source retains the same original complete copy and companion declarations.
+pub(crate) fn fixed_case<P: Scalar + 'static>(
+    reactance: i64,
+    radius: P,
+    rounded: bool,
+    budget: &mut Budget,
+) -> TestResult<Case<P>> {
+    let represented = P::parse_nearest(&reactance.to_string()).ok_or("reactance literal")?;
+    build(
+        represented,
+        radius,
+        rounded,
+        Heap::new(HeapLimits::default())?,
+        Some(reactance),
+        budget,
+    )
+}
+
+/// Existing varying cases keep their original declaration graph and operation schedule.
+fn build<P: Scalar + 'static>(
+    reactance: P,
+    radius: P,
+    rounded: bool,
     mut heap: Heap,
+    fixed: Option<i64>,
     budget: &mut Budget,
 ) -> TestResult<Case<P>> {
     let mut fixture = declarations::fixture()?;
-    let (adapters, relations, current, coverage, companions) =
-        declarations::readings(&mut fixture)?;
+    let (adapters, relations, current, coverage, companions) = if fixed.is_some() {
+        declarations::readings_fixed(&mut fixture, fixed)?
+    } else {
+        declarations::readings(&mut fixture)?
+    };
     let registry = declarations::registry(&adapters, &current)?;
     let law = nrz_bindings::readings::PhasorBlockCorrespondence::prove(
         &mut fixture.cas,

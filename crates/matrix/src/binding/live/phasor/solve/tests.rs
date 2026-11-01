@@ -215,3 +215,26 @@ fn phasor_solve_refuses_uncovered_fixed_components() -> TestResult {
     );
     Ok(())
 }
+
+/// A source-free original zero impedance remains observable and still refuses the existing solve.
+/// ´test:unit:phasor-fixed-zero-keeps-original-domain-guard´
+#[test]
+fn phasor_fixed_zero_keeps_original_domain_guard() -> TestResult {
+    let mut case = fixture::fixed_case(0, 0.0_f64, false, &mut fixture::budget()?)?;
+    assert!(case.definition.fixed_inputs()[0].iter().all(|value| {
+        value
+            .as_ref()
+            .is_some_and(nrz_bindings::readings::algebra::Rational::is_zero)
+    }));
+    let publication = case.publication(&mut fixture::budget()?)?;
+    assert!(matches!(
+        case.heap.publish_phasor_solve(
+            &publication,
+            &ArithmeticContext::new()?,
+            &mut fixture::budget()?
+        ),
+        Err(crate::PhasorError::ZeroImpedance)
+    ));
+    assert_eq!(case.heap.reading_entries(&case.bindings[0])?, vec![0.0; 4]);
+    Ok(())
+}

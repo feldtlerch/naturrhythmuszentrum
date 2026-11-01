@@ -27,6 +27,9 @@ pub enum DecisionSnapshotError {
     /// Caller Work or payload allowance was exhausted.
     #[error("decision snapshot resources: {0}")]
     Resources(#[from] Fault),
+    /// Complete phasor source, selected-copy or companion admission refused.
+    #[error("decision phasor input: {0}")]
+    Phasor(Box<crate::PhasorError>),
     /// This receiving subset requires scalar native inputs and both radius channels.
     #[error("decision snapshot requires native scalar inputs with total and numerical radii")]
     Unsupported,

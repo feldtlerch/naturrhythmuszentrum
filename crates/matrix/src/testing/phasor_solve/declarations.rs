@@ -65,6 +65,11 @@ fn inventory() -> Vec<(String, Sort)> {
 
 /// Independent original reactance/voltage families and one fresh two-coordinate current slot.
 pub(super) fn readings(fixture: &mut Fixture) -> TestResult<Inventory> {
+    readings_fixed(fixture, None)
+}
+
+/// A source-free original reactance is fixed in the complete affine family, before numerical import.
+pub(super) fn readings_fixed(fixture: &mut Fixture, fixed: Option<i64>) -> TestResult<Inventory> {
     let mut adapters = Vec::new();
     let mut relations = Vec::new();
     for (region, prefix, dimensions, coefficients) in [
@@ -72,7 +77,12 @@ pub(super) fn readings(fixture: &mut Fixture) -> TestResult<Inventory> {
         (1, "voltage", [2, 1, -3, -1, 0, 0, 0], [1, 0, 0, 1]),
     ] {
         let entry = meaning(prefix, dimensions)?;
-        let representation = block(fixture, prefix, entry, 1, &coefficients)?;
+        let (coefficients, offsets) = fixed
+            .filter(|_| region == 0)
+            .map_or((coefficients, [0; 4]), |value| {
+                ([0; 4], [0, value, -value, 0])
+            });
+        let representation = block(fixture, prefix, entry, 1, &coefficients, &offsets)?;
         let whole = representation.reading().clone();
         adapters.push(ReadingAdapter::new(
             representation,
@@ -94,6 +104,7 @@ pub(super) fn readings(fixture: &mut Fixture) -> TestResult<Inventory> {
         meaning("current", [0, 0, 0, 1, 0, 0, 0])?,
         2,
         &[1, 0, 0, 1, 0, -1, 1, 0],
+        &[0; 4],
     )?;
     let whole = current.reading();
     let mut outputs = vec![ReadingAdapter::new(
@@ -117,6 +128,7 @@ fn block(
     entry: EntryMeaning,
     width: u32,
     coefficients: &[i64],
+    offsets: &[i64],
 ) -> TestResult<Representation> {
     let root = CoordinateFamily::new(
         &fixture.cas,
@@ -129,7 +141,7 @@ fn block(
     let family = root.expand(
         &mut fixture.cas,
         &symbol,
-        &map(width, 4, coefficients, &[0; 4])?,
+        &map(width, 4, coefficients, offsets)?,
         vec![entry.clone(); 4],
         &mut ledger()?,
     )?;

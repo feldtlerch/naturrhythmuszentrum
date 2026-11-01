@@ -140,7 +140,9 @@ mod publication;
 mod records;
 
 pub use provenance::{ProvenanceId, ProvenanceLimits, ProvenanceUsage, ProvenanceView};
-pub use publication::Candidate;
+pub use publication::{
+    AxisPhasePlan, Candidate, FrozenAxisPhaseInput, PreparedAxisPhase, PublishedAxisPhase,
+};
 pub use records::{
     BundleTargetMap, CopyEvidence, Dependency, Failure, FailureRecord, OperationRecord, Outcome,
     OutputRecord, RecordId,

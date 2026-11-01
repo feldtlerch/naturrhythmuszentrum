@@ -2,6 +2,8 @@
 //! Closed original reactance questions retain exact axis branches and reciprocal guards.
 
 mod declaration;
+mod impedance;
+pub use impedance::AxisPhaseImpedance;
 mod proof;
 mod syntax;
 

@@ -45,6 +45,12 @@ pub enum LiveDecisionError {
     /// The entire frozen numerical result does not fit the certified original enclosure.
     #[error("live decision box exceeds the certified original enclosure")]
     Enclosure,
+    /// Proved zero has no phase and refuses its reciprocal continuation.
+    #[error("phase is undefined at proved zero")]
+    UndefinedPhase,
+    /// No uniform sign or singleton zero was established for the entire box.
+    #[error("axis phase remains undecided")]
+    UndecidedPhase,
     /// This live authority and every dependent descriptor or lowering have been retired.
     #[error("live decision attachment is retired")]
     Retired,

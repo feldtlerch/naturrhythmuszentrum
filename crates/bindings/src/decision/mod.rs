@@ -4,7 +4,8 @@
 mod association;
 mod axis;
 pub use axis::{
-    AxisPhaseAttempt, AxisPhaseAttempts, AxisPhaseCase, AxisPhaseOutcome, AxisPhaseSpec,
+    AxisPhaseAttempt, AxisPhaseAttempts, AxisPhaseCase, AxisPhaseImpedance, AxisPhaseOutcome,
+    AxisPhaseSpec,
 };
 mod case;
 mod count;
