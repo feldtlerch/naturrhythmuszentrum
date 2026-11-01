@@ -104,7 +104,7 @@ impl Cas {
     pub(crate) fn publish_staged_judgments(
         &mut self,
         pending: &mut Vec<PendingJudgment>,
-        budget: &Budget,
+        budget: &mut Budget,
     ) -> Result<u64, Fault> {
         if pending.is_empty() {
             return Ok(0);
@@ -196,7 +196,7 @@ fn preflight(
     pending: &[PendingJudgment],
     count: usize,
     bytes: u64,
-    budget: &Budget,
+    budget: &mut Budget,
 ) -> Result<(), Fault> {
     let count = size(count, AT)?;
     let nodes = size(cas.state.graph.node_count(), AT)?.saturating_add(count);
@@ -241,7 +241,8 @@ fn preflight(
                 }
                 let total = cas.state.judgment_bytes.saturating_add(bytes);
                 budget.check(BudgetKind::OutputBytes, total, AT)?;
-                budget.check(BudgetKind::StagedPayloadBytes, total, AT)?;
+                let unregistered = cas.judgment_reservation(total, budget, AT)?;
+                budget.check(BudgetKind::StagedPayloadBytes, unregistered, AT)?;
             }
             PendingJudgment::RecheckedEnclosure(id) => {
                 cas.enclosure_inventory(*id)?;

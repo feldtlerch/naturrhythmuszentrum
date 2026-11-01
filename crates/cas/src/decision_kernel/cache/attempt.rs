@@ -53,24 +53,23 @@ where
 }
 
 /// Only preflight is fallible; committing the moved payload cannot expose a failed prefix.
-fn publish(cas: &mut Cas, budget: &Budget) -> Result<(), Fault> {
+fn publish(cas: &mut Cas, budget: &mut Budget) -> Result<(), Fault> {
     let cache = cas
         .receipt_records
         .get_mut()
         .map_err(|_| Fault::invalid(crate::error::InvalidCode::Reference, super::AT))?;
     let mut pending = std::mem::take(&mut cache.pending);
+    let bytes = std::mem::take(&mut cache.bytes);
     let result = cas.publish_staged_judgments(&mut pending, budget);
     // Exclusive access and the successful poison check above preclude a new poison here.
     let cache = cas
         .receipt_records
         .get_mut()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    match result {
-        Ok(bytes) => cache.bytes = cache.bytes.saturating_sub(bytes),
-        Err(fault) => {
-            cache.pending = pending;
-            return Err(fault);
-        }
+    if let Err(fault) = result {
+        cache.pending = pending;
+        cache.bytes = bytes;
+        return Err(fault);
     }
     Ok(())
 }

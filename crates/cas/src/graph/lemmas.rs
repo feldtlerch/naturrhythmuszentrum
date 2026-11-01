@@ -125,6 +125,29 @@ impl Cas {
         self.state.judgment_bytes
     }
 
+    /// Reuse a present caller registration, otherwise preserve the standalone reservation.
+    pub(crate) fn judgment_reservation(
+        &self,
+        bytes: u64,
+        budget: &mut Budget,
+        at: Location,
+    ) -> Result<u64, Fault> {
+        let pending = self
+            .receipt_records
+            .lock()
+            .map_err(|_| Fault::invalid(InvalidCode::Reference, at))?
+            .pending_bytes();
+        if budget.refresh_judgment_reservation(
+            &self.memo_owner,
+            bytes.saturating_add(pending),
+            at,
+        )? {
+            Ok(0)
+        } else {
+            Ok(bytes)
+        }
+    }
+
     /// Authenticate original scope before probing the graph's complete canonical index.
     pub(crate) fn prepare_constant_node(
         &mut self,
@@ -155,17 +178,18 @@ impl Cas {
                     u64::from(size(self.retained_judgment_count(), AT)?.bit_width().max(1)),
                     AT,
                 )?;
-                retained(self.state.judgment_bytes, budget)?;
                 self.constant_preparation(id)?;
+                retained(self, self.state.judgment_bytes, budget)?;
                 return Ok(id);
             }
         }
-        let value = budget.with_retained_payload(self.state.judgment_bytes, AT, |budget| {
+        let reserved = self.judgment_reservation(self.state.judgment_bytes, budget, AT)?;
+        let value = budget.with_retained_payload(reserved, AT, |budget| {
             ExactConstant::from_expression(self, original, budget)
         })?;
         if let Some(id) = existing {
-            retained(self.state.judgment_bytes, budget)?;
             self.constant_preparation(id)?;
+            retained(self, self.state.judgment_bytes, budget)?;
             let index = self.state.indices[&id];
             let Vertex::AnonymousLemma(node) = &mut self.state.graph[index] else {
                 return Err(invalid(InvalidCode::Reference));
@@ -179,7 +203,11 @@ impl Cas {
         }
         let bytes = crate::exact_constant::preparation_bytes(&value)?;
         let prepared = PreparedConstant::checked(original.clone(), context.clone(), value);
-        self.with_state(|cas, state| publish(cas, state, prepared, key, bytes, budget))
+        self.with_state(|cas, state| {
+            crate::decision_kernel::cache::atomic(cas, budget, |budget| {
+                publish(cas, state, prepared, key, bytes, budget)
+            })
+        })
     }
 
     /// Borrow the actual graph payload only after authenticating its checked evidence edge.
@@ -225,9 +253,10 @@ fn constant_key(context: LogicalId, original: LogicalId) -> Vec<u8> {
 }
 
 /// Retained node payload is charged once beside the caller's unrelated live bytes.
-fn retained(bytes: u64, budget: &Budget) -> Result<(), Fault> {
+fn retained(cas: &Cas, bytes: u64, budget: &mut Budget) -> Result<(), Fault> {
     budget.check(BudgetKind::OutputBytes, bytes, AT)?;
-    budget.check(BudgetKind::StagedPayloadBytes, bytes, AT)
+    let unregistered = cas.judgment_reservation(bytes, budget, AT)?;
+    budget.check(BudgetKind::StagedPayloadBytes, unregistered, AT)
 }
 
 /// Preflight every fallible bound before the graph takes ownership of a checked judgment.
@@ -237,10 +266,10 @@ fn publish(
     constant: PreparedConstant,
     key: Vec<u8>,
     bytes: u64,
-    budget: &Budget,
+    budget: &mut Budget,
 ) -> Result<LogicalId, Fault> {
     let total = state.judgment_bytes.saturating_add(bytes);
-    retained(total, budget)?;
+    retained(cas, total, budget)?;
     let payload = state.payload.saturating_add(bytes);
     storage_check(&cas.limits, budget, BudgetKind::PayloadBytes, payload, AT)?;
     let nodes = size(state.graph.node_count(), AT)?.saturating_add(1);
@@ -300,3 +329,6 @@ fn publish(
 const fn invalid(code: InvalidCode) -> Fault {
     Fault::invalid(code, AT)
 }
+
+#[cfg(test)]
+mod tests;

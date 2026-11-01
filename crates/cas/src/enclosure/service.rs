@@ -127,6 +127,16 @@ fn evaluate(
     Ok(report)
 }
 
+/// Only unregistered graph payload needs an additional temporary scratch reservation.
+fn retained_request(
+    cas: &Cas,
+    request: &EnclosureRequest,
+    budget: &mut Budget,
+) -> Result<u64, Fault> {
+    let bytes = cas.judgment_reservation(cas.retained_judgment_bytes(), budget, AT)?;
+    Ok(bytes.saturating_add(super::request_bytes(request)))
+}
+
 /// Check and retain an externally supplied transcript under the expected request.
 fn replay(
     cas: &mut Cas,
@@ -148,9 +158,7 @@ fn replay(
     let attempt = cas.transaction(budget, |cas, budget| {
         boundary(budget, interrupt)?;
         analytic_policy(certificate, policy, budget)?;
-        let retained = cas
-            .retained_judgment_bytes()
-            .saturating_add(super::request_bytes(request));
+        let retained = retained_request(cas, request, budget)?;
         let checked = budget.with_retained_payload(
             retained.saturating_add(super::certificate_bytes(certificate)),
             AT,
@@ -380,10 +388,8 @@ fn round(
         }
         let reserved = super::receipt_reservation(cas, request, scope.len(), budget)?;
         budget.check(BudgetKind::OutputBytes, reserved, AT)?;
+        let retained = retained_request(cas, request, budget)?;
         let previous = budget.reserve_enclosure_checking(policy.checking_work);
-        let retained = cas
-            .retained_judgment_bytes()
-            .saturating_add(super::request_bytes(request));
         let generated =
             budget.with_retained_payload(retained.saturating_add(reserved), AT, |budget| {
                 super::producer::generate_planned(
@@ -398,6 +404,7 @@ fn round(
             });
         budget.restore_limits(previous);
         let certificate = generated?;
+        let retained = retained_request(cas, request, budget)?;
         let checked = budget.with_retained_payload(
             retained.saturating_add(super::certificate_bytes(&certificate)),
             AT,

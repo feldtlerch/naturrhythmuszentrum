@@ -40,6 +40,11 @@ pub(crate) struct Cache {
 }
 
 impl Cache {
+    /// Unpublished payload remains live beside separately published graph judgments.
+    pub(crate) const fn pending_bytes(&self) -> u64 {
+        self.bytes
+    }
+
     /// Expired checked judgments cannot retain reusable authority or storage.
     pub(crate) fn clear(&mut self) {
         self.pending = Vec::new();

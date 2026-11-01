@@ -1063,21 +1063,21 @@ fn enclosure_staged_publication() -> TestResult {
         .cas
         .stage_enclosure(second_key, second, &mut ledger()?)?;
     let mut pending = vec![first, second];
-    let one = Budget::new(Limits {
+    let mut one = Budget::new(Limits {
         vertices: fixture.cas.counts().vertices as u64 + 1,
         ..Limits::default()
     })?;
     assert!(
         fixture
             .cas
-            .publish_staged_judgments(&mut pending, &one)
+            .publish_staged_judgments(&mut pending, &mut one)
             .is_err()
     );
     assert_eq!(pending.len(), 2);
     assert_eq!(fixture.cas.canonical_snapshot(&mut ledger()?)?, before);
     fixture
         .cas
-        .publish_staged_judgments(&mut pending, &ledger()?)?;
+        .publish_staged_judgments(&mut pending, &mut ledger()?)?;
     assert!(pending.is_empty());
     assert_eq!(fixture.cas.retained_judgment_count(), 2);
     assert!(

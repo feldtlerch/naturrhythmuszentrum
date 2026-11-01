@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use super::AT;
 use crate::budget::{Budget, BudgetKind};
-use crate::error::Fault;
+use crate::error::{Fault, Location};
 use crate::graph::{Cas, size};
 
 /// Conservative reservations survive later operations on the same cumulative ledger.
@@ -48,6 +48,39 @@ impl Accounting {
                 .into_vec();
             self.bytes -= bytes.saturating_add(64);
         }
+    }
+}
+
+impl Budget {
+    /// Refresh an existing owner reservation without adding the same graph payload twice.
+    /// Every visited registration is charged before its owner is compared.
+    pub(crate) fn refresh_judgment_reservation(
+        &mut self,
+        owner: &Arc<()>,
+        bytes: u64,
+        at: Location,
+    ) -> Result<bool, Fault> {
+        for index in 0..self.checked_records.entries.len() {
+            self.work(1, at)?;
+            let (entry, old) = &self.checked_records.entries[index];
+            if !Arc::ptr_eq(entry, owner) {
+                continue;
+            }
+            let old = *old;
+            self.check(
+                BudgetKind::StagedPayloadBytes,
+                bytes.saturating_sub(old),
+                at,
+            )?;
+            self.checked_records.entries[index].1 = bytes;
+            self.checked_records.bytes = self
+                .checked_records
+                .bytes
+                .saturating_sub(old)
+                .saturating_add(bytes);
+            return Ok(true);
+        }
+        Ok(false)
     }
 }
 

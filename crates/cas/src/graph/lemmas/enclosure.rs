@@ -2,7 +2,7 @@
 //! Enclosure receipts join the shared staged anonymous-judgment publication path.
 
 use super::{AnonymousLemma, Cas, Edge, EdgeIndex, LogicalId, PendingJudgment, Vertex, VertexKind};
-use crate::budget::{Budget, BudgetKind};
+use crate::budget::Budget;
 use crate::enclosure::CheckedEnclosure;
 use crate::error::{Fault, InvalidCode, Location};
 use crate::graph::size;
@@ -68,7 +68,7 @@ impl Cas {
         {
             return Ok(None);
         }
-        retained(self.state.judgment_bytes, budget)?;
+        super::retained(self, self.state.judgment_bytes, budget)?;
         Ok(Some(&node.inventory.value))
     }
 
@@ -88,7 +88,7 @@ impl Cas {
             {
                 return Err(Fault::invalid(InvalidCode::ReuseKeyMismatch, AT));
             }
-            retained(self.state.judgment_bytes, budget)?;
+            super::retained(self, self.state.judgment_bytes, budget)?;
             return Ok(PendingJudgment::RecheckedEnclosure(id));
         }
         let scope = [
@@ -188,12 +188,6 @@ pub(super) fn append(cas: &mut Cas, inventory: EnclosureInventory) {
     state.payload = state.payload.saturating_add(bytes);
     state.judgment_bytes = state.judgment_bytes.saturating_add(bytes);
     state.judgment_count += 1;
-}
-
-/// Preserve the complete retained-payload ceilings on reuse and revalidation.
-fn retained(bytes: u64, budget: &Budget) -> Result<(), Fault> {
-    budget.check(BudgetKind::OutputBytes, bytes, AT)?;
-    budget.check(BudgetKind::StagedPayloadBytes, bytes, AT)
 }
 
 /// Missing payloads or evidence edges cannot authorize reuse.
