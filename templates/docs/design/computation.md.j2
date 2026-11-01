@@ -180,6 +180,12 @@ An illustrative invalid-binding variant changes only the gain-2 row to reference
 
 ## Implementation evidence · `sec:nrz:computation-implementation-evidence`
 
+**Observation (LC plan implementation boundary)** · `obs:nrz:computation-lc-plan-baseline`
+
+The current LC components implement checked individual operations, live symbol bindings, a bounded reciprocal invariant cache and reusable operator factors. The cache requires the caller to identify fixed inputs; it does not classify graph dependencies or schedule a batch. Its three-point fixture shares one coefficient publication across separately certified right-hand sides, isolates a changed right-hand side and invalidates all actual consumers after a shared L/C or companion change (`[MATRIX-test:integration:lc-grid-isolates-one-rhs-replacement]`), (`[MATRIX-test:integration:lc-grid-invalidates-all-source-and-companion-consumers]`). Factor reuse retains fresh solve evidence for each right-hand side (`[MATRIX-test:integration:lc-acceptance-factor-reuse-retains-original-dependencies]`). These are component evidence for (`rule:nrz:computation-cache-validity`), not an implementation of the immutable multi-node plan and binding-family scheduler defined here.
+
+The general execution inventory combines covered factor, solve, reciprocal and statistical allocation events within its own binding transaction. Native phasor, spectral, frequency, phase and source-composition owners retain separate scopes; conservative payload ceilings and backend reservations are not observed allocator capacities. The grid's scoped consumer receipts do not establish an aggregate LC attempt or simultaneous batch peak (`[MATRIX-test:integration:lc-grid-consumer-resource-owners]`). Whole-plan scheduling, complete row and continuation tables, and ownership of the allocations outside those scopes remain obligations of (`step:nrz:lc-resonance-physics-bite`).
+
 **Requirement (Computation implementation evidence)** · `req:nrz:computation-implementation-evidence`
 
 Implementation must demonstrate safe lifetime and access checks for foreign/stale handles, slot and arena reuse, exhausted versions, relocation, signed and strided maps, empty and ragged regions, integer overflow, overlapping outputs and copy-back. It must demonstrate alias-aware invalidation after center, descriptor, measure, precision, source and companion changes, preserving exact logical entry maps and independent companion shapes. Tests compare equivalent compatible layouts without asserting unmeasured allocation or throughput benefits.
