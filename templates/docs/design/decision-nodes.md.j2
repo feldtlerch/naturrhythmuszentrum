@@ -236,6 +236,14 @@ Take a nominal exact target a=−3/2, b=3/8 in the declared normalized coordinat
 
 With the same negative a interval and b∈`[−1/8,1/8]`, the enclosure meets both sides and the owned cut; the result is undecided, not a center-based choice of pi. A proved singleton b=0 with negative a selects the owned negative-axis value pi, but supplies no analytic neighborhood across the cut. The exact origin selects undefined phase and blocks angle consumers. Changing either component or its bound retires the selected chart. In the LC specialization z=i*X, exact a=0 and X∈`[299/4,301/4]` selects the upper imaginary axis and exactly pi/2 rad; the negative twin selects −pi/2 rad, while an X box straddling zero stays undecided (`rule:nrz:lc-resonance-phasor-domains`).
 
+**Rule (Declared LC axis-phase continuations)** · `rule:nrz:decision-lc-axis-continuations`
+
+Before reading the LC reactance, declare the original normalized coordinate x=X/(1 ohm), its negative/zero/positive partition, the phase and reciprocal continuations and the undecided outcome. Retain the original X expression, positive L/C and frequency-domain premises, exact maps, source identities and total/numerical enclosure scope. Certified negative membership selects exactly −π/2 rad; certified positive membership selects exactly +π/2 rad. The angle is a difference in the declared principal argument interval (−π,π], and its numerical enclosure consumes the existing certified π route. A proved zero selects undefined phase and reciprocal-domain refusal; a box meeting zero without a uniform sign or zero proof stays undecided. No center sign, symbolic NonZero(x) premise over a zero-containing numerical box, or default angle zero selects a continuation. General atan2 and trigonometric enclosures are separate from this exact axis law (`ex:nrz:decision-phase-boundaries`), (`ex:nrz:decision-nonzero-refusals`).
+
+**Convention (Argument cut and lattice ties remain distinct)** · `conv:nrz:decision-phase-cut-ownership`
+
+In the seven-chart phase question, a proved negative real axis belongs to +π in (−π,π]; an enclosure crossing that cut stays undecided. The LC imaginary-axis specialization never uses this negative-real-axis branch. The lattice nearest representative instead owns [−π,π) and sends an exact +π tie to −π under its greater-index rule. A continuation retains which question and convention was declared; it cannot borrow the other question's tie ownership (`ex:nrz:decision-phase-chart`), (`rule:nrz:lattice-orthogonal-nearest`).
+
 **Example (A sign discharges the original nonzero premise)** · `ex:nrz:decision-nonzero`
 
 For the LC driven relation at omega=1000 rad/s, retain X=(omega/radian)*L−1/((omega/radian)*C) and Z=i*X, with the original positive L,C and frequency-domain premises (`def:nrz:lc-resonance-model`). The exact reference gives X=−75 ohm (`assum:nrz:lc-resonance-reference-inputs`). Bindings checks the original operands and binds x=X/(1 ohm) as a Real normalized coordinate; the requested reciprocal has its original NonZero(x) obligation. It declares negative, zero and positive regions, their respective downstream recipes and undecided before evaluating x.
@@ -247,6 +255,14 @@ Suppose the certified heap x snapshot has center −75 and total radius 1/4, giv
 **Example (Reciprocal refusal and stale sign evidence)** · `ex:nrz:decision-nonzero-refusals`
 
 A box `[−1/4,1/4]` returns undecided and leaves NonZero(x) open; a proved singleton {0} selects zero and the declared reciprocal-domain refusal. An existing symbolic nonzero premise alone does not make a zero-containing box safe for numerical reciprocal. If only the bound changes so it reaches zero, the negative attachment, discharged use and derived reciprocal result all become stale even if the stored center remains −75. An independent impedance output may remain usable under its own checked numerical contract, while the reciprocal continuation is blocked.
+
+**Rule (LC sign consumers retain guards and live authority)** · `rule:nrz:decision-lc-sign-lifetime`
+
+The reciprocal continuation discharges exactly its original NonZero(x) premise with the checked strict-sign consequence, retaining the original question, source/model assumptions and qualified membership. Its numerical kernel still checks the whole current operand box excludes zero and certifies the reciprocal enclosure. The sign attachment, phase output and discharged reciprocal use share the complete source, map, case, arithmetic/policy and companion-version closure. A source-only write, including equal center bytes, or a radius-only write retires every dependent continuation. Historical mathematical witnesses remain inspectable but supply no current heap authority. Undefined, undecided and refused dependents preserve successful impedance and independent spectrum outputs under their own unchanged dependencies (`ex:nrz:decision-nonzero-discharge`), (`rule:nrz:decision-invalidation`).
+
+**Requirement (LC sign attempt and publication limits)** · `req:nrz:decision-lc-sign-limits`
+
+Every attempt, failed cut, exact proof, π materialization or reuse and final publication consumes the caller's cumulative allowance; a retry cannot reset spent Work. Declare a finite maximum attempt count and preserve attempted boxes, original question, assumptions and usage when the result remains undecided. Admit and publish a complete selected continuation atomically after a final dependency check; a late resource refusal exposes no selected prefix. Evidence must cover f32/f64 below/above/resonance and zero-straddling twins, applicable negative-axis ownership, original nonzero discharge with unsafe numerical reciprocals still refused, source-only and radius-only retirement, and literal N/N−1 attempt/Work/staged/output limits with already consumed prefixes. Pins are measured on the lane seed without raising any limit or default (`req:nrz:decision-lifecycle-measurements`).
 
 ## Implementation obligations and verification · `sec:nrz:decision-delivery`
 
@@ -297,7 +313,7 @@ Owner: future `nrz-physics`, `nrz-matrix`. Contract to deliver: Stable per-point
 
 **Requirement (LC quantity consumers)** · `req:nrz:decision-owner-lc-quantities`
 
-Owner: `nrz-bindings`, `nrz-matrix`, `nrz-scalar`. Contract to deliver: The LC-quantities step (`step:nrz:lc-resonance-quantity-bite`) uses declared sign/phase decisions, exact count descriptors and certified constant/angle recipes without weakening numerical guards (`rule:nrz:lc-resonance-quantity-lowering`). Required verification and minimal failing case: The cycle, phase-cut and reciprocal examples pass independently; a zero-straddling reactance never becomes phase zero or a nonzero reciprocal premise.
+Owner: `nrz-bindings`, `nrz-matrix`, `nrz-scalar`. Contract to deliver: The LC-quantities step (`step:nrz:lc-resonance-quantity-bite`) uses declared sign/phase decisions, exact count descriptors and certified constant/angle recipes without weakening numerical guards (`rule:nrz:lc-resonance-quantity-lowering`). The bounded sign consumer predeclares exact axis branches, undefined and undecided outcomes, original reciprocal discharge and their complete live authority (`rule:nrz:decision-lc-axis-continuations`), (`rule:nrz:decision-lc-sign-lifetime`); general atan2 remains separate. Required verification and minimal failing case: The cycle, phase-cut and reciprocal examples pass independently; a zero-straddling reactance never becomes phase zero or a nonzero reciprocal premise. Exercise the explicit argument/lattice convention boundary and cumulative limits with consumed prefixes (`conv:nrz:decision-phase-cut-ownership`), (`req:nrz:decision-lc-sign-limits`).
 
 **Requirement (LC plans and reproducibility)** · `req:nrz:decision-owner-lc-plans`
 
