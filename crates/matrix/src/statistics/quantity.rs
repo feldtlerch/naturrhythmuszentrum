@@ -11,7 +11,9 @@ use crate::{CheckedOperation, Extent, KernelKind, OperationError, binding::Nativ
 use nrz_bindings::{
     Budget, CheckedSensitivity, SensitivityError, SensitivityKernel, SensitivityRecipe,
 };
-use nrz_scalar::Scalar;
+use nrz_scalar::{ArithmeticContext, Scalar};
+
+mod power;
 use std::rc::Rc;
 
 /// Prepare or reuse the exact derivative while every symbolic phase shares caller Work.
@@ -24,14 +26,28 @@ pub(crate) fn prepare(
         validate(operation, &proof)?;
         return Ok(proof);
     }
-    let [left, right] = operation.inputs() else {
-        return Err(StatisticsError::Contract.into());
-    };
-    let proof = CheckedSensitivity::quantity_product(
-        left.shape().declarations().registry(),
-        [left.descriptor(), right.descriptor()],
-        budget,
-    )
+    let inputs = operation.inputs();
+    let first = inputs.first().ok_or(StatisticsError::Contract)?;
+    let registry = first.shape().declarations().registry();
+    let proof = match recipe(operation)? {
+        SensitivityRecipe::QuantityProduct => CheckedSensitivity::quantity_product(
+            registry,
+            [
+                first.descriptor(),
+                inputs.get(1).ok_or(StatisticsError::Contract)?.descriptor(),
+            ],
+            budget,
+        ),
+        SensitivityRecipe::QuantityIntegerPower { exponent } => {
+            CheckedSensitivity::quantity_integer_power(
+                registry,
+                first.descriptor(),
+                exponent,
+                budget,
+            )
+        }
+        _ => return Err(StatisticsError::NonlinearStatistics.into()),
+    }
     .map_err(refusal)?;
     validate(operation, &proof)?;
     Ok(Rc::new(proof))
@@ -42,12 +58,7 @@ pub(super) fn validate(
     operation: &CheckedOperation,
     proof: &CheckedSensitivity,
 ) -> Result<(), OperationError> {
-    let NativeRecipe::Kernel(contract) = &operation.recipe else {
-        return Err(StatisticsError::Contract.into());
-    };
-    if contract.kind() != KernelKind::ScalarQuantityProduct
-        || proof.recipe() != SensitivityRecipe::QuantityProduct
-    {
+    if proof.recipe() != recipe(operation)? {
         return Err(StatisticsError::NonlinearStatistics.into());
     }
     let same_inputs = operation
@@ -83,9 +94,7 @@ fn reused(
         let Some(original) = record.inventory.operation() else {
             continue;
         };
-        if proof.recipe() != SensitivityRecipe::QuantityProduct
-            || original.revision != operation.revision
-        {
+        if proof.recipe() != recipe(operation)? || original.revision != operation.revision {
             continue;
         }
         let same_inputs = original.inputs().len() == operation.inputs().len()
@@ -110,6 +119,22 @@ fn reused(
     Ok(None)
 }
 
+/// The operation kind and exact integer parameter identify the closed symbolic recipe.
+fn recipe(operation: &CheckedOperation) -> Result<SensitivityRecipe, OperationError> {
+    let NativeRecipe::Kernel(contract) = &operation.recipe else {
+        return Err(StatisticsError::Contract.into());
+    };
+    match contract.kind() {
+        KernelKind::ScalarQuantityProduct => Ok(SensitivityRecipe::QuantityProduct),
+        KernelKind::ScalarQuantityIntegerPower => Ok(SensitivityRecipe::QuantityIntegerPower {
+            exponent: operation
+                .quantity_integer_exponent()
+                .ok_or(StatisticsError::Contract)?,
+        }),
+        _ => Err(StatisticsError::NonlinearStatistics.into()),
+    }
+}
+
 /// Retain the bindings refusal and complete original symbolic outcome.
 fn refusal(cause: SensitivityError) -> OperationError {
     StatisticsError::Sensitivity(Rc::new(cause)).into()
@@ -119,9 +144,16 @@ fn refusal(cause: SensitivityError) -> OperationError {
 pub(super) fn map<P: Scalar + 'static, Q: Scalar + 'static>(
     points: &[Matrix<P>],
     derivative: Option<&CheckedSensitivity>,
+    context: &ArithmeticContext,
     run: &super::inventory::Run,
 ) -> Result<Affine<Q>, OperationError> {
     let proof = derivative.ok_or(StatisticsError::Contract)?;
+    if matches!(
+        proof.recipe(),
+        SensitivityRecipe::QuantityIntegerPower { .. }
+    ) {
+        return power::map(points, proof, context, run);
+    }
     if proof.recipe() != SensitivityRecipe::QuantityProduct
         || points.len() != 2
         || proof.entries().len() != 2

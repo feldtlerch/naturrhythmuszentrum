@@ -11,7 +11,7 @@ use nrz_scalar::Scalar;
 impl QuantityContext {
     /// Raise a scalar difference quantity to an exact signed integer power.
     /// # Errors
-    /// Refuses points, counts, unsupported kinds or exponents, statistics and uncertified domains.
+    /// Refuses points, counts, unsupported kinds or exponents, incomplete statistical evidence and uncertified domains.
     pub fn integer_power<P: Scalar + 'static, R: QuantityRole>(
         &self,
         heap: &mut crate::Heap,
@@ -71,14 +71,30 @@ impl QuantityContext {
         budget: &mut Budget,
     ) -> Result<Quantity<P>, QuantityError<P>> {
         self.check_descriptor(descriptor)?;
-        let inputs = vec![self.nonlinear_operand(heap, input, false, budget)?.0];
+        let supported = matches!(operation, ScalarQuantityOp::IntegerPower(_));
+        let (input_contract, statistics) =
+            self.nonlinear_operand(heap, input, supported, budget)?;
+        let inputs = vec![input_contract];
         let recipe = ScalarQuantityRecipe {
             operation,
             allowance: 0,
         };
         let operation = self.nonlinear_contract(inputs, descriptor, recipe)?;
+        let derivative = if statistics {
+            Some(crate::statistics::prepare_quantity(
+                heap, &operation, budget,
+            )?)
+        } else {
+            None
+        };
         let counts = lineage::merge(&input.counts, &None, budget)?;
-        let mut result = self.execute(heap, operation, vec![input.binding().clone()], budget)?;
+        let mut result = self.execute_with_sensitivity(
+            heap,
+            operation,
+            vec![input.binding().clone()],
+            derivative,
+            budget,
+        )?;
         result.counts = counts;
         Ok(result)
     }

@@ -67,7 +67,9 @@ impl<P: Scalar + 'static> Plan<P> {
             return Ok(());
         };
         let nonlinear = match contract.kind() {
-            crate::KernelKind::Elementwise(_) | crate::KernelKind::ScalarQuantityProduct => true,
+            crate::KernelKind::Elementwise(_)
+            | crate::KernelKind::ScalarQuantityProduct
+            | crate::KernelKind::ScalarQuantityIntegerPower => true,
             crate::KernelKind::Product => !(self.fixed(0, context)? || self.fixed(1, context)?),
             _ => false,
         };

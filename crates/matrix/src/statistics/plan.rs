@@ -216,6 +216,11 @@ fn phase_work(operation: &CheckedOperation, lineage: &Lineage) -> Result<usize, 
         total = add(total, product(&[entries, sources, 8])?)?;
         total = add(total, product(&[entries, 16])?)?;
     }
+    if let Some(exponent) = operation.quantity_integer_exponent() {
+        // Each bit admits integer construction and power multiplication, including interval endpoints.
+        let bits = 64 - exponent.unsigned_abs().leading_zeros() as usize;
+        total = add(total, product(&[bits + 1, 32])?)?;
+    }
     if let NativeRecipe::Solve(contract) = &operation.recipe {
         total = add(total, crate::solve::sensitivity::work(contract)?)?;
     }
@@ -242,7 +247,11 @@ impl CheckedOperation {
         match &self.recipe {
             NativeRecipe::Reciprocal { .. } => false,
             NativeRecipe::Kernel(contract) => match &contract.recipe {
-                Recipe::Quantity(_) => contract.kind() == crate::KernelKind::ScalarQuantityProduct,
+                Recipe::Quantity(_) => matches!(
+                    contract.kind(),
+                    crate::KernelKind::ScalarQuantityProduct
+                        | crate::KernelKind::ScalarQuantityIntegerPower
+                ),
                 Recipe::Sum { .. }
                 | Recipe::Linear(_)
                 | Recipe::Transform(_)

@@ -197,3 +197,44 @@ fn quantity_product_sensitivity_work_boundary() -> TestResult {
     }
     Ok(())
 }
+
+/// Factory derivatives are checked against an independent exact evaluator.
+/// ´test:integration:quantity-power-sensitivity-oracle´
+/// ´claim:bindings:quantity-power-sensitivity-oracle´ Quantity integer-power identities retain physical originals, exact composed descriptors and replayed rational derivatives for signed, zero and unit powers.
+#[test]
+fn quantity_power_sensitivity_oracle() -> TestResult {
+    let registry = nrz_bindings::Registry::new(nrz_bindings::ExponentPolicy::Rational);
+    for (exponent, numerator, denominator) in [
+        (-2, -2, 27),
+        (-1, -1, 9),
+        (0, 0, 1),
+        (1, 1, 1),
+        (2, 6, 1),
+        (3, 27, 1),
+    ] {
+        let proof = nrz_bindings::CheckedSensitivity::quantity_integer_power(
+            &registry,
+            &Descriptor::ratio(),
+            exponent,
+            &mut Budget::new(Limits::default())?,
+        )?;
+        let cas = proof.declarations().cas()?;
+        equal_fraction(
+            coefficient(
+                &cas,
+                proof.jacobian().entries()[0].expression(),
+                &[("x", 3)],
+            )?,
+            (numerator, denominator),
+        )?;
+        assert_eq!(
+            proof.recipe(),
+            SensitivityRecipe::QuantityIntegerPower { exponent }
+        );
+        assert!(proof.jacobian().entries()[0].identity().is_discharged());
+        proof
+            .declarations()
+            .validate_checked(&proof.originals()[0])?;
+    }
+    Ok(())
+}

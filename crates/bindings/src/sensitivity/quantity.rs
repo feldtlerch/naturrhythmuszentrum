@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Quantity coordinate derivatives retain physical originals and composed output measures.
 
+mod power;
+
 use super::{
     CheckedSensitivity, JacobianEntry, JacobianEvidence, SensitivityEntry, SensitivityError,
     SensitivityKernel, SensitivityRecipe, graph::Graph, native, replay,

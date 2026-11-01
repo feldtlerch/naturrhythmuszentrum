@@ -2,7 +2,11 @@
 //! Quantity covariance retains exact coordinate derivatives and complete joint sources.
 
 mod boundaries;
+mod domains;
+mod measures;
 mod physical;
+mod power_boundaries;
+mod powers;
 mod refusals;
 
 use crate::kernel_oracle::Rational;

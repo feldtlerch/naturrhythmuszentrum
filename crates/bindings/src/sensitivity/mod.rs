@@ -37,6 +37,11 @@ pub use evidence::{
 pub enum SensitivityRecipe {
     /// Product in the exact composed quantity coordinate measure.
     QuantityProduct,
+    /// Exact signed integer power in its composed quantity measure.
+    QuantityIntegerPower {
+        /// Original signed integer exponent.
+        exponent: i64,
+    },
     /// Elementwise square of a declared continuous difference input.
     Square,
     /// Elementwise reciprocal of a declared continuous difference input.
@@ -54,7 +59,7 @@ pub enum SensitivityRecipe {
 
 /// One entry in a fixed numerical schedule, never an arbitrary expression evaluator.
 ///
-/// Input coordinates use their declared measures. Quantity products retain the composed
+/// Input coordinates use their declared measures. Quantity schedules retain the composed
 /// output measure; the other native schedules use coherent outputs.
 /// Let `s` be the input's exact measure scale and `c = s*x`. Each indicated
 /// operation must be evaluated with numerical error bounds by the numerical owner.
@@ -64,6 +69,11 @@ pub enum SensitivityKernel {
     QuantityProduct {
         /// Index of the other operand in the ordered input inventory.
         coordinate: usize,
+    },
+    /// Evaluate `n*x^(n-1)` at the represented quantity coordinate.
+    QuantityIntegerPower {
+        /// Original signed integer exponent, with explicit zero and one cases.
+        exponent: i64,
     },
     /// Formal derivative zero with the entry's output/input pairing descriptor.
     Zero,

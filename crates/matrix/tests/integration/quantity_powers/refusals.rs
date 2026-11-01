@@ -8,7 +8,7 @@ use nrz_scalar::{ArithmeticFailure, KernelError};
 
 /// Points and attached statistics refuse before any unary output publication.
 /// ´test:integration:quantity-powers-semantic-refusals´
-/// ´claim:matrix:quantity-powers-semantic-refusals´ Integer powers and roots reject point roles and nonlinear statistics while deterministic difference twins succeed.
+/// ´claim:matrix:quantity-powers-semantic-refusals´ Integer powers and roots reject point roles, and unsupported root statistics refuse while deterministic difference twins succeed.
 #[test]
 fn quantity_powers_semantic_refusals() -> TestResult {
     let (context, [length, _, _]) = fixture(ExponentPolicy::Rational)?;
@@ -34,16 +34,18 @@ fn quantity_powers_semantic_refusals() -> TestResult {
             panic!("unary point arithmetic must refuse");
         };
         assert!(matches!(fault, QuantityError::Units(UnitError::AffineRole)));
-        let Err(fault) = execute(
-            &context,
-            &mut heap,
-            &statistical,
-            operation,
-            &mut Budget::new(Limits::default())?,
-        ) else {
-            panic!("unary statistical propagation must refuse");
-        };
-        assert!(matches!(fault, QuantityError::NonlinearStatistics));
+        if matches!(operation, Unary::Root) {
+            let Err(fault) = execute(
+                &context,
+                &mut heap,
+                &statistical,
+                Unary::Root,
+                &mut Budget::new(Limits::default())?,
+            ) else {
+                panic!("unary statistical propagation must refuse");
+            };
+            assert!(matches!(fault, QuantityError::NonlinearStatistics));
+        }
         assert_eq!(heap.provenance_usage(), before);
         execute(
             &context,
