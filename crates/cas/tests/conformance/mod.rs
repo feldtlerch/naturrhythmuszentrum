@@ -128,4 +128,5 @@ mod decision_pi;
 mod half_pi;
 mod half_pi_work;
 mod trig;
+mod trig_values;
 mod trig_work;

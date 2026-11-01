@@ -42,7 +42,7 @@ const fn named(
 /// Every native and solving primitive in the same ASCII key order as `PRIMITIVES`.
 ///
 /// Unavailable schemas remain represented assumptions and cannot certify an application.
-pub static PRIMITIVE_SCHEMAS: [PrimitiveSchema; 81] = [
+pub static PRIMITIVE_SCHEMAS: [PrimitiveSchema; 85] = [
     named(
         Primitive::CaseCongruence,
         "thm:cas:primitive-case-congruence",
@@ -524,10 +524,34 @@ pub static PRIMITIVE_SCHEMAS: [PrimitiveSchema; 81] = [
         "No ordered proof premises; complete range cover, exact forward differences and endpoint certificates.",
     ),
     named(
+        Primitive::AtanOne,
+        "thm:cas:primitive-trig-atan-one",
+        "Arctangent of the original Real operand equals the exact named Pi times one quarter.",
+        "Ordered original `DomainGuard` and Equality to exactly one in the identical context and domain; every original condition remains attached.",
+    ),
+    named(
+        Primitive::AtanZero,
+        "thm:cas:primitive-trig-atan-zero",
+        "Arctangent of the original Real operand equals exact rational zero.",
+        "Ordered original `DomainGuard` and Equality to exactly zero in the identical context and domain; every original condition remains attached.",
+    ),
+    named(
+        Primitive::CosHalfPi,
+        "thm:cas:primitive-trig-cos-half-pi",
+        "Cosine of the original Real operand equals 1, 0, -1 or 0 at Euclidean integer residues 0, 1, 2 or 3 modulo four.",
+        "One checked original half-Pi witness in the identical context and domain; exact arbitrary-precision residue recomputation retains every original condition.",
+    ),
+    named(
         Primitive::HalfPiWitness,
         "thm:cas:primitive-trig-half-pi-witness",
         "The original Real operand equals the exact named Pi times half its retained concrete integer. The coefficient check accepts literal Mul(Pi, q) operand order; producers reach other spellings through checked equality.",
         "Ordered original definedness and checked equality in the identical context and domain, retaining every original divisor guard; canonical integer payload and exact repeated statement.",
+    ),
+    named(
+        Primitive::SinHalfPi,
+        "thm:cas:primitive-trig-sin-half-pi",
+        "Sine of the original Real operand equals 0, 1, 0 or -1 at Euclidean integer residues 0, 1, 2 or 3 modulo four.",
+        "One checked original half-Pi witness in the identical context and domain; exact arbitrary-precision residue recomputation retains every original condition.",
     ),
 ];
 
@@ -536,7 +560,11 @@ impl Primitive {
     #[must_use]
     pub const fn formal_schema(self) -> &'static PrimitiveSchema {
         match self {
-            Self::HalfPiWitness => &PRIMITIVE_SCHEMAS[80],
+            Self::AtanOne => &PRIMITIVE_SCHEMAS[80],
+            Self::AtanZero => &PRIMITIVE_SCHEMAS[81],
+            Self::CosHalfPi => &PRIMITIVE_SCHEMAS[82],
+            Self::HalfPiWitness => &PRIMITIVE_SCHEMAS[83],
+            Self::SinHalfPi => &PRIMITIVE_SCHEMAS[84],
             Self::Solve(schema) => solving(schema),
             Self::CaseCongruence => &PRIMITIVE_SCHEMAS[0],
             Self::CaseDomain => &PRIMITIVE_SCHEMAS[1],

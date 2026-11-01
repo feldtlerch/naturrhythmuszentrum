@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-//! Finite exact recognition of a concrete integer multiple of half Pi.
+//! Finite exact recognition and premise-checked trigonometric special values.
 
 #![expect(
     clippy::redundant_pub_crate,
@@ -14,6 +14,338 @@ use crate::number::Rational;
 use crate::proof_model::{
     ApplicationDraft, Certificate, CheckedApplication, ScopedConditions, Statement,
 };
+use crate::rule::Primitive;
+
+/// Recompute the nonnegative residue without narrowing the original integer.
+fn residue(k: &Rational, budget: &mut Budget) -> Result<Rational, Fault> {
+    k.check(budget, AT)?;
+    if !k.is_integer() {
+        return Err(invalid());
+    }
+    let four = Rational::from_ratio(4, 1, budget)?;
+    let q = k.div(&four, budget)?.floor(budget)?;
+    k.sub(&q.mul(&four, budget)?, budget)
+}
+
+/// The table is evaluated only after exact Euclidean division of the retained integer.
+fn circular_value(k: &Rational, cosine: bool, budget: &mut Budget) -> Result<Rational, Fault> {
+    let r = residue(k, budget)?;
+    let table = if cosine { [1, 0, -1, 0] } else { [0, 1, 0, -1] };
+    for (index, value) in [0, 1, 2, 3].into_iter().zip(table) {
+        if r == Rational::from_ratio(index, 1, budget)? {
+            return Rational::from_ratio(value, 1, budget);
+        }
+    }
+    Err(invalid())
+}
+
+/// Candidate selection grants no authority; the independent checker still validates every join.
+fn candidate(
+    cas: &Cas,
+    operator: &Operator,
+    premises: &[CheckedApplication],
+    budget: &mut Budget,
+) -> Result<Option<(Primitive, Handle, Rational)>, Fault> {
+    Ok(Some(match (operator, premises) {
+        (Operator::Sine | Operator::Cosine, [witness]) => {
+            let Statement::HalfPiWitness { k, domain, .. } = &witness.judgment.statement else {
+                return Ok(None);
+            };
+            let cosine = *operator == Operator::Cosine;
+            (
+                if cosine {
+                    Primitive::CosHalfPi
+                } else {
+                    Primitive::SinHalfPi
+                },
+                domain.clone(),
+                circular_value(k, cosine, budget)?,
+            )
+        }
+        (Operator::Arctangent, [_, equality]) => {
+            let Statement::Equality { right, domain, .. } = &equality.judgment.statement else {
+                return Ok(None);
+            };
+            let constant = cas.state.expression(cas.checked(right)?)?;
+            let Operator::Rational(value) = &constant.operator else {
+                return Ok(None);
+            };
+            value.check(budget, AT)?;
+            if value.is_zero() {
+                (Primitive::AtanZero, domain.clone(), Rational::zero())
+            } else if *value == Rational::one() {
+                (
+                    Primitive::AtanOne,
+                    domain.clone(),
+                    Rational::from_ratio(1, 4, budget)?,
+                )
+            } else {
+                return Ok(None);
+            }
+        }
+        _ => return Ok(None),
+    }))
+}
+
+impl Cas {
+    /// Produce an exact trigonometric equality from ordered checked proof handles.
+    ///
+    /// Sine and cosine consume one half-Pi witness. Arctangent consumes original
+    /// definedness and equality to a literal zero or one. Missing recognition or
+    /// another valid input returns `None`, without a negative mathematical claim.
+    /// All qualified hypotheses and original divisor requirements remain attached.
+    /// # Errors
+    /// Rejects foreign handles, malformed premise joins and exhausted resources.
+    pub fn trig_special_value(
+        &mut self,
+        function: &Handle,
+        proofs: &[Handle],
+        budget: &mut Budget,
+    ) -> Result<Option<crate::proof_model::VerifiedWitness>, Fault> {
+        self.proof_limits(budget, |cas, budget| {
+            cas.transaction(budget, |cas, budget| {
+                let expression = cas.state.expression(cas.checked(function)?)?;
+                budget.work(1, AT)?;
+                if proofs.len() > 2 {
+                    return Err(invalid());
+                }
+                let operator = match &expression.operator {
+                    Operator::Sine => Operator::Sine,
+                    Operator::Cosine => Operator::Cosine,
+                    Operator::Arctangent => Operator::Arctangent,
+                    _ => return Ok(None),
+                };
+                let mut premises = Vec::new();
+                for proof in proofs {
+                    premises.push(crate::proof_view::application(
+                        cas,
+                        cas.checked(proof)?,
+                        budget,
+                    )?);
+                }
+                let Some((rule, domain, value)) = candidate(cas, &operator, &premises, budget)?
+                else {
+                    return Ok(None);
+                };
+                let context = premises
+                    .first()
+                    .ok_or_else(invalid)?
+                    .judgment
+                    .context
+                    .clone();
+                let mut right =
+                    value_term(cas, function, Operator::Rational(value), Vec::new(), budget)?;
+                if rule == Primitive::AtanOne {
+                    let pi = value_term(
+                        cas,
+                        function,
+                        Operator::Constant(Constant::Pi),
+                        Vec::new(),
+                        budget,
+                    )?;
+                    right = value_term(cas, function, Operator::Mul, vec![pi, right], budget)?;
+                }
+                let draft = ApplicationDraft {
+                    rule,
+                    context,
+                    conclusion: Statement::Equality {
+                        left: function.clone(),
+                        right,
+                        domain,
+                        domain_contract: crate::proof_model::DomainContract::DefinedAndEqual,
+                    },
+                    premises: Vec::new(),
+                    substitutions: Vec::new(),
+                    certificate: Certificate::None,
+                };
+                let mut checked =
+                    crate::scoped_check::check_application(cas, &draft, &premises, budget)?;
+                checked.premises = proofs.iter().map(Handle::logical_id).collect();
+                let proof = cas.publish_scoped(checked, budget)?;
+                cas.seal_scoped(&proof, budget).map(Some)
+            })
+        })
+    }
+}
+
+/// Copy only output scope metadata, after its measured copy charge and live reservation.
+fn value_term(
+    cas: &mut Cas,
+    function: &Handle,
+    operator: Operator,
+    operands: Vec<Handle>,
+    budget: &mut Budget,
+) -> Result<Handle, Fault> {
+    let expression = cas.state.expression(cas.checked(function)?)?;
+    let header = cas.handle(expression.header);
+    let bytes = if expression.scope.is_empty() {
+        // An empty scope owns no buffer and needs no copy or temporary workspace.
+        0
+    } else {
+        crate::validation::scope_limit(&expression.scope, budget)?;
+        let mut out = crate::encoding::Encoder::new(budget, AT);
+        crate::encoding::scope(&expression.scope, &mut out)?;
+        let bytes = crate::graph::size(out.finish().len(), AT)?;
+        budget.work(bytes, AT)?;
+        bytes
+    };
+    budget.with_retained_payload(bytes, AT, |budget| {
+        let source = &cas.state.expression(cas.checked(function)?)?.scope;
+        let mut scope = Vec::new();
+        scope
+            .try_reserve_exact(source.len())
+            .map_err(|_| Fault::allocation(AT))?;
+        for frame in source {
+            let mut copied = Vec::new();
+            copied
+                .try_reserve_exact(frame.len())
+                .map_err(|_| Fault::allocation(AT))?;
+            copied.extend(frame.iter().cloned());
+            scope.push(copied);
+        }
+        cas.admit(
+            &[crate::graph::Draft::Expression(
+                crate::graph::ExpressionDraft {
+                    header: crate::graph::Reference::Existing(header),
+                    space: None,
+                    operator,
+                    sort: Sort::Value(AtomicSort::Scalar(Field::Real)),
+                    scope,
+                    binding: None,
+                    operands: operands
+                        .into_iter()
+                        .map(crate::graph::Reference::Existing)
+                        .collect(),
+                },
+            )],
+            budget,
+        )?
+        .pop()
+        .ok_or_else(invalid)
+    })
+}
+
+/// Four analytic schemas reuse ordinary equality and the empty certificate grammar.
+pub(crate) fn value_check(
+    cas: &Cas,
+    draft: &ApplicationDraft,
+    premises: &[CheckedApplication],
+    budget: &mut Budget,
+) -> Result<ScopedConditions, Fault> {
+    use crate::proof_model::DomainContract;
+    let Statement::Equality {
+        left,
+        right,
+        domain,
+        domain_contract: DomainContract::DefinedAndEqual,
+    } = &draft.conclusion
+    else {
+        return Err(invalid());
+    };
+    if draft.certificate != Certificate::None || !draft.substitutions.is_empty() {
+        return Err(invalid());
+    }
+    let operator = match draft.rule {
+        Primitive::SinHalfPi => Operator::Sine,
+        Primitive::CosHalfPi => Operator::Cosine,
+        Primitive::AtanZero | Primitive::AtanOne => Operator::Arctangent,
+        _ => return Err(invalid()),
+    };
+    let u = cas.handle(crate::rule_check::unary(
+        &cas.state,
+        cas.checked(left)?,
+        &operator,
+    )?);
+    let operand = cas.state.expression(cas.checked(&u)?)?;
+    let output = cas.state.expression(cas.checked(right)?)?;
+    if operand.sort != Sort::Value(AtomicSort::Scalar(Field::Real))
+        || output.sort != operand.sort
+        || output.scope != operand.scope
+        || output.ambient != operand.ambient
+        || output.space.is_some()
+    {
+        return Err(invalid());
+    }
+    for premise in premises {
+        if premise.judgment.context != draft.context {
+            return Err(invalid());
+        }
+    }
+    match draft.rule {
+        Primitive::SinHalfPi | Primitive::CosHalfPi => {
+            let [witness] = premises else {
+                return Err(invalid());
+            };
+            let Statement::HalfPiWitness {
+                u: original,
+                k,
+                context,
+                domain: region,
+            } = &witness.judgment.statement
+            else {
+                return Err(invalid());
+            };
+            if original != &u || context != &draft.context || region != domain {
+                return Err(invalid());
+            }
+            let expected = circular_value(k, draft.rule == Primitive::CosHalfPi, budget)?;
+            if output.operator != Operator::Rational(expected) {
+                return Err(invalid());
+            }
+        }
+        Primitive::AtanZero | Primitive::AtanOne => {
+            let [guard, equality] = premises else {
+                return Err(invalid());
+            };
+            definedness(cas, &u, domain, &guard.judgment.statement)?;
+            let Statement::Equality {
+                left: original,
+                right: constant,
+                domain: region,
+                ..
+            } = &equality.judgment.statement
+            else {
+                return Err(invalid());
+            };
+            let one = draft.rule == Primitive::AtanOne;
+            if original != &u
+                || region != domain
+                || !crate::rule_check::literal(
+                    &cas.state,
+                    cas.checked(constant)?,
+                    i64::from(one),
+                    budget,
+                )?
+            {
+                return Err(invalid());
+            }
+            atan_output(cas, right, one, budget)?;
+        }
+        _ => return Err(invalid()),
+    }
+    let mut conditions = ScopedConditions::default();
+    for premise in premises {
+        crate::statement::merge(cas, &mut conditions, &premise.conditions, budget)?;
+    }
+    Ok(conditions)
+}
+
+/// Reconstruct the exact arctangent endpoint without a transcendental evaluation.
+fn atan_output(cas: &Cas, right: &Handle, one: bool, budget: &mut Budget) -> Result<(), Fault> {
+    if one {
+        let (pi, quarter) =
+            crate::rule_check::binary(&cas.state, cas.checked(right)?, &Operator::Mul)?;
+        if cas.state.expression(pi)?.operator != Operator::Constant(Constant::Pi)
+            || cas.state.expression(quarter)?.operator
+                != Operator::Rational(Rational::from_ratio(1, 4, budget)?)
+        {
+            return Err(invalid());
+        }
+    } else if !crate::rule_check::literal(&cas.state, cas.checked(right)?, 0, budget)? {
+        return Err(invalid());
+    }
+    Ok(())
+}
 
 /// Recognition never supplies a trigonometric value or a numerical approximation.
 const AT: Location = Location::new("integer half-Pi witness");
@@ -218,4 +550,97 @@ pub(crate) fn encode_certificate(
     write(domain, out)?;
     out.unsigned(u64::from(*defined))?;
     out.unsigned(u64::from(*equality))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::value_term;
+    use crate::budget::{Budget, BudgetKind, Limits};
+    use crate::domain_model::HeaderDraft;
+    use crate::graph::{Cas, Draft, ExpressionDraft, Reference};
+    use crate::model::{AtomicSort, Environment, Field, Operator, Sort};
+    use crate::number::Rational;
+    use crate::{FaultKind, Location};
+
+    fn scope_attempt(
+        kind: BudgetKind,
+        amount: u64,
+    ) -> Result<(bool, u64), Box<dyn std::error::Error>> {
+        let mut setup = Budget::new(Limits::default())?;
+        let mut cas = Cas::new(Limits::default())?;
+        let header = cas
+            .admit(
+                &[Draft::Header(HeaderDraft::Core(Environment::default()))],
+                &mut setup,
+            )?
+            .pop()
+            .ok_or("header")?;
+        let scope = vec![vec![AtomicSort::Scalar(Field::Named("field".repeat(20))); 8]; 16];
+        let source = cas
+            .admit(
+                &[Draft::Expression(ExpressionDraft {
+                    header: Reference::Existing(header),
+                    space: None,
+                    operator: Operator::Rational(Rational::zero()),
+                    sort: Sort::Value(AtomicSort::Scalar(Field::Real)),
+                    scope: scope.clone(),
+                    binding: None,
+                    operands: Vec::new(),
+                })],
+                &mut setup,
+            )?
+            .pop()
+            .ok_or("source")?;
+        let before = cas.canonical_snapshot(&mut Budget::new(Limits::default())?)?;
+        let mut limits = Limits::default();
+        match kind {
+            BudgetKind::Work => limits.work = amount,
+            BudgetKind::StagedPayloadBytes => limits.staged_payload_bytes = amount,
+            _ => return Err("resource".into()),
+        }
+        let mut budget = Budget::new(limits.clone())?;
+        budget.work(7, Location::new("prior scope Work"))?;
+        let result =
+            budget.with_retained_payload(19, Location::new("prior scope payload"), |budget| {
+                value_term(
+                    &mut cas,
+                    &source,
+                    Operator::Rational(Rational::one()),
+                    Vec::new(),
+                    budget,
+                )
+            });
+        assert_eq!(budget.limits(), &limits);
+        match &result {
+            Ok(handle) => assert_eq!(cas.state.expression(cas.checked(handle)?)?.scope, scope),
+            Err(fault) => {
+                assert!(
+                    matches!(fault.kind,FaultKind::Exhausted {budget,..} if budget==kind),
+                    "{fault:?}"
+                );
+                assert_eq!(
+                    cas.canonical_snapshot(&mut Budget::new(Limits::default())?)?,
+                    before
+                );
+            }
+        }
+        Ok((result.is_ok(), budget.usage().work - 7))
+    }
+
+    /// Complete output admission retains the scope copy alongside nested admission workspace.
+    /// ´test:unit:trig-value-scope-boundaries´
+    #[test]
+    fn trig_value_scope_boundaries() -> Result<(), Box<dyn std::error::Error>> {
+        for (kind, cost, prefix) in [
+            (BudgetKind::Work, 260_817, 247_132),
+            (BudgetKind::StagedPayloadBytes, 138_908, 260_817),
+        ] {
+            let prior = if kind == BudgetKind::Work { 7 } else { 0 };
+            assert_eq!(scope_attempt(kind, cost + prior)?, (true, 260_817));
+            assert_eq!(scope_attempt(kind, cost + prior - 1)?, (false, prefix));
+        }
+        // The metered measuring buffer fits; prepayment refuses before any scope clone.
+        assert_eq!(scope_attempt(BudgetKind::Work, 27_534)?, (false, 13_892));
+        Ok(())
+    }
 }

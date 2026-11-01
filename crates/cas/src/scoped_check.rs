@@ -110,6 +110,9 @@ fn rule_conditions(
     let mut scalar_view = None;
     let conditions = match draft.rule {
         Primitive::HalfPiWitness => crate::trig::check(cas, draft, premises, budget)?,
+        Primitive::SinHalfPi | Primitive::CosHalfPi | Primitive::AtanZero | Primitive::AtanOne => {
+            crate::trig::value_check(cas, draft, premises, budget)?
+        }
         Primitive::Solve(_) => crate::solving::check(cas, draft, premises, budget)?,
         Primitive::LimitCaseRestrict | Primitive::SeriesCaseRestrict => {
             crate::germ_check::check(cas, draft, premises, budget)?
