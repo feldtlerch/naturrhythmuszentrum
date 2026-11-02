@@ -97,8 +97,9 @@ pub use error::UnitError;
 pub use evidence::{CheckedDeclarations, SnapshotError, SnapshotId};
 pub use kind::{CountDomain, Kind, UncertaintyMode};
 pub use lc_relation::{
-    LcBranch, LcInput, LcInterval, LcObservationValue, LcQuantity, LcRelation, LcRelationError,
-    LcValues, LcWitness,
+    LcBranch, LcCertainty, LcDeterminacy, LcForwardArc, LcForwardCover, LcInput, LcInterval,
+    LcObservationValue, LcPhaseEndpoint, LcQuantity, LcRelation, LcRelationError, LcValues,
+    LcWitness,
 };
 pub use measure::{Conversion, Measure, Scale};
 pub use pairing::{

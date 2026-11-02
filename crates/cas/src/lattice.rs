@@ -6,6 +6,8 @@ mod coordinate_enclosure;
 pub(crate) mod cover;
 mod enclosure;
 mod index;
+mod pi_interval;
+pub use pi_interval::{PiAffineEndpoint, PiIntervalArc, PiIntervalCover};
 pub(crate) mod selection;
 pub use affine_enclosure::{CheckedLatticeBoxEnclosure, LatticeBoxEnclosure};
 pub use coordinate_enclosure::{CheckedLatticeCoordinateEnclosure, LatticeCoordinateEnclosure};

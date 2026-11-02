@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Immutable autonomous LC constraints and exact point feasibility, without numerical authority.
 
+mod forward;
 mod interval;
 mod quantity;
 mod storage;
 mod witness;
 
+pub use forward::{LcCertainty, LcDeterminacy, LcForwardArc, LcForwardCover, LcPhaseEndpoint};
 pub use interval::LcInterval;
 pub use quantity::LcQuantity;
 pub use witness::{LcBranch, LcObservationValue, LcValues, LcWitness};
@@ -56,6 +58,12 @@ pub enum LcRelationError {
     /// Conservative metadata accounting exceeded its representable size.
     #[error("LC relation metadata capacity exhausted")]
     Capacity,
+    /// This projection adapter does not cover the complete supplied constraint family.
+    #[error("unsupported LC forward projection constraints")]
+    Projection,
+    /// Proposed endpoint cycle indices do not have a complete exact floor-cell proof.
+    #[error("LC forward cycle cover is not proved")]
+    CycleCover,
 }
 
 /// One supplied deterministic constraint, retaining the original coherent meaning and range.

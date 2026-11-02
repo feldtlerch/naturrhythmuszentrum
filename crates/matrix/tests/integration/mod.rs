@@ -6,6 +6,7 @@ mod compaction;
 mod coordinates;
 mod imports;
 mod layouts;
+mod lc_relation;
 mod lifecycle;
 mod shapes;
 
