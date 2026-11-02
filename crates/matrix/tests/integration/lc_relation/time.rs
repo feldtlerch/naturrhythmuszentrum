@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Independent exact zero-time endpoints, unbounded domains and assurance controls.
 
-mod oracle;
+pub(super) mod oracle;
 mod refusals;
 
 use super::support::{self, TestResult, input, integer, ledger, number};

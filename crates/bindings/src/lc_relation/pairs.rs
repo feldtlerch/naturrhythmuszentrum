@@ -4,6 +4,7 @@
 mod admit;
 mod aliases;
 pub use aliases::{LcAliasCover, LcAliasLattice, LcAliasWitness};
+mod horizon;
 mod project;
 mod scale;
 mod support;

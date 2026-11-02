@@ -3,7 +3,9 @@
 
 mod aliases;
 pub use aliases::{LcAliasProjection, LcNumericalAlias};
+mod horizon;
 mod lower;
+pub use horizon::LcHorizonProjection;
 mod time;
 pub use time::{LcNumericalTail, LcNumericalTime, LcTimeProjection};
 mod pairs;

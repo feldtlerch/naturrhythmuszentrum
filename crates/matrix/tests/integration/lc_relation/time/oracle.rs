@@ -8,14 +8,14 @@ use nrz_scalar::{Enclosure, Scalar};
 use std::cmp::Ordering;
 
 /// Prepared once per fixture and reused for every endpoint and both numerical formats.
-pub(super) struct Pi {
+pub(in crate::integration::lc_relation) struct Pi {
     /// Independent alternating-series lower and upper bounds for mathematical pi.
     bounds: [Rational; 2],
 }
 
 impl Pi {
     /// Exact Machin identity `pi=16*atan(1/5)-4*atan(1/239)`.
-    pub(super) fn new() -> TestResult<Self> {
+    pub(in crate::integration::lc_relation) fn new() -> TestResult<Self> {
         let small = atan(5, 18)?;
         let tiny = atan(239, 6)?;
         let sixteen = number("16")?;
@@ -33,7 +33,7 @@ impl Pi {
     }
 
     /// Every comparison is exact; rational arithmetic refuses its resource limit.
-    pub(super) fn contains<P: Scalar>(
+    pub(in crate::integration::lc_relation) fn contains<P: Scalar>(
         &self,
         value: Enclosure<P>,
         numerator: i64,
@@ -47,7 +47,7 @@ impl Pi {
     }
 
     /// Expected coefficients are fixture literals independent of the production projection.
-    pub(super) fn affine<P: Scalar>(
+    pub(in crate::integration::lc_relation) fn affine<P: Scalar>(
         &self,
         value: Enclosure<P>,
         coefficient: &Rational,

@@ -2,7 +2,9 @@
 //! Immutable autonomous LC constraints, exact projection families and checked feasibility.
 
 mod forward;
+mod horizon;
 mod impossible;
+pub use horizon::{LcHorizon, LcHorizonValue};
 mod interval;
 pub use impossible::LcImpossible;
 mod pairs;
