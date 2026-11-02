@@ -2,8 +2,10 @@
 //! Independent timestamp intervals retain their original equations beside any relaxation.
 
 mod admit;
+mod exact;
 mod outer;
 
+pub use exact::LcTimingCover;
 pub use outer::LcTimingOuterCover;
 
 use super::{AT, LcRelation, LcRelationError, storage};

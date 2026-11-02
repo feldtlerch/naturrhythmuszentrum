@@ -2,7 +2,9 @@
 //! Conservative nominal-time projection never promotes a relaxed tuple to original feasibility.
 
 use super::{AT, Bounds, LcRelation, LcRelationError, LcSampleTimes, Rational, admit, storage};
-use crate::{Budget, LcInput, LcInterval, LcPairsCover, LcQuantity as Q, LcValues, LcWitness};
+use crate::{
+    Budget, LcInput, LcInterval, LcPairsCover, LcPhaseGauge, LcQuantity as Q, LcValues, LcWitness,
+};
 use nrz_cas::{limits::BudgetUsage, pi_bounds::PiBoundCertificate};
 
 /// Certified outer coverage only; rate/timing correlation was relaxed before projection.
@@ -81,6 +83,12 @@ impl LcTimingOuterCover {
     #[must_use]
     pub fn cycles(&self) -> &[Rational] {
         self.relaxed.cycles()
+    }
+
+    /// Complete common integer gauge inherited from the original initial-phase declaration.
+    #[must_use]
+    pub fn phase_gauge(&self) -> LcPhaseGauge {
+        self.relaxed.phase_gauge()
     }
 
     /// Exact corner hulls used in the conservative phase widening.
