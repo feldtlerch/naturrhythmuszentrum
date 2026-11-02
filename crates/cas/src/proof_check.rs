@@ -445,7 +445,7 @@ impl Cas {
         let expected = crate::wire::claim_key(self, &witness.claim, budget)?;
         let mut fresh = Self::new(self.limits.clone())?;
         let replayed = fresh.inspect(&witness.bytes, budget)?;
-        let actual_claim = crate::proof_view::scalar_claim(&fresh, &replayed.judgment)?;
+        let actual_claim = crate::proof_view::scalar_claim(&fresh, &replayed.judgment, budget)?;
         let actual = crate::wire::claim_key(&fresh, &actual_claim, budget)?;
         if expected == actual {
             Ok(())

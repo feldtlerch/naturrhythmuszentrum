@@ -10,6 +10,7 @@ mod conditions;
 
 mod boundary;
 mod distributions;
+mod scalar_transport;
 
 mod region_cache;
 

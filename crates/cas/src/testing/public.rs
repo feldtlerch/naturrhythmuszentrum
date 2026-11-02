@@ -341,3 +341,11 @@ pub(crate) mod trig_minus_one;
 #[path = "trig_minus_one_work.rs"]
 #[expect(clippy::redundant_pub_crate, reason = "shared public test fixtures")]
 pub(crate) mod trig_minus_one_work;
+
+#[path = "scalar_transport.rs"]
+#[expect(clippy::redundant_pub_crate, reason = "shared public test fixtures")]
+pub(crate) mod scalar_transport;
+
+#[path = "scalar_transport_work.rs"]
+#[expect(clippy::redundant_pub_crate, reason = "shared public test fixtures")]
+pub(crate) mod scalar_transport_work;

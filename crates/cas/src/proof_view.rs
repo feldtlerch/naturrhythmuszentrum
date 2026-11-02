@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Typed views of checked scalar applications; there is only one portable witness language.
 
+mod transport;
+
 use crate::budget::{Budget, BudgetKind};
 use crate::domain_model::{HypothesisRef, Layer};
 use crate::error::{Fault, InvalidCode, Location};
@@ -228,13 +230,16 @@ pub(crate) fn typed_claim(
     clippy::suspicious_operation_groupings,
     reason = "a residual's home must equal the judgment's context, not a nonexistent home field"
 )]
-pub(crate) fn scalar_claim(cas: &Cas, value: &Judgment) -> Result<Claim, Fault> {
+pub(crate) fn scalar_claim(
+    cas: &Cas,
+    value: &Judgment,
+    budget: &mut Budget,
+) -> Result<Claim, Fault> {
     crate::context::require_closed(&cas.state, cas.checked(&value.context)?)?;
     if value.layer != Layer::Pointwise || value.space.is_some() {
         return Err(invalid());
     }
     let (relation, left, right) = scalar_parts(cas, &value.context, &value.statement)?;
-    let domain = cas.state.context(cas.checked(&value.context)?)?.admissible;
     let mut residuals = Vec::new();
     residuals
         .try_reserve_exact(value.residuals.len())
@@ -243,7 +248,6 @@ pub(crate) fn scalar_claim(cas: &Cas, value: &Judgment) -> Result<Claim, Fault> 
         if required.home != value.context
             || required.layer != value.layer
             || required.space.is_some()
-            || cas.checked(&required.region)? != domain
         {
             return Err(invalid());
         }
@@ -259,6 +263,12 @@ pub(crate) fn scalar_claim(cas: &Cas, value: &Judgment) -> Result<Claim, Fault> 
         if predicate.arguments.len() != 1 || predicate.scope != required.scope {
             return Err(invalid());
         }
+        let context = cas.checked(&value.context)?;
+        let region = cas.checked(&required.region)?;
+        if region != cas.state.context(context)?.admissible {
+            crate::statement::validate_guard(cas, required, budget)?;
+        }
+        transport::check(cas, context, region, budget)?;
         residuals.push(Guard {
             kind,
             term: cas.handle(*predicate.arguments.first().ok_or_else(invalid)?),
@@ -619,7 +629,7 @@ pub(crate) fn scalar_application(
         prepay_scalar_copy(checked, budget)?;
         return Ok(checked.clone());
     }
-    let claim = scalar_claim(cas, &value.judgment)?;
+    let claim = scalar_claim(cas, &value.judgment, budget)?;
     let mut conditions = crate::conditions::Conditions::default();
     for (target, source) in [
         (&mut conditions.requirements, &value.conditions.requirements),
@@ -630,7 +640,7 @@ pub(crate) fn scalar_application(
                 residuals: vec![required.clone()],
                 ..value.judgment.clone()
             };
-            let guard = scalar_claim(cas, &view)?
+            let guard = scalar_claim(cas, &view, budget)?
                 .residuals
                 .into_iter()
                 .next()

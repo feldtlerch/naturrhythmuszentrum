@@ -152,6 +152,8 @@ pub enum InvalidCode {
     Rule,
     /// Replay proved a different theorem than the caller requested.
     EndpointMismatch,
+    /// A guarded scalar region lacks supported whole-domain transport evidence.
+    ScalarTransportUnsupported,
     /// Declared residuals or hypotheses differ from checked conditions.
     ConditionMismatch,
     /// The wire format or exact primitive semantic version is unknown.
