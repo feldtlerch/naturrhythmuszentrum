@@ -48,6 +48,7 @@ mod evidence;
 )]
 mod exact;
 mod kind;
+mod lc_relation;
 mod measure;
 #[expect(
     clippy::redundant_pub_crate,
@@ -95,6 +96,10 @@ pub use dimension::{BaseDimension, Dimension, ExponentPolicy};
 pub use error::UnitError;
 pub use evidence::{CheckedDeclarations, SnapshotError, SnapshotId};
 pub use kind::{CountDomain, Kind, UncertaintyMode};
+pub use lc_relation::{
+    LcBranch, LcInput, LcInterval, LcObservationValue, LcQuantity, LcRelation, LcRelationError,
+    LcValues, LcWitness,
+};
 pub use measure::{Conversion, Measure, Scale};
 pub use pairing::{
     EvaluationDescriptor, EvaluationKind, NamedReference, PairingError, PairingKind, PairingSide,

@@ -32,7 +32,7 @@ This table describes supported routes; the closing claims and their measured sta
 |Retained spectral publication|`Heap::publish_lc_spectrum_reusing` consumes the scheduled original evaluation and publishes the complete root group without reevaluation (`[MATRIX-rule:matrix:lc-retained-spectrum-publication]`).|Explicit consumer outside the autonomous scheduler; full observable and owner aggregation remains partial (`obs:nrz:lc-plan-spectral-executor`).|(`[MATRIX-test:integration:lc-spectral-batch-publishes-retained-root-bundle]`), (`[MATRIX-test:integration:lc-spectral-retained-publication-owner-refusals]`), (`[MATRIX-test:integration:lc-spectral-retained-publication-stale-refusals]`)|
 |Live imaginary-axis phase and reciprocal guards|The original fixed-impedance consumer returns strict-sign phase enclosures, undefined at proved zero and undecided at zero-straddling bounds; every use revalidates original source/radius versions (`[MATRIX-rule:matrix:axis-phase-publication]`).|Heap phase-value publication and driven-plan continuations remain partial (`claim:nrz:lc-closing-driven-phase`), (`claim:nrz:lc-closing-undecided-continuation`).|(`[MATRIX-test:integration:lc-axis-phase-original-block-twins]`), (`[MATRIX-test:integration:lc-axis-phase-original-block-undefined-undecided]`), (`[MATRIX-test:integration:lc-axis-phase-original-block-retirement]`)|
 |Restored source-free energy|Native square/product/add/half operations consume restored state and original L/C bindings with exact original-corner checks (`step:nrz:lc-resonance-coordinate-lowering`).|Nominal reference, both-format plan acceptance and relation queries remain partial (`claim:nrz:lc-closing-initial-energy`).|(`[MATRIX-test:integration:lc-energy-restored-native-box-oracle]`), (`[MATRIX-test:integration:lc-energy-is-independent-of-driven-experiment]`)|
-|Any-direction autonomous relation|The shared equation, certified-set, determinacy/certainty and horizon contracts are design requirements (`sec:nrz:lc-relation`).|No implemented complete inverse/consistency interface; the relation closing claims remain open (`tab:nrz:lc-closing-relation`).|No executable closing evidence; exact future fixtures are specified by (`req:nrz:lc-relation-acceptance`).|
+|Any-direction autonomous relation|Bindings admits immutable typed constraints and checks exact complete-tuple feasibility (`rule:nrz:lc-relation-point-implementation`).|Complete projection, branch coverage, dual verdicts, numerical publication and horizons remain open (`tab:nrz:lc-closing-relation`).|(`[BINDINGS-test:integration:lc-relation-exact-reference-witness]`), (`[BINDINGS-test:integration:lc-relation-recovery-feasibility-witness]`); these check witnesses, not the full future fixtures of (`req:nrz:lc-relation-acceptance`).|
 |Scoped inventories and remaining plan aggregation|Reciprocal, factor, solve, generic statistics and native phasor receipts expose their actual owners; the closed autonomous scheduler and retained-spectrum consumer have their own scoped limits (`obs:nrz:computation-lc-plan-baseline`), (`obs:nrz:lc-plan-spectral-executor`).|Complete owner inventories, overlap map and literal whole-attempt limits remain partial (`claim:nrz:lc-closing-owner-inventories`), (`claim:nrz:lc-closing-whole-attempt-limits`).|(`[MATRIX-test:integration:lc-grid-consumer-resource-owners]`), (`[MATRIX-test:integration:lc-spectral-batch-literal-boundaries]`), (`[MATRIX-test:integration:lc-spectral-batch-late-resource-refusal]`)|
 
 The quantity and native spectral statistical routes are separate consumers. Typed spectral covariance access does not create generic heap moment companions for arbitrary reading composition (`[MATRIX-sec:matrix:guarantees]`). A declared two-angle lattice example likewise does not establish the complete physical two-LC derivation (`req:nrz:lattice-live-integration`). Statistical parameter enclosures certify numerical error in a first-order model; they do not become deterministic physical radii, exact nonlinear moments or a proof of model adequacy.
@@ -233,19 +233,19 @@ LC closing requires property evidence for (`req:nrz:lc-relation-refinement-monot
 
 **Claim (Exact relation fixtures have executable twins)** · `claim:nrz:lc-closing-relation-fixtures`
 
-LC closing requires the independent rational/enclosed-irrational fixtures and refusal/property twins of (`req:nrz:lc-relation-acceptance`). Their derivations below specify later acceptance; they are not executable test evidence or a claim that an any-direction solver already exists.
+LC closing requires the independent rational/enclosed-irrational fixtures and refusal/property twins of (`req:nrz:lc-relation-acceptance`). Their derivations below specify later acceptance. The exact point-witness subfixtures in (`rule:nrz:lc-relation-point-implementation`) supply limited executable evidence; they do not establish the ten full numerical fixtures or an any-direction solver.
 
 **Table (Relation quantity closing evidence)** · `tab:nrz:lc-closing-relation`
 
 |Requirement|Acceptance evidence|Status|Remaining work|
 |-----------|-------------------|------|--------------|
-|(`claim:nrz:lc-closing-relation-quantities`)|None identified.|open|(`rule:nrz:lc-relation-any-direction`), (`req:nrz:lc-relation-acceptance`)|
+|(`claim:nrz:lc-closing-relation-quantities`)|Typed supplied subsets and exact point coordinates (`[BINDINGS-test:integration:lc-relation-exact-reference-witness]`); no complete projection.|partial|(`rule:nrz:lc-relation-any-direction`), (`req:nrz:lc-relation-acceptance`)|
 |(`claim:nrz:lc-closing-relation-sets`)|None identified.|open|(`rule:nrz:lc-relation-certified-sets`), (`rule:nrz:lc-relation-cycle-branches`)|
-|(`claim:nrz:lc-closing-relation-verdicts`)|None identified.|open|(`def:nrz:lc-relation-determinacy`), (`def:nrz:lc-relation-certainty`)|
+|(`claim:nrz:lc-closing-relation-verdicts`)|Exact nonemptiness component (`[BINDINGS-test:integration:lc-relation-recovery-feasibility-witness]`); both whole-set verdict axes remain absent.|partial|(`def:nrz:lc-relation-determinacy`), (`def:nrz:lc-relation-certainty`)|
 |(`claim:nrz:lc-closing-inverse-time`)|None identified.|open|(`rule:nrz:lc-relation-time-queries`), (`rule:nrz:lc-relation-overlap-tail`)|
 |(`claim:nrz:lc-closing-certainty-horizon`)|None identified.|open|(`rule:nrz:lc-relation-forward-horizon`)|
 |(`claim:nrz:lc-closing-relation-monotonicity`)|None identified.|open|(`req:nrz:lc-relation-refinement-monotonicity`)|
-|(`claim:nrz:lc-closing-relation-fixtures`)|None identified.|open|(`req:nrz:lc-relation-acceptance`)|
+|(`claim:nrz:lc-closing-relation-fixtures`)|Reference and recovery witness subfixtures (`[BINDINGS-test:integration:lc-relation-exact-reference-witness]`), (`[BINDINGS-test:integration:lc-relation-recovery-feasibility-witness]`); none of the ten full numerical fixtures closes.|partial|(`req:nrz:lc-relation-acceptance`)|
 
 ### Closing boundaries · `sec:nrz:lc-closing-boundaries`
 
@@ -385,6 +385,23 @@ For a compatible refinement S_new subset S_old obtained by adding pairs or tight
 **Argument (Energy alone does not identify the element scale)** · `arg:nrz:lc-relation-energy-identifiability`
 
 With a positive product `P=L*C` from pairs and a positive energy E, every `lambda>0` still permits `L=lambda`, `C=P/lambda`, `Vhat=sqrt(2*E*lambda/P)` and `Ihat=sqrt(2*E/lambda)`. Thus pairs plus energy alone leave unbounded element scale and must report that free direction; they cannot guarantee bounded L and C without another supplied range or amplitude. A positive ratio `R=Vhat/Ihat` instead gives `L=R*sqrt(P)` and `C=sqrt(P)/R`. Energy plus a known positive voltage amplitude fixes `C=2*E/Vhat^2`, or energy plus current amplitude fixes `L=2*E/Ihat^2`. These are eliminations of (`def:nrz:lc-relation`), with no hidden scale prior.
+
+### Relation implementation boundary · `sec:nrz:lc-relation-implementation`
+
+**Table (Measured relation attachment points)** · `tab:nrz:lc-relation-owners`
+
+|Piece|Inspected attachment|Owner and boundary|
+|-----|--------------------|------------------|
+|Original relation and eliminations|(`def:nrz:lc-relation`), (`arg:nrz:lc-relation-energy-identifiability`); original determinant checking in `crates/bindings/src/readings/spectral/original.rs:39`, exact constant operations in `crates/cas/src/exact_constant/arithmetic.rs:8`.|Bindings owns the physical relation and its positive-domain interpretation; CAS owns exact mathematical expressions and checked decisions. The new point checker is not a complete elimination theorem.|
+|Full-turn branches|(`ex:nrz:lattice-phase-wrap`); `crates/cas/src/lattice.rs:40` and `crates/cas/src/lattice/selection/attempt.rs:147`.|CAS owns the exact lattice question, integer domain and decided/undecided evidence. Bindings retains physical phase meanings and original integer lifts; a point's lift is not an alias cover.|
+|Outcome vocabulary|(`def:nrz:decision-outcomes`); `crates/cas/src/lattice/selection/attempt.rs:121` and `crates/bindings/src/decision/axis/mod.rs:66`.|Existing mathematical cuts retain their outcomes; relation determinacy and certainty require separate whole-set evidence. Invalid inputs and failed witness attempts are refusals.|
+|Quantity kinds|(`rule:nrz:lc-relation-kinds`); `crates/bindings/src/kind.rs:168`, `crates/bindings/src/lc_relation/quantity.rs`.|Bindings fixes each coherent kind and difference role, preserving the distinction between angle, rate and angular frequency.|
+|Enclosure arithmetic|`crates/scalar/src/enclosure.rs:16`; exact replay in `crates/cas/src/decision_pi.rs:121`.|Scalar owns outward numerical arithmetic; matrix owns its heap values, error companions and live version closure. CAS consumes mathematical certificates, never numerical heap values.|
+|Pi|`crates/scalar/src/pi/mod.rs:96`, `crates/matrix/src/conversion/pi/region.rs:26`, `crates/cas/src/pi_bounds.rs:16`.|Scalar encloses pi; matrix shares the immutable `PiConstant` numerical owner; CAS independently checks the Machin certificate.|
+
+**Rule (Current exact relation increment)** · `rule:nrz:lc-relation-point-implementation`
+
+The implemented bindings surface admits supplied subsets and exact full-tuple nonemptiness witnesses under (`[BINDINGS-rule:bindings:lc-relation-declaration]`), (`[BINDINGS-rule:bindings:lc-relation-point-witness]`), (`[BINDINGS-rule:bindings:lc-relation-witness-resources]`). The exact reference tuple checks the amplitude ratio 50 and energy 1/8000 against all original equalities and supplied inputs. Unknown and supplied initial phase remain different declarations even when the same witness satisfies both. This moves only the declaration and point-feasibility portions of (`tab:nrz:lc-closing-relation`). It does not close the queryable-set half of (`claim:nrz:lc-closing-characteristic-impedance`) or (`claim:nrz:lc-closing-initial-energy`), either numerical format, complete finite/infinite branch coverage, dual verdicts, time queries, horizon publication or monotone refinement. The ownership follows existing matrix → bindings → CAS and matrix → scalar edges; this increment adds no dependency, wire change, theorem schema or raised limit.
 
 ### Independent exact fixtures · `sec:nrz:lc-relation-fixtures`
 
