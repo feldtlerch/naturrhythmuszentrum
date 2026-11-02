@@ -6,6 +6,8 @@ mod coordinate_enclosure;
 pub(crate) mod cover;
 mod enclosure;
 mod index;
+mod integer_tuples;
+pub use integer_tuples::IntegerTupleDomain;
 mod pi_horizon;
 mod pi_interval;
 mod pi_zero;

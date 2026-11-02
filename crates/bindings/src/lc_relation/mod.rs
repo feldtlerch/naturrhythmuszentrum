@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Immutable autonomous LC constraints, exact projection families and checked feasibility.
 
+mod attempt;
+pub use attempt::{LcBranchObligation, LcPairAttempt, LcUnresolvedBranches};
 mod capacitance;
 mod clock;
 mod forward;

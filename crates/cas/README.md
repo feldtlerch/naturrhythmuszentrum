@@ -1987,3 +1987,7 @@ The `LogExp` route attains absolute widths of `2^-4`, `2^-8` and `2^-16` for bas
 **Rule (Eventual affine-width full-turn horizon)** · `rule:cas:pi-width-horizon`
 
 `PiWidthHorizon` checks the nonnegative future width `offset+slope*t` with nonnegative slope and an explicit future reference. Reused checked pi evidence distinguishes a finite affine-pi threshold, a constant-width infinite horizon, an already-full reference and an unresolved reference comparison. The positive-slope threshold derives exactly as `(2*pi-offset)/slope`; it is never inferred from an inverse-family cutoff. This mathematical certificate asserts an interval-width fact only; the physical owner must supply the retained joint feasible image and its total existence evidence.
+
+**Rule (Unpruned integer tuple candidate domains)** · `rule:cas:integer-tuple-domain`
+
+`IntegerTupleDomain` represents the complete mathematical Cartesian domain `Z^d`. Exact membership checks coordinate count, arbitrary-precision rational component limits and integrality without converting indices to machine integers. The domain has no magnitude cutoff and asserts no feasibility, selected branch or physical equation. Admission and membership spend the caller's existing cumulative ledger.
