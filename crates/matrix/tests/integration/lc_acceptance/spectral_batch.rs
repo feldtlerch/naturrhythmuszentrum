@@ -4,6 +4,7 @@
 mod boundaries;
 mod lifecycle;
 mod limits;
+mod publication;
 
 use crate::reading_testing::{TestResult, ledger};
 use crate::reciprocal_testing::oracle::Rational;

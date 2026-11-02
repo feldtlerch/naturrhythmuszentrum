@@ -792,6 +792,35 @@ The schema separately owns 152 bytes and each retained bound plan 752 bytes in t
 
 Current result lookup costs 3 Work and needs 4792/4904 staged bytes in binary32/binary64 for the retained local owners. These limits are checked even on a successful row. A one-byte resident prefix refuses the scheduler's staged threshold; after releasing it, a new explicit owner can run on the same ledger while preserving spent Work. The original owner cannot retry. Work 493 refuses the later root while preserving the earlier root and all its row aliases (`test:integration:lc-spectral-batch-late-resource-refusal`). These tests do not claim late heap-publication or decision-retry coverage.
 
+**Rule (Retained spectral evaluation publication)** · `rule:matrix:lc-retained-spectrum-publication`
+
+`Heap::publish_lc_spectrum_reusing` accepts the original deterministic `LcSpectralEvaluation` and a complete publication prepared from that exact plan. It authenticates the retained plan owner, revalidates all original inputs and arithmetic, checks fresh output declarations, and commits the existing complete six-view/eight-companion group. It preserves the producer's numerical receipt and never evaluates the root again. Scheduled row aliases retain one original producer through this adapter (`test:integration:lc-spectral-batch-publishes-retained-root-bundle`). Independently rebound equal plans, foreign heaps, stale original values/radii and already published output roots refuse without a published prefix (`test:integration:lc-spectral-retained-publication-owner-refusals`), (`test:integration:lc-spectral-retained-publication-stale-refusals`).
+
+The new consumer reserves the retained evaluation alongside the original publication metadata and complete produced group. These are scoped conservative allowances; the retained evaluation may already occupy a batch result slot and cannot be added again in an aggregate inventory. The original cold publisher and its resource pins are unchanged. Statistical spectral extensions remain outside this entry point. A separate composed test feeds the same scheduled deterministic producer into original mapped/copied/overlapping source statistics, preserving the native covariance model, all signed operator/root blocks and the original root receipt after the batch index is dropped (`test:integration:lc-source-retained-scheduled-root-cross-blocks`). This does not supply the driven cross-frequency lineage or a common publication scheduler.
+
+**Table (Spectral owner overlaps)** · `tab:matrix:lc-spectral-owner-overlaps`
+
+|Owner|New storage in this scope|Overlap or separate lifetime|
+|-----|-------------------------|----------------------------|
+|Checked schema|One fixed shared record and three exact string capacities.|The original law and graph remain shared evidence; each binding holds a reference rather than another export.|
+|Bound spectrum|One fixed plan record and reference-count fields per retained input key.|Its source groups and schema are shared. A duplicate row does not retain another producer record.|
+|Spectral batch|Two vector capacities and fixed coefficient, status, key and receipt fields.|Key bytes are a subset. The completed root structs occupy existing inline slots, so child output allowances cannot be added again.|
+|Coefficient preparation|One temporary fixed decoded array beside the reserved owner.|The completed array moves into the fixed owner; no coefficient vector is allocated on this route.|
+|Root numerical child|Existing scoped temporary evaluation and enclosure allowance.|Its final evaluation is stored inline in the batch. Original source groups and scalar literal internals remain outside the batch inventory.|
+|Retained-root publisher|Existing metadata and produced-group allowances, with a retained evaluation prefix.|The produced-group allowance includes a metadata copy while staging also reserves the original declaration metadata; these conservative proof/adapter allowances account for the roughly doubled staged ceiling. The retained evaluation can be the batch slot itself; detailed allocation inventory remains required before aggregation.|
+|Original-source statistics|Existing contraction, sensitivity and retained-source allowances.|The root, derivative, exact map and joint model keep their original owners; these allowances are not disjoint totals.|
+
+**Example (Retained spectral publication boundaries)** · `ex:matrix:lc-retained-publication-boundaries`
+
+After the original batch and complete output declaration are prepared, the retained deterministic root publisher has the following independent consumer limits:
+
+|Format|Work|Staged bytes|Output bytes|
+|------|----|------------|------------|
+|binary32|4,811|1,010,772|505,316|
+|binary64|4,811|1,010,888|505,400|
+
+Literal `N`, `N−1` and consumed-Work-prefix assertions preserve the original producer receipt and all successful row aliases (`test:integration:lc-spectral-retained-publication-literal-boundaries`). Refusal leaves provenance unchanged and permits the same complete declaration to publish later, checking that no output prefix survived. A one-byte resident prefix refuses at the staged ceiling; releasing it permits publication on the same ledger with all refused Work retained. The roughly half-megabyte output allowance includes conservative adapter and witness envelopes, not merely the thirteen numerical coordinates. These scoped logical allowances are not observed allocator capacities, backend reservations or disjoint whole-attempt totals; their overlaps are recorded in (`tab:matrix:lc-spectral-owner-overlaps`).
+
 **Example (Retained LC root consumer boundaries)** · `ex:matrix:lc-source-retained-root-boundaries`
 
 After the original deterministic evaluation and source binding are retained, the mapped fixture in (`ex:matrix:lc-source-owner-boundaries`) has the following independent consumer limits:

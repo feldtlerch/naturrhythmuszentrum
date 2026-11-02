@@ -231,15 +231,7 @@ impl Heap {
         budget: &mut Budget,
     ) -> Result<PublishedLcSpectrum<P>, Error> {
         let plan = &publication.0;
-        let root = plan.definition.outputs()[0].reading().family().root();
-        for group in self.symbols.groups() {
-            for adapter in group.coverage.readings() {
-                budget.work(1, AT)?;
-                if adapter.reading().family().root() == root {
-                    return Err(Error::Identity);
-                }
-            }
-        }
+        fresh(self, plan, budget)?;
         let owned = check::produced(plan)?;
         budget.check(BudgetKind::OutputBytes, owned, AT)?;
         budget.with_retained_payload(plan.bytes, AT, |budget| {
@@ -249,6 +241,56 @@ impl Heap {
             })
         })
     }
+
+    /// Publish the complete deterministic root bundle using its original retained evaluation.
+    ///
+    /// The publication must have been prepared from the same original deterministic
+    /// plan. The result preserves the producer's receipt and live input closure;
+    /// this consumer never evaluates the spectrum or silently recomputes a refused input.
+    /// # Errors
+    /// Refuses independently prepared equal plans, statistical extensions, foreign or
+    /// stale evaluations, reused output roots and exhausted resources without a prefix.
+    pub fn publish_lc_spectrum_reusing<P: Scalar + 'static>(
+        &mut self,
+        publication: &LcSpectralPublication<P>,
+        evaluation: &LcSpectralEvaluation<P>,
+        context: &ArithmeticContext,
+        budget: &mut Budget,
+    ) -> Result<PublishedLcSpectrum<P>, Error> {
+        let plan = &publication.0;
+        budget.work(1, AT)?;
+        if plan.spectrum.extension().is_some()
+            || !Rc::ptr_eq(&plan.spectrum.0, &evaluation.plan().0)
+        {
+            return Err(Error::Identity);
+        }
+        evaluation.validate(self, context)?;
+        fresh(self, plan, budget)?;
+        let owned = check::produced(plan)?;
+        budget.check(BudgetKind::OutputBytes, owned, AT)?;
+        let retained = super::statistics::evaluation_bytes(evaluation.plan())?;
+        budget.with_retained_payload(retained, AT, |budget| {
+            budget.with_retained_payload(plan.bytes, AT, |budget| {
+                budget.with_retained_payload(owned, AT, |budget| {
+                    commit(self, plan, evaluation.clone(), context, budget)
+                })
+            })
+        })
+    }
+}
+
+/// Reusing an evaluation cannot overwrite any already bound output declaration.
+fn fresh<P: Scalar>(heap: &Heap, plan: &Plan<P>, budget: &mut Budget) -> Result<(), Error> {
+    let root = plan.definition.outputs()[0].reading().family().root();
+    for group in heap.symbols.groups() {
+        for adapter in group.coverage.readings() {
+            budget.work(1, AT)?;
+            if adapter.reading().family().root() == root {
+                return Err(Error::Identity);
+            }
+        }
+    }
+    Ok(())
 }
 
 /// All metadata, output radii and region payloads are prepared before the existing atomic heap commit.

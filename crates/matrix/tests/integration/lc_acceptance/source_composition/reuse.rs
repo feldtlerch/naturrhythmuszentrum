@@ -7,6 +7,7 @@ use crate::spectral_testing::Fixture;
 use nrz_matrix::{ReciprocalDerivativeContract, SpectralError};
 use nrz_scalar::{ArithmeticContext, Scalar};
 
+mod batch;
 mod boundaries;
 mod native;
 
