@@ -3,6 +3,7 @@
 
 mod refusals;
 mod support;
+mod timing;
 
 use nrz_bindings::{LcBranch, LcInterval, LcQuantity as Q, LcRelation};
 use support::{TestResult, exact_input, input, ledger, number, reference, relation};

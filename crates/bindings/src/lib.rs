@@ -102,9 +102,9 @@ pub use lc_relation::{
     LcConsistency, LcDeterminacy, LcForwardArc, LcForwardCover, LcFreeDirection, LcHorizon,
     LcHorizonValue, LcImpossible, LcInput, LcInputRefinement, LcInterval, LcObservationValue,
     LcPairAttempt, LcPairParameters, LcPairRefinement, LcPairsCover, LcPhaseEndpoint, LcPhaseGauge,
-    LcQuantity, LcRefinementState, LcRefinementSuccess, LcRelation, LcRelationError, LcSharedClock,
-    LcTailOutcome, LcTailStatus, LcTimeBox, LcTimeTail, LcUnresolvedBranches, LcValues, LcWitness,
-    LcZeroTimes,
+    LcQuantity, LcRefinementState, LcRefinementSuccess, LcRelation, LcRelationError, LcSampleTimes,
+    LcSharedClock, LcTailOutcome, LcTailStatus, LcTimeBox, LcTimeTail, LcTimingOuterCover,
+    LcUnresolvedBranches, LcValues, LcWitness, LcZeroTimes,
 };
 pub use measure::{Conversion, Measure, Scale};
 pub use pairing::{

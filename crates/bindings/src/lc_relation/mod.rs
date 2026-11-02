@@ -18,7 +18,9 @@ pub use impossible::LcImpossible;
 mod pairs;
 mod quantity;
 mod time;
+mod timing;
 pub use time::{LcTailOutcome, LcTailStatus, LcTimeBox, LcTimeTail, LcZeroTimes};
+pub use timing::{LcSampleTimes, LcTimingOuterCover};
 mod storage;
 mod witness;
 
