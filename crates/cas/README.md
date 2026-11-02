@@ -484,6 +484,12 @@ Formal primitive `trig.sin-half-pi`, version 1. Sine of the original Real operan
 
 Formal primitive `trig.sin-odd`, version 1. Sine at the negated original Real operand equals the negation of its value at that operand. Required premises: One ordered original `DomainGuard`; both sides retain the same operand identity, context, declaration frame and scope, with checked negation and registered trigonometric totality. Standing: Lemma; instances are CAS-checked.
 
+**Derived recipe `trig.atan-minus-one@1`.**
+
+The named D recipe `trig.atan-minus-one@1` concludes arctangent(u) = −Pi/4 from the original definedness guard and equality u = −1. `Cas::trig_atan_minus_one` supports the literal −1 and Neg(1). Its checked expansion uses equality congruence, the exact arithmetic join Neg(1) = −1, parity at one, `trig.atan-one@1`, negation congruence and equality transport. Local Defined(arctangent(·)) hypotheses retain the scalar endpoint obligations. Restricted `trig.defined@1` facts discharge those hypotheses at `ctx.close`; portable replay checks that close and every earlier link. Original assumptions remain attached. The recipe adds no primitive manifest entry or cost-policy version.
+
+The recipe validates both premise handles as proofs before entering the scalar-view capability mapping; a function handle in either premise slot remains Invalid. The recipe boundary maps the scalar view's unsupported condition-transport capability to `TrigRecipeOutcome::Unresolved` after rollback, rather than classifying a valid equality as malformed evidence. Original spellings other than the literal −1 and Neg(1) are also Unresolved, even with a checked equality to −1. The quotient u = −2/2, the conditional input u = −1 + 0/x and Add(−2,1) exercise these unsupported cases. A lossless conversion rule is outside this recipe's supported scope. Malformed original joins remain Invalid; spent resources retain their typed exhaustion. Unresolved is no negative mathematical conclusion.
+
 ## Formal hypothesis kinds · `sec:cas:hypothesis-kinds`
 
 `proof::HYPOTHESIS_SCHEMAS` names every `HypothesisKind` with an `assum` label. Exhaustive matches classify every `PremiseShape`, every predicate constructor and every outer typed statement. Exact arities remain in `PremiseShape::Exact` and `PremiseShape::AtLeast`; a kind never replaces an ordered slot or its original statement. Solving and distribution subtypes retain their full existing typed certificate contracts.

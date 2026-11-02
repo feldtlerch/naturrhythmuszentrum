@@ -330,3 +330,14 @@ pub(crate) mod trig_parity_work;
 )]
 #[path = "endpoint_hypotheses.rs"]
 pub(crate) mod endpoint_hypotheses;
+
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "shared original minus-one recipe fixtures"
+)]
+#[path = "trig_minus_one.rs"]
+pub(crate) mod trig_minus_one;
+
+#[path = "trig_minus_one_work.rs"]
+#[expect(clippy::redundant_pub_crate, reason = "shared public test fixtures")]
+pub(crate) mod trig_minus_one_work;

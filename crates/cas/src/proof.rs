@@ -29,6 +29,7 @@ pub use crate::rule::{
     CertificateSchema, ConclusionKind, PRIMITIVES, PremiseShape, Primitive, RuleSpec,
 };
 pub use crate::schema_standing::{LemmaProvenance, Standing};
+pub use crate::trig::TrigRecipeOutcome;
 
 pub use crate::case_model::CaseCertificate;
 pub use crate::proof_model::{
