@@ -51,7 +51,7 @@ fn endpoint<P: Scalar + 'static>(
 }
 
 /// One cumulative exact/numerical ledger reconciles literal failure work as well as success.
-fn decode<P: Scalar>(
+pub(super) fn decode<P: Scalar>(
     value: &Rational,
     literals: LiteralLimits,
     context: &ArithmeticContext,

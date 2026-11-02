@@ -2,6 +2,8 @@
 //! Immutable numerical endpoint regions retain the original exact LC forward cover.
 
 mod lower;
+mod pairs;
+pub use pairs::{LcNumericalQuantity, LcPairsProjection};
 
 use crate::PiConstant;
 use nrz_bindings::readings::algebra::{

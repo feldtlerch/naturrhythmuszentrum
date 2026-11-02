@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Both-format forward boxes use independently specified rational and enclosed-pi oracles.
 
+mod pairs;
 mod refusals;
 mod support;
 

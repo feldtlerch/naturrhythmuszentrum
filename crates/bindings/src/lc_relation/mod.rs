@@ -3,12 +3,14 @@
 
 mod forward;
 mod interval;
+mod pairs;
 mod quantity;
 mod storage;
 mod witness;
 
 pub use forward::{LcCertainty, LcDeterminacy, LcForwardArc, LcForwardCover, LcPhaseEndpoint};
 pub use interval::LcInterval;
+pub use pairs::{LcFreeDirection, LcPairParameters, LcPairsCover, LcPhaseGauge};
 pub use quantity::LcQuantity;
 pub use witness::{LcBranch, LcObservationValue, LcValues, LcWitness};
 
@@ -59,10 +61,10 @@ pub enum LcRelationError {
     #[error("LC relation metadata capacity exhausted")]
     Capacity,
     /// This projection adapter does not cover the complete supplied constraint family.
-    #[error("unsupported LC forward projection constraints")]
+    #[error("unsupported LC projection constraints")]
     Projection,
     /// Proposed endpoint cycle indices do not have a complete exact floor-cell proof.
-    #[error("LC forward cycle cover is not proved")]
+    #[error("LC complete cycle cover is not proved")]
     CycleCover,
 }
 

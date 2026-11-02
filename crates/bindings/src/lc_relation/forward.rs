@@ -18,6 +18,8 @@ use std::rc::Rc;
 /// Structural information is separate from the certainty of its evidence.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LcDeterminacy {
+    /// A named continuous physical direction remains unconstrained.
+    Underdetermined,
     /// The supported observation map determines the projection within declared uncertainty.
     DeterminedFinite,
 }
