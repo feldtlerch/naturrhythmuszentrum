@@ -16,6 +16,10 @@ Several symbols can have checked physical readings over one exact coordinate fam
 
 ## In the LC target · `sec:bindings:lc-target`
 
+**Observation (LC closing scope)** · `obs:bindings:lc-closing-scope`
+
+The [LC closing register](../../docs/design/lc-resonance.md) distinguishes this crate's tested LC component contracts from the remaining driven-plan, any-direction relation and reproducibility obligations.
+
 **Rule (Exact-export attempt receipts)** · `rule:bindings:exact-export-attempts`
 
 Consumed exact Work and arithmetic steps are retained in the child even if recognition, spelling or a final byte check refuses. Its Work receipt includes exact arithmetic schedules and must remain available without an exported value; an invalid policy reports zero Work. Staging capacity is temporary and released on return. A rational spelling and its borrowed original definition publish together only on success. Exact-export bytes are temporary capacity inside matrix admission, not another retained numerical owner. Parent reconciliation counts the receipt once; numerical literal decoding and pi multiplication are distinct schedules added afterward. Unsupported factors after exact arithmetic therefore consume Work without acquiring a numerical result.

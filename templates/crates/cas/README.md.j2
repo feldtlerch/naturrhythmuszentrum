@@ -17,6 +17,10 @@ No heap value enters CAS. Bindings exports a source-free exact constant spelling
 
 ## In the LC target · `sec:cas:lc-target`
 
+**Observation (LC closing scope)** · `obs:cas:lc-closing-scope`
+
+The [LC closing register](../../docs/design/lc-resonance.md) distinguishes this crate's tested LC component contracts from the remaining driven-plan, any-direction relation and reproducibility obligations.
+
 For `L=25 mH=1/40 H` and `C=10 µF=1/100000 F`, the characteristic equation is `s²+1/(LC)=0`. On the Real stratum `L>0, C>0`, its two Complex roots are `±i/√(LC)=±2000i s⁻¹`. The angular-frequency relation gives `ω₀=2000 rad/s`; the distinct cyclic-frequency relation gives `f₀=1000/π Hz`. CAS supplies exact root selection, membership, factor identity and completeness evidence. Bindings must supply the physical interpretation and retain the original denominator and positivity premises.
 
 The implemented mixed family `z²-r=0` supports negative-radicand pieces with positive Real square-root witnesses and explicit transport from the base stratum. The original two-parameter determinant has checked coefficient transport under separate positive `L` and `C` guards, including fresh replay against independently assembled exact coefficient syntax. The original complete root/factor certificate is implemented and consumed by bindings `LcSpectralLaw::check` and matrix `Heap::evaluate_lc_spectrum`/`publish_lc_spectrum`. The current route table in `docs/design/lc-resonance.md` also records native operator/root covariance, the separate correlated quantity ω₀ chain and explicit native certified π conversion, with their positive/refusal evidence and remaining adapters. A symbolic root proof certifies neither a floating eigenvalue enclosure nor a phase branch or trajectory.
