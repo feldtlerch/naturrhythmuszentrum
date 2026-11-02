@@ -20,6 +20,27 @@ pub(in crate::binding::live::phasor) fn coverage(
     companions: &[CompanionAdapter<usize>],
     budget: &mut Budget,
 ) -> Result<(), PhasorError> {
+    complete(output, coverage, companions, true, budget)
+}
+
+/// A fresh impedance source requires all original copies and radii, without a current vector view.
+pub(in crate::binding::live) fn impedance(
+    output: &Representation,
+    coverage: &ReadingCoverage<usize>,
+    companions: &[CompanionAdapter<usize>],
+    budget: &mut Budget,
+) -> Result<(), PhasorError> {
+    complete(output, coverage, companions, false, budget)
+}
+
+/// Both closed producers share the unchanged exact coverage traversal and companion checks.
+fn complete(
+    output: &Representation,
+    coverage: &ReadingCoverage<usize>,
+    companions: &[CompanionAdapter<usize>],
+    require_vector: bool,
+    budget: &mut Budget,
+) -> Result<(), PhasorError> {
     let expected = (0..4)
         .map(|index| EntryTicket { region: 0, index })
         .collect::<Vec<_>>();
@@ -54,7 +75,7 @@ pub(in crate::binding::live::phasor) fn coverage(
             vector = true;
         }
     }
-    if !whole || !vector || copies.iter().any(|present| !present) {
+    if !whole || (require_vector && !vector) || copies.iter().any(|present| !present) {
         return Err(PhasorError::Identity);
     }
     parameters(output, companions, budget)
@@ -136,7 +157,7 @@ fn parameters(
 }
 
 /// Charge newly owned witnesses and source records; product and definition remain shared.
-pub(super) fn storage(
+pub(in crate::binding::live) fn storage(
     coverage: &ReadingCoverage<usize>,
     companions: &[CompanionAdapter<usize>],
     sources: usize,

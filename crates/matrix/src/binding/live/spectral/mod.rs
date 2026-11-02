@@ -17,7 +17,9 @@ pub use angular::{
 mod frequency;
 pub(crate) use frequency::Origin as FrequencyOrigin;
 pub use frequency::{LcFrequencyPublication, PublishedLcFrequency};
+mod impedance;
 mod input;
+pub use impedance::{LcImpedancePublication, PublishedLcImpedance};
 mod moments;
 mod numeric;
 mod plan;

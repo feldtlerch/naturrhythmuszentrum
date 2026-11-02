@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Complete output declarations and their original source closure precede one atomic heap publication.
 
-pub(super) mod check;
+pub(in crate::binding::live) mod check;
 use super::{AT, Heap, HeapError, PhasorError, PhasorEvaluation, PhasorProduct};
 use crate::{
     CompanionAdapter, DependencyPolicy, Extent, ReadingCoverage, ReadingImport, ReadingRegion,

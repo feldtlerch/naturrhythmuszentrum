@@ -24,10 +24,11 @@ pub use phasor::{
 pub use spectral::{
     LcAngularFrequencyParameter, LcAngularFrequencyPublication, LcDrivenContinuations,
     LcDrivenError, LcDrivenInventory, LcDrivenLimits, LcDrivenPoint, LcDrivenStatus,
-    LcDrivenStratum, LcFrequencyPublication, LcSourceBinding, LcSourceStatistics, LcSpectralBatch,
-    LcSpectralBatchInventory, LcSpectralBatchLimits, LcSpectralEvaluation, LcSpectralPublication,
-    LcSpectralSchema, LcSpectralStatus, LcSpectrum, PublishedLcAngularFrequency,
-    PublishedLcFrequency, PublishedLcSpectrum, SpectralError, SpectralValue,
+    LcDrivenStratum, LcFrequencyPublication, LcImpedancePublication, LcSourceBinding,
+    LcSourceStatistics, LcSpectralBatch, LcSpectralBatchInventory, LcSpectralBatchLimits,
+    LcSpectralEvaluation, LcSpectralPublication, LcSpectralSchema, LcSpectralStatus, LcSpectrum,
+    PublishedLcAngularFrequency, PublishedLcFrequency, PublishedLcImpedance, PublishedLcSpectrum,
+    SpectralError, SpectralValue,
 };
 mod derivatives;
 pub use derivatives::{
@@ -134,6 +135,7 @@ impl<P: Scalar> ReadingBinding<P> {
             ResultDefinition::Product(value) => Some(value),
             ResultDefinition::Solve(_)
             | ResultDefinition::Spectral(_)
+            | ResultDefinition::LcImpedance(_)
             | ResultDefinition::Coordinate(_)
             | ResultDefinition::AngularFrequency(_)
             | ResultDefinition::Frequency(_) => None,
@@ -146,6 +148,7 @@ impl<P: Scalar> ReadingBinding<P> {
             ResultDefinition::Solve(value) => Some(value),
             ResultDefinition::Product(_)
             | ResultDefinition::Spectral(_)
+            | ResultDefinition::LcImpedance(_)
             | ResultDefinition::Coordinate(_)
             | ResultDefinition::AngularFrequency(_)
             | ResultDefinition::Frequency(_) => None,
@@ -160,6 +163,7 @@ impl<P: Scalar> ReadingBinding<P> {
             ResultDefinition::Spectral(value) => Some(value),
             ResultDefinition::Product(_)
             | ResultDefinition::Solve(_)
+            | ResultDefinition::LcImpedance(_)
             | ResultDefinition::Coordinate(_)
             | ResultDefinition::AngularFrequency(_)
             | ResultDefinition::Frequency(_) => None,
@@ -175,6 +179,7 @@ impl<P: Scalar> ReadingBinding<P> {
             ResultDefinition::Product(_)
             | ResultDefinition::Solve(_)
             | ResultDefinition::Spectral(_)
+            | ResultDefinition::LcImpedance(_)
             | ResultDefinition::Coordinate(_)
             | ResultDefinition::Frequency(_) => None,
         }
@@ -188,7 +193,21 @@ impl<P: Scalar> ReadingBinding<P> {
             | ResultDefinition::Product(_)
             | ResultDefinition::Solve(_)
             | ResultDefinition::Spectral(_)
+            | ResultDefinition::LcImpedance(_)
             | ResultDefinition::Coordinate(_) => None,
+        }
+    }
+    /// Original deterministic L/C assignment and driven expression retained by an impedance producer.
+    #[must_use]
+    pub fn lc_driven_impedance(&self) -> Option<&nrz_bindings::LcDrivenImpedance> {
+        match self.group.result_definition.as_ref()? {
+            ResultDefinition::LcImpedance(value) => Some(value),
+            ResultDefinition::AngularFrequency(_)
+            | ResultDefinition::Product(_)
+            | ResultDefinition::Solve(_)
+            | ResultDefinition::Spectral(_)
+            | ResultDefinition::Coordinate(_)
+            | ResultDefinition::Frequency(_) => None,
         }
     }
     /// Original operand assurance scopes retained by a published phasor result.
@@ -263,6 +282,8 @@ pub(crate) struct ProofDependency {
 /// A closed producer retains the exact operation that initialized its output family.
 #[derive(Clone, Debug)]
 pub(crate) enum ResultDefinition {
+    /// Original deterministic L/C point and written driven impedance expression.
+    LcImpedance(nrz_bindings::LcDrivenImpedance),
     /// Original restored snapshot, references, companions and numerical source closure.
     Coordinate(Rc<coordinates::selection::Origin>),
     /// Complete multiplication correspondence and physical result slot.

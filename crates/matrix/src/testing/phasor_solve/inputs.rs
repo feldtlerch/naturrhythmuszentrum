@@ -11,7 +11,7 @@ use nrz_bindings::{
 use nrz_scalar::{ArithmeticContext, Enclosure, Finite, Scalar};
 
 /// Input radius parameters are distinct per original stored copy and coverage channel.
-pub(super) fn companions(
+pub(crate) fn companions(
     fixture: &mut Fixture,
     adapters: &[ReadingAdapter<usize>],
 ) -> TestResult<Vec<CompanionAdapter<usize>>> {
@@ -52,7 +52,7 @@ pub(super) fn companions(
 }
 
 /// Dyadic discrepancies and input boxes keep independent exact-rational test oracles finite.
-pub(super) fn regions<P: Scalar>(
+pub(crate) fn regions<P: Scalar>(
     reactance: P,
     radius: P,
     rounded: bool,
@@ -110,7 +110,7 @@ pub(super) fn regions<P: Scalar>(
 }
 
 /// Cover the unchanged current solver's conservative exact-literal import on the new fixed route.
-pub(super) fn cover_fixed<P: Scalar>(
+pub(crate) fn cover_fixed<P: Scalar>(
     regions: &mut [ReadingRegion<P>],
     exact: i64,
     budget: &mut nrz_bindings::Budget,

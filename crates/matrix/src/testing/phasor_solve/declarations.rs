@@ -27,7 +27,7 @@ type Inventory = (
 );
 
 /// Original symbols include both source blocks and all result/component/parameter declarations.
-pub(super) fn fixture() -> TestResult<Fixture> {
+pub(crate) fn fixture() -> TestResult<Fixture> {
     let declarations = inventory();
     let borrowed = declarations
         .iter()
@@ -64,12 +64,12 @@ fn inventory() -> Vec<(String, Sort)> {
 }
 
 /// Independent original reactance/voltage families and one fresh two-coordinate current slot.
-pub(super) fn readings(fixture: &mut Fixture) -> TestResult<Inventory> {
+pub(crate) fn readings(fixture: &mut Fixture) -> TestResult<Inventory> {
     readings_fixed(fixture, None)
 }
 
 /// A source-free original reactance is fixed in the complete affine family, before numerical import.
-pub(super) fn readings_fixed(fixture: &mut Fixture, fixed: Option<i64>) -> TestResult<Inventory> {
+pub(crate) fn readings_fixed(fixture: &mut Fixture, fixed: Option<i64>) -> TestResult<Inventory> {
     let mut adapters = Vec::new();
     let mut relations = Vec::new();
     for (region, prefix, dimensions, coefficients) in [
@@ -166,7 +166,7 @@ fn block(
 }
 
 /// `ohm * ampere = volt` is checked by the explicit physical registry.
-pub(super) fn registry(
+pub(crate) fn registry(
     adapters: &[ReadingAdapter<usize>],
     current: &Representation,
 ) -> TestResult<Registry> {
@@ -187,7 +187,7 @@ pub(super) fn registry(
 }
 
 /// Both unit metrics and a deliberate two-volt reference retain their own exact definitions.
-pub(super) fn frames(
+pub(crate) fn frames(
     fixture: &mut Fixture,
     definition: &PhasorSolveDefinition,
     budget: &mut Budget,

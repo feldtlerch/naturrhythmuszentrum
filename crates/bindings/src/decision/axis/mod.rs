@@ -3,7 +3,9 @@
 
 mod declaration;
 mod impedance;
+mod lc;
 pub use impedance::AxisPhaseImpedance;
+pub use lc::LcDrivenImpedance;
 mod proof;
 mod syntax;
 

@@ -2,9 +2,9 @@
 //! Public physical LC equation fixtures with predeclared current families and named references.
 
 #[path = "phasor_solve/declarations.rs"]
-mod declarations;
+pub(crate) mod declarations;
 #[path = "phasor_solve/inputs.rs"]
-mod inputs;
+pub(crate) mod inputs;
 #[path = "phasor_solve/voltage.rs"]
 mod voltage;
 use crate::reading_testing;

@@ -86,7 +86,7 @@ pub use decision::{
     DecisionError, DecisionExpression, DecisionInputs, DecisionOperand, IntegerDecisionCase,
     IntegerDecisionSpec, LatticeAttachment, LatticeAxis, LatticeCoordinate, LatticeDecisionCase,
     LatticeDecisionSpec, LatticeIndexKind, LatticeInputs, LatticeMetric, LatticePreparationUsage,
-    LatticeSite, SelectedDecision, SelectedLattice,
+    LatticeSite, LcDrivenImpedance, SelectedDecision, SelectedLattice,
 };
 pub use declaration::{Companion, Context, Declaration, Evidence, FunctionSignature, Observable};
 pub use descriptor::{Descriptor, Role, uncertainty};

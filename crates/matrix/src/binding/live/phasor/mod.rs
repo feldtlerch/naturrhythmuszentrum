@@ -4,7 +4,7 @@
 mod input;
 mod numeric;
 mod plan;
-mod publication;
+pub(in crate::binding::live) mod publication;
 mod solve;
 pub use plan::{PhasorOperand, PhasorProduct};
 pub use publication::{PhasorPublication, PublishedPhasor};
