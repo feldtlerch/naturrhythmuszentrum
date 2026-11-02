@@ -50,7 +50,18 @@ fn discharge(cas: &Cas, witness: &VerifiedWitness) -> TestResult {
             .iter()
             .all(|hypothesis| hypothesis.context == witness.judgment().context)
     );
-    assert_eq!(close.residuals, []);
+    if witness.judgment().residuals.is_empty() {
+        assert_eq!(close.residuals, []);
+    } else {
+        for step in [child, close] {
+            assert_ne!(step.residuals, []);
+            assert!(
+                step.residuals
+                    .iter()
+                    .all(|residual| *residual == nrz_cas::proof::HypothesisKind::NonZero)
+            );
+        }
+    }
     for fact in close.premises.iter().skip(2) {
         let restriction = citations
             .iter()
@@ -75,7 +86,7 @@ fn discharge(cas: &Cas, witness: &VerifiedWitness) -> TestResult {
 /// ´test:integration:trig-minus-one-fresh-replay´
 #[test]
 fn trig_minus_one_fresh_replay() -> TestResult {
-    for kind in [0, 1] {
+    for kind in [0, 1, 2, 3, 4] {
         let (source, witness) = produced(kind)?;
         discharge(&source, &witness)?;
         let bytes = source.export_witness(&witness, &mut default_budget()?)?;
@@ -112,7 +123,7 @@ fn trig_minus_one_fresh_replay() -> TestResult {
 /// ´test:integration:trig-minus-one-severed-links´
 #[test]
 fn trig_minus_one_severed_links() -> TestResult {
-    for kind in [0, 1] {
+    for kind in [0, 1, 2, 3, 4] {
         let (source, witness) = produced(kind)?;
         let bytes = source.export_witness(&witness, &mut default_budget()?)?;
         let inventory = records(&bytes)?;
@@ -166,6 +177,46 @@ fn trig_minus_one_severed_links() -> TestResult {
             }
         }
         assert!(mutations > 20);
+    }
+    Ok(())
+}
+
+/// Conditional replay cannot discard either retained region of the original nonzero residual.
+/// ´test:integration:trig-minus-one-conditional-residual-replay´
+#[test]
+fn trig_minus_one_conditional_residual_replay() -> TestResult {
+    let (source, witness) = produced(2)?;
+    let bytes = source.export_witness(&witness, &mut default_budget()?)?;
+    for reordered in [false, true] {
+        for removed in 0..3 {
+            let (mut receiver, _) = fixture(2, reordered)?;
+            assert_eq!(receiver.expected.residuals.len(), 2);
+            let mut expected = receiver.expected.clone();
+            if removed == 2 {
+                expected.residuals.clear();
+            } else {
+                expected.residuals.remove(removed);
+            }
+            let before = receiver.cas.canonical_snapshot(&mut default_budget()?)?;
+            let fault = receiver
+                .cas
+                .replay(&bytes, &expected, &mut default_budget()?)
+                .expect_err("dropped residual");
+            assert_eq!(
+                fault.kind,
+                FaultKind::Invalid(nrz_cas::InvalidCode::EndpointMismatch)
+            );
+            assert_eq!(
+                receiver.cas.canonical_snapshot(&mut default_budget()?)?,
+                before
+            );
+            let replayed =
+                receiver
+                    .cas
+                    .replay(&bytes, &receiver.expected, &mut default_budget()?)?;
+            assert_eq!(replayed.judgment(), &receiver.expected);
+            discharge(&receiver.cas, &replayed)?;
+        }
     }
     Ok(())
 }

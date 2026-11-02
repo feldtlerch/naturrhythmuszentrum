@@ -47,7 +47,7 @@ fn trig_minus_one_expansion() -> TestResult {
     Ok(())
 }
 
-/// Valid quotient, conditional and sum equalities remain outside the two supported spellings.
+/// Checked quotient, conditional and sum equalities expand with every original residual retained.
 /// ´test:integration:trig-minus-one-transport-boundary´
 #[test]
 fn trig_minus_one_transport_boundary() -> TestResult {
@@ -58,15 +58,14 @@ fn trig_minus_one_transport_boundary() -> TestResult {
             f.cas
                 .check_proof(&f.context, &f.steps[1..], &mut default_budget()?)?;
         assert_eq!(original_equality.is_discharged(), kind != 2);
-        let before = f.cas.canonical_snapshot(&mut default_budget()?)?;
-        let counts = f.cas.counts();
-        assert!(matches!(
+        let TrigRecipeOutcome::Proved(witness) =
             f.cas
-                .trig_atan_minus_one(&function, &guard, &equality, &mut default_budget()?)?,
-            TrigRecipeOutcome::Unresolved
-        ));
-        assert_eq!(f.cas.counts(), counts);
-        assert_eq!(f.cas.canonical_snapshot(&mut default_budget()?)?, before);
+                .trig_atan_minus_one(&function, &guard, &equality, &mut default_budget()?)?
+        else {
+            return Err("checked transport did not expand".into());
+        };
+        assert_eq!(witness.judgment(), &f.expected);
+        assert_eq!(witness.judgment().residuals.is_empty(), kind != 2);
     }
     Ok(())
 }
@@ -95,5 +94,42 @@ fn trig_minus_one_premise_categories() -> TestResult {
         assert_eq!(f.cas.counts(), counts);
         assert_eq!(f.cas.canonical_snapshot(&mut default_budget()?)?, before);
     }
+    Ok(())
+}
+
+/// A valid subset between independent roots remains an unsupported conversion route.
+/// ´test:integration:trig-minus-one-independent-root-transport´
+#[test]
+fn trig_minus_one_independent_root_transport() -> TestResult {
+    let (mut f, function) = crate::testing::trig_minus_one::independent_root()?;
+    let [guard, equality] = premises(&mut f)?;
+    let before = f.cas.canonical_snapshot(&mut default_budget()?)?;
+    assert!(matches!(
+        f.cas
+            .trig_atan_minus_one(&function, &guard, &equality, &mut default_budget()?)?,
+        TrigRecipeOutcome::Unresolved
+    ));
+    assert_eq!(f.cas.canonical_snapshot(&mut default_budget()?)?, before);
+    Ok(())
+}
+
+/// A valid checked equality to a different rational supplies no minus-one conclusion.
+/// ´test:integration:trig-minus-one-other-rational´
+#[test]
+fn trig_minus_one_other_rational() -> TestResult {
+    let mut f = crate::testing::trig_values::atan("2", true, false)?;
+    f.steps.pop().ok_or("old consumer")?;
+    let nrz_cas::proof::Statement::Equality { left: function, .. } = &f.expected.statement else {
+        return Err("expected equality".into());
+    };
+    let function = function.clone();
+    let [guard, equality] = premises(&mut f)?;
+    let before = f.cas.canonical_snapshot(&mut default_budget()?)?;
+    assert!(matches!(
+        f.cas
+            .trig_atan_minus_one(&function, &guard, &equality, &mut default_budget()?)?,
+        TrigRecipeOutcome::Unresolved
+    ));
+    assert_eq!(f.cas.canonical_snapshot(&mut default_budget()?)?, before);
     Ok(())
 }
