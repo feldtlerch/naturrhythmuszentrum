@@ -22,11 +22,12 @@ pub use phasor::{
     PhasorTransferBounds, PhasorTransferredResidual, PublishedPhasor, PublishedPhasorSolve,
 };
 pub use spectral::{
-    LcAngularFrequencyParameter, LcAngularFrequencyPublication, LcFrequencyPublication,
-    LcSourceBinding, LcSourceStatistics, LcSpectralBatch, LcSpectralBatchInventory,
-    LcSpectralBatchLimits, LcSpectralEvaluation, LcSpectralPublication, LcSpectralSchema,
-    LcSpectralStatus, LcSpectrum, PublishedLcAngularFrequency, PublishedLcFrequency,
-    PublishedLcSpectrum, SpectralError, SpectralValue,
+    LcAngularFrequencyParameter, LcAngularFrequencyPublication, LcDrivenContinuations,
+    LcDrivenError, LcDrivenInventory, LcDrivenLimits, LcDrivenPoint, LcDrivenStatus,
+    LcDrivenStratum, LcFrequencyPublication, LcSourceBinding, LcSourceStatistics, LcSpectralBatch,
+    LcSpectralBatchInventory, LcSpectralBatchLimits, LcSpectralEvaluation, LcSpectralPublication,
+    LcSpectralSchema, LcSpectralStatus, LcSpectrum, PublishedLcAngularFrequency,
+    PublishedLcFrequency, PublishedLcSpectrum, SpectralError, SpectralValue,
 };
 mod derivatives;
 pub use derivatives::{

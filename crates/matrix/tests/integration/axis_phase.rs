@@ -3,8 +3,7 @@
 
 #[path = "axis_phase/costs.rs"]
 mod costs;
-#[path = "../../../bindings/src/testing/axis_phase.rs"]
-mod fixture;
+pub(super) mod fixture;
 #[path = "axis_phase/lifecycle.rs"]
 mod lifecycle;
 #[path = "axis_phase/phasor.rs"]

@@ -8,6 +8,7 @@ mod companions;
 mod construction_costs;
 mod costs;
 mod cyclic_frequency;
+mod driven;
 mod energy;
 mod family_costs;
 mod family_invalidation;

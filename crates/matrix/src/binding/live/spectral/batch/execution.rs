@@ -108,7 +108,11 @@ impl<P: Scalar + 'static> LcSpectralBatch<P> {
     }
 
     /// No heap occupation or numerical arithmetic context crosses this evaluation scope.
-    fn check_owner(&self, heap: &Heap, context: &ArithmeticContext) -> Result<(), SpectralError> {
+    pub(super) fn check_owner(
+        &self,
+        heap: &Heap,
+        context: &ArithmeticContext,
+    ) -> Result<(), SpectralError> {
         if self.header.scope != heap.scope {
             return Err(HeapError::ForeignHandle.into());
         }

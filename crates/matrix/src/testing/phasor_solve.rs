@@ -160,13 +160,32 @@ pub(crate) fn fixed_case<P: Scalar + 'static>(
     rounded: bool,
     budget: &mut Budget,
 ) -> TestResult<Case<P>> {
+    fixed_case_in_heap(
+        reactance,
+        radius,
+        rounded,
+        Heap::new(HeapLimits::default())?,
+        false,
+        budget,
+    )
+}
+
+/// Several fixed original equations can share a numerical owner without reimporting its spectrum.
+pub(crate) fn fixed_case_in_heap<P: Scalar + 'static>(
+    reactance: i64,
+    radius: P,
+    rounded: bool,
+    heap: Heap,
+    cover_import: bool,
+    budget: &mut Budget,
+) -> TestResult<Case<P>> {
     let represented = P::parse_nearest(&reactance.to_string()).ok_or("reactance literal")?;
     build(
         represented,
         radius,
         rounded,
-        Heap::new(HeapLimits::default())?,
-        Some(reactance),
+        heap,
+        Some((reactance, cover_import)),
         budget,
     )
 }
@@ -177,12 +196,12 @@ fn build<P: Scalar + 'static>(
     radius: P,
     rounded: bool,
     mut heap: Heap,
-    fixed: Option<i64>,
+    fixed: Option<(i64, bool)>,
     budget: &mut Budget,
 ) -> TestResult<Case<P>> {
     let mut fixture = declarations::fixture()?;
     let (adapters, relations, current, coverage, companions) = if fixed.is_some() {
-        declarations::readings_fixed(&mut fixture, fixed)?
+        declarations::readings_fixed(&mut fixture, fixed.map(|(value, _)| value))?
     } else {
         declarations::readings(&mut fixture)?
     };
@@ -210,11 +229,15 @@ fn build<P: Scalar + 'static>(
         .flat_map(|region| crate::phasor_testing::tickets(region, &[0, 1, 2, 3]))
         .collect();
     let source_coverage = ReadingCoverage::new(universe, adapters, relations, &mut ledger()?)?;
+    let mut regions = inputs::regions(reactance, radius, rounded)?;
+    if let Some((value, true)) = fixed {
+        inputs::cover_fixed(&mut regions, value, budget)?;
+    }
     let imported = heap.import_readings(
         Rc::new(fixture.cas),
         source_coverage,
         source_companions,
-        &inputs::regions(reactance, radius, rounded)?,
+        &regions,
         crate::test_api::DependencyPolicy::WholeBase,
         budget,
     )?;

@@ -108,3 +108,36 @@ pub(super) fn regions<P: Scalar>(
         },
     ])
 }
+
+/// Cover the unchanged current solver's conservative exact-literal import on the new fixed route.
+pub(super) fn cover_fixed<P: Scalar>(
+    regions: &mut [ReadingRegion<P>],
+    exact: i64,
+    budget: &mut nrz_bindings::Budget,
+) -> TestResult {
+    let context = ArithmeticContext::new()?;
+    let text = exact.to_string();
+    let work = u64::try_from(text.len())? * 12 + 8;
+    budget.work(
+        work,
+        nrz_bindings::readings::algebra::Location::new("fixed driven literal coverage"),
+    )?;
+    let original =
+        nrz_scalar::NumericLiteral::new(&text, nrz_scalar::LiteralLimits::new(1024, 4096, work))?
+            .decode::<P>(&context)?
+            .enclosure();
+    for index in [1, 2] {
+        let target = if index == 2 {
+            original.negated()
+        } else {
+            original
+        };
+        let error = target.displacement_from(Finite::new(regions[0].values[index])?, &context)?;
+        let total = Enclosure::singleton(Finite::new(regions[2].values[index * 2])?)
+            .add(Enclosure::singleton(error), &context)?
+            .upper();
+        regions[2].values[index * 2] = total.get();
+        regions[2].values[index * 2 + 1] = error.get();
+    }
+    Ok(())
+}

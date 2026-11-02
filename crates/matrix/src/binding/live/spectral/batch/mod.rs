@@ -2,6 +2,11 @@
 //! A closed autonomous node has one live producer per admitted original input key.
 
 mod admission;
+mod driven;
+pub use driven::{
+    LcDrivenContinuations, LcDrivenError, LcDrivenInventory, LcDrivenLimits, LcDrivenPoint,
+    LcDrivenStatus, LcDrivenStratum,
+};
 mod coefficients;
 use coefficients::Coefficients;
 mod execution;

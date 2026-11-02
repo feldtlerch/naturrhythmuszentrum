@@ -3,7 +3,9 @@
 
 mod batch;
 pub use batch::{
-    LcSpectralBatch, LcSpectralBatchInventory, LcSpectralBatchLimits, LcSpectralStatus,
+    LcDrivenContinuations, LcDrivenError, LcDrivenInventory, LcDrivenLimits, LcDrivenPoint,
+    LcDrivenStatus, LcDrivenStratum, LcSpectralBatch, LcSpectralBatchInventory,
+    LcSpectralBatchLimits, LcSpectralStatus,
 };
 mod schema;
 pub use schema::LcSpectralSchema;
