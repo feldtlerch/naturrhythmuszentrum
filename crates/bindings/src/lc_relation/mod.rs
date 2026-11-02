@@ -10,7 +10,10 @@ mod witness;
 
 pub use forward::{LcCertainty, LcDeterminacy, LcForwardArc, LcForwardCover, LcPhaseEndpoint};
 pub use interval::LcInterval;
-pub use pairs::{LcFreeDirection, LcPairParameters, LcPairsCover, LcPhaseGauge};
+pub use pairs::{
+    LcAliasCover, LcAliasLattice, LcAliasWitness, LcFreeDirection, LcPairParameters, LcPairsCover,
+    LcPhaseGauge,
+};
 pub use quantity::LcQuantity;
 pub use witness::{LcBranch, LcObservationValue, LcValues, LcWitness};
 

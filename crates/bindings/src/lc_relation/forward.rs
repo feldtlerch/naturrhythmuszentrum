@@ -22,6 +22,8 @@ pub enum LcDeterminacy {
     Underdetermined,
     /// The supported observation map determines the projection within declared uncertainty.
     DeterminedFinite,
+    /// The observed projection retains a complete infinite discrete alias family.
+    DeterminedInfinite,
 }
 
 /// Numerical certainty is not inferred from structural determination.

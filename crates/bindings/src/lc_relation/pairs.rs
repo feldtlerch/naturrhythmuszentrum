@@ -2,6 +2,8 @@
 //! Correlated exact-time phase-pair projection with a proved complete bounded cycle family.
 
 mod admit;
+mod aliases;
+pub use aliases::{LcAliasCover, LcAliasLattice, LcAliasWitness};
 mod project;
 mod support;
 mod witness;

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Independent exact recovery intervals retain unknown-phase correlation and free scale.
 
+mod aliases;
 mod refusals;
 mod support;
 

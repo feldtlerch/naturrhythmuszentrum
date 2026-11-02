@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Immutable numerical endpoint regions retain the original exact LC forward cover.
 
+mod aliases;
+pub use aliases::{LcAliasProjection, LcNumericalAlias};
 mod lower;
 mod pairs;
 pub use pairs::{LcNumericalQuantity, LcPairsProjection};

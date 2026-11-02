@@ -43,7 +43,8 @@ mod storage;
 mod lc_relation;
 mod quantity;
 pub use lc_relation::{
-    LcForwardProjection, LcNumericalArc, LcNumericalQuantity, LcPairsProjection, LcProjectionError,
+    LcAliasProjection, LcForwardProjection, LcNumericalAlias, LcNumericalArc, LcNumericalQuantity,
+    LcPairsProjection, LcProjectionError,
 };
 pub use quantity::{
     CountArray, CountError, CountHistory, CountQuantity, DifferenceRole, DynamicRole,
