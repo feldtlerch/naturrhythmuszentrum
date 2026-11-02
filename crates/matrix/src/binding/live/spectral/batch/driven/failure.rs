@@ -15,6 +15,9 @@ pub enum LcDrivenError {
     /// Original physical current publication refused.
     #[error("LC driven current: {0}")]
     Current(#[source] Box<PhasorError>),
+    /// The declared shared-voltage statistical family refused.
+    #[error("LC driven statistics: {0}")]
+    Statistics(#[source] Box<crate::CompanionExecutionError>),
     /// The retained autonomous owner refused.
     #[error("LC driven invariant: {0}")]
     Invariant(#[from] SpectralError),
@@ -29,6 +32,11 @@ pub enum LcDrivenError {
     Identity,
 }
 
+impl From<crate::CompanionExecutionError> for LcDrivenError {
+    fn from(cause: crate::CompanionExecutionError) -> Self {
+        Self::Statistics(Box::new(cause))
+    }
+}
 impl From<PhasorError> for LcDrivenError {
     fn from(cause: PhasorError) -> Self {
         Self::Current(Box::new(cause))

@@ -5,7 +5,7 @@ mod admission;
 mod driven;
 pub use driven::{
     LcDrivenContinuations, LcDrivenError, LcDrivenInventory, LcDrivenLimits, LcDrivenPoint,
-    LcDrivenStatus, LcDrivenStratum,
+    LcDrivenStatistics, LcDrivenStatus, LcDrivenStratum,
 };
 mod coefficients;
 use coefficients::Coefficients;

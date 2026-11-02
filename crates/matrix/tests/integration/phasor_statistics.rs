@@ -3,6 +3,7 @@
 
 mod blocks;
 mod costs;
+mod driven_plan;
 mod fixture;
 mod lc_acceptance;
 mod lc_costs;

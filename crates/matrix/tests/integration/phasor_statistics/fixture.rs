@@ -83,7 +83,18 @@ pub(super) fn case<P: Scalar + 'static>() -> TestResult<Case<P>> {
 
 /// One caller ledger covers both equations, all covariance laws and complete source/publication admission.
 pub(super) fn case_with_budget<P: Scalar + 'static>(resources: &mut Budget) -> TestResult<Case<P>> {
-    build(resources, false, DependencyPolicy::WholeBase, None)
+    build(resources, false, DependencyPolicy::WholeBase, None, false)
+}
+
+/// Add complete real-copy radius coverage for the original axis consumer without changing old fixtures.
+pub(super) fn axis_case<P: Scalar + 'static>() -> TestResult<Case<P>> {
+    build(
+        &mut budget()?,
+        false,
+        DependencyPolicy::WholeBase,
+        None,
+        true,
+    )
 }
 
 /// Full two-coordinate targets exercise both covariance axes without a scalar statistics facade.
@@ -95,7 +106,7 @@ pub(super) fn vector_case<P: Scalar + 'static>() -> TestResult<Case<P>> {
 pub(super) fn vector_case_with_budget<P: Scalar + 'static>(
     resources: &mut Budget,
 ) -> TestResult<Case<P>> {
-    build(resources, true, DependencyPolicy::WholeBase, None)
+    build(resources, true, DependencyPolicy::WholeBase, None, false)
 }
 
 /// Isolate fine admission on its unchanged caller policy before numerical lifecycle requests.
@@ -108,7 +119,7 @@ pub(super) fn lifecycle_case(
     dependencies: DependencyPolicy,
     admission: &mut Budget,
 ) -> TestResult<Case<f64>> {
-    build(&mut budget()?, false, dependencies, Some(admission))
+    build(&mut budget()?, false, dependencies, Some(admission), false)
 }
 
 /// Scalar and vector requests retain their complete inventories before importing any values.
@@ -117,8 +128,9 @@ fn build<P: Scalar + 'static>(
     full: bool,
     dependencies: DependencyPolicy,
     admission: Option<&mut Budget>,
+    axis: bool,
 ) -> TestResult<Case<P>> {
-    let mut fixture = declarations(full)?;
+    let mut fixture = declarations(full, axis)?;
     let voltage = meaning("voltage", [2, 1, -3, -1, 0, 0, 0])?;
     let impedance = meaning("impedance", [2, 1, -3, -2, 0, 0, 0])?;
     let current = meaning("current", [0, 0, 0, 1, 0, 0, 0])?;
@@ -129,6 +141,10 @@ fn build<P: Scalar + 'static>(
     ];
     blocks::cover_reactance(&mut fixture, "below", &mut inputs[0], 0)?;
     blocks::cover_reactance(&mut fixture, "above", &mut inputs[1], 2)?;
+    if axis {
+        blocks::cover_axis_real(&mut fixture, "below", &mut inputs[0], 0)?;
+        blocks::cover_axis_real(&mut fixture, "above", &mut inputs[1], 2)?;
+    }
     let outputs = [
         blocks::output(&mut fixture, "first", current.clone())?,
         blocks::output(&mut fixture, "second", current)?,
@@ -164,6 +180,7 @@ fn build<P: Scalar + 'static>(
         dependencies,
         resources,
         admission,
+        axis,
     )
     .map_err(|error| format!("source admission ({dependencies:?}): {error}"))?;
     let publications = publications(&definitions, &outputs, &bindings, &frames, resources)?;
@@ -186,7 +203,7 @@ fn build<P: Scalar + 'static>(
 }
 
 /// Every exact symbol is available in the shared graph before any numerical computation.
-fn declarations(full: bool) -> TestResult<Fixture> {
+fn declarations(full: bool, axis: bool) -> TestResult<Fixture> {
     let mut declarations = Vec::new();
     for prefix in ["below", "above", "voltage"] {
         blocks::declare(&mut declarations, prefix, 1, false);
@@ -196,6 +213,9 @@ fn declarations(full: bool) -> TestResult<Fixture> {
     }
     for prefix in ["below", "above"] {
         blocks::error_declarations(&mut declarations, prefix);
+        if axis {
+            blocks::axis_error_declarations(&mut declarations, prefix);
+        }
     }
     parameters::declare(&mut declarations, full);
     let borrowed = declarations
@@ -264,6 +284,7 @@ fn import<P: Scalar + 'static>(
     dependencies: DependencyPolicy,
     budget: &mut Budget,
     admission: Option<&mut Budget>,
+    axis: bool,
 ) -> TestResult<Imported<P>> {
     let mut adapters = inputs
         .iter()
@@ -297,7 +318,7 @@ fn import<P: Scalar + 'static>(
         .decode::<P>(&ArithmeticContext::new()?)?;
     let nominal = imported.center().get();
     let import_error = imported.displacement().get();
-    let regions = vec![
+    let mut regions = vec![
         ReadingRegion {
             extent: Extent::new(2, 2)?,
             values: vec![P::ZERO, -nominal, nominal, P::ZERO],
@@ -327,6 +348,14 @@ fn import<P: Scalar + 'static>(
             values: vec![import_error; 4],
         },
     ];
+    if axis {
+        for _ in 0..2 {
+            regions.push(ReadingRegion {
+                extent: Extent::new(4, 1)?,
+                values: vec![P::ZERO; 4],
+            });
+        }
+    }
     let graph = Rc::new(fixture.cas);
     let bindings = admit_group(
         &mut heap,
@@ -447,6 +476,7 @@ fn driven_entries_admission_work_boundary() -> TestResult {
             false,
             DependencyPolicy::Entries,
             Some(&mut admission),
+            false,
         );
         assert_eq!(
             result.is_ok(),

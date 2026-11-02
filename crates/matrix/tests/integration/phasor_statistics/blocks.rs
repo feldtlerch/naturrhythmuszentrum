@@ -287,7 +287,17 @@ fn parameters(
 
 /// Only the nonzero fixed-reactance copies need explicit conservative literal-import coverage.
 pub(super) fn error_declarations(declarations: &mut Vec<(String, Sort)>, prefix: &str) {
-    for index in [1, 2] {
+    error_symbols(declarations, prefix, [1, 2]);
+}
+
+/// Axis decisions additionally require declared zero radii for both real copies.
+pub(super) fn axis_error_declarations(declarations: &mut Vec<(String, Sort)>, prefix: &str) {
+    error_symbols(declarations, prefix, [0, 3]);
+}
+
+/// Preserve each selected original component and channel in its distinct declaration names.
+fn error_symbols(declarations: &mut Vec<(String, Sort)>, prefix: &str, indices: [usize; 2]) {
+    for index in indices {
         for channel in ["total", "error"] {
             for suffix in ["source", "output"] {
                 declarations.push((
@@ -306,11 +316,33 @@ pub(super) fn cover_reactance(
     block: &mut Block,
     offset: u64,
 ) -> TestResult {
-    for (position, index) in [1, 2].into_iter().enumerate() {
+    cover_indices(fixture, prefix, block, offset, [1, 2], [6, 5])
+}
+
+/// Complete axis input coverage declares the exact zero real-copy total and numerical radii.
+pub(super) fn cover_axis_real(
+    fixture: &mut Fixture,
+    prefix: &str,
+    block: &mut Block,
+    offset: u64,
+) -> TestResult {
+    cover_indices(fixture, prefix, block, offset, [0, 3], [7, 8])
+}
+
+/// The old nonzero-import route retains its original traversal and accounting unchanged.
+fn cover_indices(
+    fixture: &mut Fixture,
+    prefix: &str,
+    block: &mut Block,
+    offset: u64,
+    indices: [usize; 2],
+    regions: [usize; 2],
+) -> TestResult {
+    for (position, index) in indices.into_iter().enumerate() {
         let target = &block.adapters[index + 1];
         for (channel, kind, region) in [
-            ("total", CompanionKind::DeterministicBound, 6),
-            ("error", CompanionKind::NumericalError, 5),
+            ("total", CompanionKind::DeterministicBound, regions[0]),
+            ("error", CompanionKind::NumericalError, regions[1]),
         ] {
             let key = format!("{prefix}_{index}_import_{channel}");
             let parameters = CompanionParameters::new(

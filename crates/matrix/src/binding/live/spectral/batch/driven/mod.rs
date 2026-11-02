@@ -5,6 +5,8 @@ mod access;
 mod admission;
 mod execution;
 mod failure;
+mod statistics;
+pub use statistics::LcDrivenStatistics;
 
 use super::LcSpectralBatch;
 use crate::{AxisPhasePlan, PhasorSolvePublication, PublishedAxisPhase, PublishedPhasorSolve};
