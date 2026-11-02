@@ -327,6 +327,7 @@ pub(crate) fn application(
                         .map_err(|_| Fault::capacity(BudgetKind::ConditionAtoms, AT))?,
                 });
             }
+            local_hypotheses(cas, value, &mut conditions, budget)?;
             let certificate = value.certificate.as_ref().map_or_else(
                 || {
                     if value.path.is_empty() {
@@ -614,16 +615,6 @@ pub(crate) fn scalar_application(
     value: &CheckedApplication,
     budget: &mut Budget,
 ) -> Result<crate::scalar_model::CheckedStep, Fault> {
-    for used in &value.conditions.hypotheses {
-        if cas
-            .state
-            .context(cas.checked(&used.context)?)?
-            .parent
-            .is_some()
-        {
-            return Err(invalid());
-        }
-    }
     if let Some(checked) = &value.scalar {
         prepay_scalar_copy(checked, budget)?;
         return Ok(checked.clone());
@@ -658,6 +649,20 @@ pub(crate) fn scalar_application(
             conditions
                 .hypotheses
                 .insert(frame.assumptions.get(slot).ok_or_else(invalid)?.0.clone());
+        } else {
+            let introducing = cas.checked(&reference.context)?;
+            if reference.slot == 0
+                || !crate::context_check::ancestor(cas, introducing, context, budget)?
+            {
+                return Err(invalid());
+            }
+            crate::context_check::predicate(cas, reference)?;
+            let bytes = size(conditions.qualified.len().saturating_add(1), AT)?
+                .checked_mul(96)
+                .ok_or_else(|| Fault::capacity(BudgetKind::StagedPayloadBytes, AT))?;
+            budget.check(BudgetKind::StagedPayloadBytes, bytes, AT)?;
+            budget.work(96, AT)?;
+            conditions.qualified.insert((introducing, reference.slot));
         }
     }
     budget.condition(size(conditions.requirements.len(), AT)?, AT)?;
@@ -745,7 +750,41 @@ pub(crate) fn scalar_conditions(
             slot: u32::try_from(slot).map_err(|_| invalid())?,
         });
     }
+    local_hypotheses(cas, value, &mut result, budget)?;
     Ok(result)
+}
+
+/// Retain checked local scalar provenance in the existing portable reference form.
+fn local_hypotheses(
+    cas: &Cas,
+    value: &crate::scalar_model::CheckedStep,
+    result: &mut ScopedConditions,
+    budget: &mut Budget,
+) -> Result<(), Fault> {
+    if !value.conditions.qualified.is_empty() {
+        let bytes = size(value.conditions.qualified.len(), AT)?
+            .checked_mul(96)
+            .ok_or_else(|| Fault::capacity(BudgetKind::StagedPayloadBytes, AT))?;
+        budget.check(BudgetKind::StagedPayloadBytes, bytes, AT)?;
+        budget.work(bytes, AT)?;
+        result
+            .hypotheses
+            .try_reserve_exact(value.conditions.qualified.len())
+            .map_err(|_| Fault::allocation(AT))?;
+    }
+    for (frame, slot) in &value.conditions.qualified {
+        budget.condition(1, AT)?;
+        if *slot == 0 || !crate::context_check::ancestor(cas, *frame, value.context, budget)? {
+            return Err(invalid());
+        }
+        let reference = HypothesisRef {
+            context: cas.handle(*frame),
+            slot: *slot,
+        };
+        crate::context_check::predicate(cas, &reference)?;
+        result.hypotheses.push(reference);
+    }
+    Ok(())
 }
 
 /// Transfer a sealed scalar producer result into the public scoped theorem vocabulary.

@@ -6,10 +6,10 @@ use nrz_bindings::{Budget, Limits, readings::algebra::Location};
 
 /// Independent original cases and measured declaration/attempt/staging/output costs.
 const CASES: [(i64, &str, &str, [u64; 4]); 4] = [
-    (1000, "-301/4", "-299/4", [131_553, 301_980, 56_880, 31_104]),
+    (1000, "-301/4", "-299/4", [131_553, 301_982, 56_880, 31_104]),
     (2000, "0", "0", [128_578, 195_740, 54_200, 14_372]),
     (2000, "-1/4", "1/4", [128_578, 50_583, 29_175, 1300]),
-    (4000, "299/4", "301/4", [131_073, 299_970, 56_880, 31_104]),
+    (4000, "299/4", "301/4", [131_073, 299_972, 56_880, 31_104]),
 ];
 /// Caller work and live payload exist before this consumer begins.
 const PRIOR: u64 = 17;

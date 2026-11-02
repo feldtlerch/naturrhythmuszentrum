@@ -4,6 +4,14 @@
 /// A compiled checker whose mathematical meaning is fixed by its semantic version.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Primitive {
+    /// Oddness of sine on its original defined Real operand.
+    SinOdd,
+    /// Evenness of cosine on its original defined Real operand.
+    CosEven,
+    /// Oddness of arctangent on its original defined Real operand.
+    AtanOdd,
+    /// Totality of closed Real trigonometric nodes from original definedness.
+    TrigDefined,
     /// Exact sine from the checked original half-Pi witness.
     SinHalfPi,
     /// Exact cosine from the checked original half-Pi witness.
@@ -139,6 +147,8 @@ pub enum Primitive {
 /// Typed conclusion family selected by an executable checker.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ConclusionKind {
+    /// An exact predicate established throughout the stated region.
+    Predicate,
     /// Original Real operand with its concrete exact integer half-Pi witness.
     HalfPiWitness,
     /// Native typed solution, coefficient, root, family or local fact.
@@ -248,6 +258,10 @@ impl Primitive {
         matches!(
             self,
             Self::Solve(_)
+                | Self::SinOdd
+                | Self::CosEven
+                | Self::AtanOdd
+                | Self::TrigDefined
                 | Self::HalfPiWitness
                 | Self::SinHalfPi
                 | Self::CosHalfPi
@@ -289,6 +303,10 @@ impl Primitive {
     #[must_use]
     pub const fn specification(self) -> RuleSpec {
         let (key, weight) = match self {
+            Self::SinOdd => ("trig.sin-odd", 2),
+            Self::CosEven => ("trig.cos-even", 2),
+            Self::AtanOdd => ("trig.atan-odd", 2),
+            Self::TrigDefined => ("trig.defined", 2),
             Self::HalfPiWitness => ("trig.half-pi-witness", 2),
             Self::SinHalfPi => ("trig.sin-half-pi", 2),
             Self::CosHalfPi => ("trig.cos-half-pi", 2),
@@ -374,6 +392,7 @@ impl Primitive {
     /// Identify the exact proposition family without inspecting untrusted payloads.
     const fn conclusion_kind(self) -> ConclusionKind {
         match self {
+            Self::TrigDefined => ConclusionKind::Predicate,
             Self::HalfPiWitness => ConclusionKind::HalfPiWitness,
             Self::Solve(_) => ConclusionKind::Solve,
             Self::LimitCaseRestrict | Self::SeriesCaseRestrict => ConclusionKind::Germ,
@@ -453,6 +472,10 @@ impl Primitive {
             | Self::DifferentiateQuotient
             | Self::DerivativeTransport => PremiseShape::Exact(2),
             Self::Symmetry
+            | Self::SinOdd
+            | Self::CosEven
+            | Self::AtanOdd
+            | Self::TrigDefined
             | Self::SinHalfPi
             | Self::CosHalfPi
             | Self::Congruence
@@ -499,7 +522,7 @@ impl Primitive {
 }
 
 /// Every registered primitive, in ASCII key order; availability is separate metadata.
-pub const PRIMITIVES: [Primitive; 85] = [
+pub const PRIMITIVES: [Primitive; 89] = [
     Primitive::CaseCongruence,
     Primitive::CaseDomain,
     Primitive::CaseEliminate,
@@ -580,9 +603,13 @@ pub const PRIMITIVES: [Primitive; 85] = [
     Primitive::Solve(crate::solving::SolveSchema::TotalPredicateSplit),
     Primitive::Solve(crate::solving::SolveSchema::SolutionTransport),
     Primitive::SumCaseSplit,
+    Primitive::AtanOdd,
     Primitive::AtanOne,
     Primitive::AtanZero,
+    Primitive::CosEven,
     Primitive::CosHalfPi,
+    Primitive::TrigDefined,
     Primitive::HalfPiWitness,
     Primitive::SinHalfPi,
+    Primitive::SinOdd,
 ];

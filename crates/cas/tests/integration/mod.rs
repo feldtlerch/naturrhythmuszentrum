@@ -11,6 +11,7 @@ mod square_free;
 
 mod cases;
 mod contexts;
+mod endpoint_hypotheses;
 
 mod boundary;
 mod distributions;
@@ -72,3 +73,12 @@ mod strict_sign;
 mod trig;
 mod trig_values;
 mod trig_values_work;
+
+mod trig_defined;
+mod trig_parity;
+
+mod trig_defined_work;
+
+mod trig_minus_one;
+mod trig_minus_one_work;
+mod trig_parity_work;

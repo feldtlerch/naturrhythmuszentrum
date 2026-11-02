@@ -51,7 +51,17 @@ pub(crate) fn encode_application(value: &CheckedStep, out: &mut Encoder<'_>) -> 
         out.name(key)?;
     }
     out.unsigned(value.depth)?;
-    out.unsigned(value.cost)
+    out.unsigned(value.cost)?;
+    // Local provenance is internal interning metadata. Portable applications use
+    // the existing qualified-hypothesis records; root-only keys stay identical.
+    if !value.conditions.qualified.is_empty() {
+        out.count(value.conditions.qualified.len())?;
+        for (frame, slot) in &value.conditions.qualified {
+            encode_id(*frame, out)?;
+            out.unsigned(u64::from(*slot))?;
+        }
+    }
+    Ok(())
 }
 
 /// Measure pending application weights, owned set keys and not-yet-assigned premise IDs.

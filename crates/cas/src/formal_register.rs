@@ -42,7 +42,7 @@ const fn named(
 /// Every native and solving primitive in the same ASCII key order as `PRIMITIVES`.
 ///
 /// Unavailable schemas remain represented assumptions and cannot certify an application.
-pub static PRIMITIVE_SCHEMAS: [PrimitiveSchema; 85] = [
+pub static PRIMITIVE_SCHEMAS: [PrimitiveSchema; 89] = [
     named(
         Primitive::CaseCongruence,
         "thm:cas:primitive-case-congruence",
@@ -524,6 +524,12 @@ pub static PRIMITIVE_SCHEMAS: [PrimitiveSchema; 85] = [
         "No ordered proof premises; complete range cover, exact forward differences and endpoint certificates.",
     ),
     named(
+        Primitive::AtanOdd,
+        "thm:cas:primitive-trig-atan-odd",
+        "Arctangent at the negated original Real operand equals the negation of its value at that operand.",
+        "One ordered original `DomainGuard`; both sides retain the same operand identity, context, declaration frame and scope, with checked negation and registered trigonometric totality.",
+    ),
+    named(
         Primitive::AtanOne,
         "thm:cas:primitive-trig-atan-one",
         "Arctangent of the original Real operand equals the exact named Pi times one quarter.",
@@ -536,10 +542,22 @@ pub static PRIMITIVE_SCHEMAS: [PrimitiveSchema; 85] = [
         "Ordered original `DomainGuard` and Equality to exactly zero in the identical context and domain; every original condition remains attached.",
     ),
     named(
+        Primitive::CosEven,
+        "thm:cas:primitive-trig-cos-even",
+        "Cosine at the negated original Real operand equals its value at that operand.",
+        "One ordered original `DomainGuard`; both sides retain the same operand identity, context, declaration frame and scope, with checked negation and registered trigonometric totality.",
+    ),
+    named(
         Primitive::CosHalfPi,
         "thm:cas:primitive-trig-cos-half-pi",
         "Cosine of the original Real operand equals 1, 0, -1 or 0 at Euclidean integer residues 0, 1, 2 or 3 modulo four.",
         "One checked original half-Pi witness in the identical context and domain; exact arbitrary-precision residue recomputation retains every original condition.",
+    ),
+    named(
+        Primitive::TrigDefined,
+        "thm:cas:primitive-trig-defined",
+        "A closed Real sine, cosine or arctangent is defined throughout the exact region of its original defined operand.",
+        "One ordered original `DomainGuard` in the identical context, scope and domain; every original child obligation remains attached.",
     ),
     named(
         Primitive::HalfPiWitness,
@@ -553,6 +571,12 @@ pub static PRIMITIVE_SCHEMAS: [PrimitiveSchema; 85] = [
         "Sine of the original Real operand equals 0, 1, 0 or -1 at Euclidean integer residues 0, 1, 2 or 3 modulo four.",
         "One checked original half-Pi witness in the identical context and domain; exact arbitrary-precision residue recomputation retains every original condition.",
     ),
+    named(
+        Primitive::SinOdd,
+        "thm:cas:primitive-trig-sin-odd",
+        "Sine at the negated original Real operand equals the negation of its value at that operand.",
+        "One ordered original `DomainGuard`; both sides retain the same operand identity, context, declaration frame and scope, with checked negation and registered trigonometric totality.",
+    ),
 ];
 
 impl Primitive {
@@ -560,11 +584,15 @@ impl Primitive {
     #[must_use]
     pub const fn formal_schema(self) -> &'static PrimitiveSchema {
         match self {
-            Self::AtanOne => &PRIMITIVE_SCHEMAS[80],
-            Self::AtanZero => &PRIMITIVE_SCHEMAS[81],
-            Self::CosHalfPi => &PRIMITIVE_SCHEMAS[82],
-            Self::HalfPiWitness => &PRIMITIVE_SCHEMAS[83],
-            Self::SinHalfPi => &PRIMITIVE_SCHEMAS[84],
+            Self::AtanOdd => &PRIMITIVE_SCHEMAS[80],
+            Self::AtanOne => &PRIMITIVE_SCHEMAS[81],
+            Self::AtanZero => &PRIMITIVE_SCHEMAS[82],
+            Self::CosEven => &PRIMITIVE_SCHEMAS[83],
+            Self::CosHalfPi => &PRIMITIVE_SCHEMAS[84],
+            Self::TrigDefined => &PRIMITIVE_SCHEMAS[85],
+            Self::HalfPiWitness => &PRIMITIVE_SCHEMAS[86],
+            Self::SinHalfPi => &PRIMITIVE_SCHEMAS[87],
+            Self::SinOdd => &PRIMITIVE_SCHEMAS[88],
             Self::Solve(schema) => solving(schema),
             Self::CaseCongruence => &PRIMITIVE_SCHEMAS[0],
             Self::CaseDomain => &PRIMITIVE_SCHEMAS[1],

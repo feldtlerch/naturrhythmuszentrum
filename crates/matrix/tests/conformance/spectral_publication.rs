@@ -111,9 +111,9 @@ fn attempt(
 fn lc_spectral_construction_phase_boundaries() -> TestResult {
     use crate::spectral_testing::construction;
     let expected = [
-        [108_364, 434_653, 465_907, 1_007_902, 0, 4_945, 2_016_826],
-        [37_235, 336_003, 366_745, 871_765, 54_239, 2_972, 1_665_987],
-        [37_235, 336_003, 366_745, 871_765, 54_239, 2_972, 1_665_987],
+        [108_364, 434_653, 465_907, 1_008_240, 0, 4_945, 2_017_164],
+        [37_235, 336_003, 366_745, 872_103, 54_239, 2_972, 1_666_325],
+        [37_235, 336_003, 366_745, 872_103, 54_239, 2_972, 1_666_325],
     ];
     for (mode, row) in expected.into_iter().enumerate() {
         assert_eq!(construction(mode, [Limits::default().work; 5])?, row);
@@ -183,7 +183,7 @@ fn lc_spectral_result_definition_boundaries() -> TestResult {
 /// ´test:integration:lc-spectral-complete-construction-work-boundaries´
 #[test]
 fn lc_spectral_complete_construction_work_boundaries() {
-    for (phase, required) in [1_611_748, 932_710].into_iter().enumerate() {
+    for (phase, required) in [1_612_086, 932_710].into_iter().enumerate() {
         for work in [required, required - 1] {
             let mut limits = [Limits::default().work; 2];
             limits[phase] = work;
