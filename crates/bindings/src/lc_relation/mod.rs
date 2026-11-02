@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Immutable autonomous LC constraints, exact projection families and checked feasibility.
 
+mod amplitude;
+pub use amplitude::{
+    LcAmplitudeCover, LcAmplitudeParameters, LcAmplitudeSamples, LcAmplitudeWitness,
+};
 mod attempt;
 pub use attempt::{LcBranchObligation, LcPairAttempt, LcUnresolvedBranches};
 mod capacitance;

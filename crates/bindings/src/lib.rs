@@ -97,7 +97,8 @@ pub use error::UnitError;
 pub use evidence::{CheckedDeclarations, SnapshotError, SnapshotId};
 pub use kind::{CountDomain, Kind, UncertaintyMode};
 pub use lc_relation::{
-    LcAliasCover, LcAliasLattice, LcAliasWitness, LcBranch, LcBranchObligation, LcCapacitanceCover,
+    LcAliasCover, LcAliasLattice, LcAliasWitness, LcAmplitudeCover, LcAmplitudeParameters,
+    LcAmplitudeSamples, LcAmplitudeWitness, LcBranch, LcBranchObligation, LcCapacitanceCover,
     LcCapacitanceParameters, LcCertainty, LcClockCover, LcClockParameters, LcClockWitness,
     LcConsistency, LcDeterminacy, LcForwardArc, LcForwardCover, LcFreeDirection, LcHorizon,
     LcHorizonValue, LcImpossible, LcInput, LcInputRefinement, LcInterval, LcObservationValue,
