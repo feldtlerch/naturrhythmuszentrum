@@ -97,24 +97,7 @@ impl<P: Scalar> LcPairsProjection<P> {
             for quantity in quantities {
                 budget.work(1, AT)?;
                 let exact = cover.bounds(*quantity, budget)?;
-                let mut endpoints = [None, None];
-                for (i, value) in [exact.lower(), exact.upper()].into_iter().enumerate() {
-                    if let Some(value) = value {
-                        let rational = value.as_rational().ok_or(LcProjectionError::Capacity)?;
-                        endpoints[i] = Some(lower::decode(rational, literals, context, budget)?);
-                    }
-                }
-                let enclosure = if let [Some(lower), Some(upper)] = endpoints {
-                    Some(Enclosure::new(lower.lower().get(), upper.upper().get())?)
-                } else {
-                    None
-                };
-                values.push(LcNumericalQuantity {
-                    quantity: *quantity,
-                    exact,
-                    endpoints,
-                    enclosure,
-                });
+                values.push(lower_quantity(*quantity, exact, literals, context, budget)?);
             }
             Ok::<_, LcProjectionError>(values)
         })?;
@@ -156,4 +139,32 @@ impl<P: Scalar> LcPairsProjection<P> {
     pub fn owned_bytes(&self) -> u64 {
         self.0.bytes
     }
+}
+
+/// Shared rational marginal lowering preserves the existing caller arithmetic schedule.
+pub(super) fn lower_quantity<P: Scalar>(
+    quantity: LcQuantity,
+    exact: LcInterval,
+    literals: LiteralLimits,
+    context: &ArithmeticContext,
+    budget: &mut Budget,
+) -> Result<LcNumericalQuantity<P>, LcProjectionError> {
+    let mut endpoints = [None, None];
+    for (i, value) in [exact.lower(), exact.upper()].into_iter().enumerate() {
+        if let Some(value) = value {
+            let rational = value.as_rational().ok_or(LcProjectionError::Capacity)?;
+            endpoints[i] = Some(lower::decode(rational, literals, context, budget)?);
+        }
+    }
+    let enclosure = if let [Some(lower), Some(upper)] = endpoints {
+        Some(Enclosure::new(lower.lower().get(), upper.upper().get())?)
+    } else {
+        None
+    };
+    Ok(LcNumericalQuantity {
+        quantity,
+        exact,
+        endpoints,
+        enclosure,
+    })
 }

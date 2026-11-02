@@ -2,6 +2,7 @@
 //! Independent exact recovery intervals retain unknown-phase correlation and free scale.
 
 mod aliases;
+mod capacitance;
 mod horizon;
 mod horizon_checks;
 mod impossible;

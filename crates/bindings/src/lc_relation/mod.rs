@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Immutable autonomous LC constraints, exact projection families and checked feasibility.
 
+mod capacitance;
 mod forward;
+pub use capacitance::{LcCapacitanceCover, LcCapacitanceParameters};
 mod horizon;
 mod impossible;
 mod inclusion;

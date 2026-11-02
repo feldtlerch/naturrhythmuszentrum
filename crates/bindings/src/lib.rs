@@ -97,10 +97,11 @@ pub use error::UnitError;
 pub use evidence::{CheckedDeclarations, SnapshotError, SnapshotId};
 pub use kind::{CountDomain, Kind, UncertaintyMode};
 pub use lc_relation::{
-    LcAliasCover, LcAliasLattice, LcAliasWitness, LcBranch, LcCertainty, LcConsistency,
-    LcDeterminacy, LcForwardArc, LcForwardCover, LcFreeDirection, LcHorizon, LcHorizonValue,
-    LcImpossible, LcInput, LcInputRefinement, LcInterval, LcObservationValue, LcPairParameters,
-    LcPairRefinement, LcPairsCover, LcPhaseEndpoint, LcPhaseGauge, LcQuantity, LcRefinementState,
+    LcAliasCover, LcAliasLattice, LcAliasWitness, LcBranch, LcCapacitanceCover,
+    LcCapacitanceParameters, LcCertainty, LcConsistency, LcDeterminacy, LcForwardArc,
+    LcForwardCover, LcFreeDirection, LcHorizon, LcHorizonValue, LcImpossible, LcInput,
+    LcInputRefinement, LcInterval, LcObservationValue, LcPairParameters, LcPairRefinement,
+    LcPairsCover, LcPhaseEndpoint, LcPhaseGauge, LcQuantity, LcRefinementState,
     LcRefinementSuccess, LcRelation, LcRelationError, LcTailOutcome, LcTailStatus, LcTimeBox,
     LcTimeTail, LcValues, LcWitness, LcZeroTimes,
 };

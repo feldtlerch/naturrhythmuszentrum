@@ -176,6 +176,17 @@ fn lc_relation_refinement_generated_inclusions() -> TestResult {
                 assert!(attempt.previous().shares_allocation(&previous));
                 assert!(attempt.inclusion().refined().shares_allocation(&refined));
                 assert_eq!(success.cover().phase_gauge(), previous.phase_gauge());
+                for quantity in [
+                    nrz_bindings::LcQuantity::Inductance,
+                    nrz_bindings::LcQuantity::Capacitance,
+                    nrz_bindings::LcQuantity::VoltageAmplitude,
+                    nrz_bindings::LcQuantity::Energy,
+                ] {
+                    assert_eq!(
+                        success.cover().free_directions(quantity)?,
+                        previous.free_directions(quantity)?
+                    );
+                }
                 assert!(
                     success
                         .finite_horizon_margin()

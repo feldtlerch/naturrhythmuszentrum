@@ -2,7 +2,9 @@
 //! Immutable numerical endpoint regions retain the original exact LC forward cover.
 
 mod aliases;
+mod capacitance;
 pub use aliases::{LcAliasProjection, LcNumericalAlias};
+pub use capacitance::LcCapacitanceProjection;
 mod horizon;
 mod lower;
 pub use horizon::LcHorizonProjection;
