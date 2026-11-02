@@ -2,6 +2,7 @@
 //! Independent timing relaxation keeps original membership distinct from shared offsets.
 
 mod exact;
+mod phase;
 mod shared;
 mod support;
 

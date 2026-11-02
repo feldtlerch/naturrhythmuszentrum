@@ -16,6 +16,8 @@ pub use inclusion::LcInputRefinement;
 mod interval;
 pub use impossible::LcImpossible;
 mod pairs;
+mod phase;
+pub use phase::{LcPhaseCover, LcPhaseParameters, LcPhaseWitness, LcSharedPhase};
 mod quantity;
 mod time;
 mod timing;
