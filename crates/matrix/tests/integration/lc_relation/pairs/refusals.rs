@@ -55,7 +55,7 @@ fn lc_relation_recovery_cover_refusals() -> TestResult {
 #[test]
 fn lc_relation_recovery_constraint_refusals() -> TestResult {
     let mut inputs = support::inputs(false, "1/20")?;
-    inputs.push(input(Q::Energy, ["1", "1"])?);
+    inputs.push(input(Q::Product, ["1", "1"])?);
     assert!(
         support::relation(inputs)?
             .pairs_cover(

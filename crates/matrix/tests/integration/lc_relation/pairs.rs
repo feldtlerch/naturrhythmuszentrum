@@ -2,7 +2,9 @@
 //! Independent exact recovery intervals retain unknown-phase correlation and free scale.
 
 mod aliases;
+mod impossible;
 mod refusals;
+mod scale;
 mod support;
 
 use super::support::{TestResult, contains, ledger, number};

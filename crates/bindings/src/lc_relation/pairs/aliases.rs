@@ -149,7 +149,9 @@ impl LcAliasCover {
         match self.0.fundamental.determinacy(quantity)? {
             LcDeterminacy::DeterminedFinite => Ok(LcDeterminacy::DeterminedInfinite),
             LcDeterminacy::Underdetermined => Ok(LcDeterminacy::Underdetermined),
-            LcDeterminacy::DeterminedInfinite => Err(LcRelationError::Projection),
+            LcDeterminacy::DeterminedInfinite | LcDeterminacy::Impossible => {
+                Err(LcRelationError::Projection)
+            }
         }
     }
 

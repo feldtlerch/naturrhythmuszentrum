@@ -97,10 +97,10 @@ pub use error::UnitError;
 pub use evidence::{CheckedDeclarations, SnapshotError, SnapshotId};
 pub use kind::{CountDomain, Kind, UncertaintyMode};
 pub use lc_relation::{
-    LcAliasCover, LcAliasLattice, LcAliasWitness, LcBranch, LcCertainty, LcDeterminacy,
-    LcForwardArc, LcForwardCover, LcFreeDirection, LcInput, LcInterval, LcObservationValue,
-    LcPairParameters, LcPairsCover, LcPhaseEndpoint, LcPhaseGauge, LcQuantity, LcRelation,
-    LcRelationError, LcValues, LcWitness,
+    LcAliasCover, LcAliasLattice, LcAliasWitness, LcBranch, LcCertainty, LcConsistency,
+    LcDeterminacy, LcForwardArc, LcForwardCover, LcFreeDirection, LcImpossible, LcInput,
+    LcInterval, LcObservationValue, LcPairParameters, LcPairsCover, LcPhaseEndpoint, LcPhaseGauge,
+    LcQuantity, LcRelation, LcRelationError, LcValues, LcWitness,
 };
 pub use measure::{Conversion, Measure, Scale};
 pub use pairing::{

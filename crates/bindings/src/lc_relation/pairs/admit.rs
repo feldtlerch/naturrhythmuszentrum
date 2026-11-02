@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Every supplied quantity participates in the exact finite-cycle recovery question.
 
+use super::scale::Scale;
 use super::{
     AT, Bounds, LcQuantity, LcRelation, LcRelationError, Rational, Strip, storage, support,
 };
@@ -15,6 +16,8 @@ pub(super) struct Inputs {
     pub(super) rate: Bounds,
     /// Whether the starting phase fixes the common cycle gauge.
     pub(super) fixed_phase: bool,
+    /// Original and exactly eliminated positive physical scale constraints.
+    pub(super) scale: Scale,
 }
 
 /// One original timestamp/phase inventory slot, intersecting repeated constraints.
@@ -41,6 +44,7 @@ impl Inputs {
         let mut slots: Vec<_> = (0..count).map(|_| Slot::default()).collect();
         let mut rate = None;
         let mut phase = None;
+        let mut scale = Scale::default();
         let turn = support::turn(budget)?;
         for cycle in cycles {
             support::integer(cycle, budget)?;
@@ -71,35 +75,45 @@ impl Inputs {
                     support::bounds(input.interval(), budget)?,
                     budget,
                 )?,
-                _ => return Err(LcRelationError::Projection),
+                _ => scale.admit(input, budget)?,
             }
         }
-        let rate = rate.ok_or(LcRelationError::Projection)?;
+        let mut rate = rate.ok_or(LcRelationError::Projection)?;
+        if let Some(fixed) = scale.derive(budget)? {
+            support::intersect(&mut rate, &[fixed.clone(), fixed], budget)?;
+        }
         if rate[0].is_negative() || rate[0].is_zero() {
             return Err(LcRelationError::Projection);
         }
-        let mut strips = Vec::with_capacity(count.saturating_add(1));
-        for slot in slots {
-            let time = slot.time.ok_or(LcRelationError::Projection)?;
-            if time[0] != time[1] {
-                return Err(LcRelationError::Projection);
-            }
-            strips.push(Strip {
-                time: time[0].clone(),
-                phase: slot.phase.ok_or(LcRelationError::Projection)?,
-            });
-        }
         let fixed_phase = phase.is_some();
-        if let Some(phase) = phase {
-            strips.push(Strip {
-                time: Rational::zero(),
-                phase,
-            });
-        }
+        let strips = strips(slots, phase)?;
         Ok(Self {
             strips,
             rate,
             fixed_phase,
+            scale,
         })
     }
+}
+
+/// Complete original observation slots become correlated strips after admission succeeds.
+fn strips(slots: Vec<Slot>, phase: Option<Bounds>) -> Result<Vec<Strip>, LcRelationError> {
+    let mut strips = Vec::with_capacity(slots.len().saturating_add(1));
+    for slot in slots {
+        let time = slot.time.ok_or(LcRelationError::Projection)?;
+        if time[0] != time[1] {
+            return Err(LcRelationError::Projection);
+        }
+        strips.push(Strip {
+            time: time[0].clone(),
+            phase: slot.phase.ok_or(LcRelationError::Projection)?,
+        });
+    }
+    if let Some(phase) = phase {
+        strips.push(Strip {
+            time: Rational::zero(),
+            phase,
+        });
+    }
+    Ok(strips)
 }

@@ -48,21 +48,16 @@ pub(super) fn check(
             cycle: Some(cycle.add(&parameters.gauge, budget)?),
         });
     }
-    let inductance = parameters.ratio.div(&parameters.rate, budget)?;
-    let capacitance =
-        Rational::one().div(&parameters.ratio.mul(&parameters.rate, budget)?, budget)?;
-    let current = parameters.voltage.div(&parameters.ratio, budget)?;
-    let twice_energy = capacitance.mul(&parameters.voltage.pow(2, budget)?, budget)?;
-    let energy = twice_energy.div(&Rational::from_ratio(2, 1, budget)?, budget)?;
+    let physical = inputs.scale.values(parameters, budget)?;
     relation.check_witness(
         LcValues {
-            inductance: inductance.into(),
-            capacitance: capacitance.into(),
+            inductance: physical.inductance.into(),
+            capacitance: physical.capacitance.into(),
             rate: parameters.rate.clone().into(),
             initial_phase: Some(initial),
-            voltage: parameters.voltage.clone().into(),
-            current: current.into(),
-            energy: energy.into(),
+            voltage: physical.voltage,
+            current: physical.current,
+            energy: physical.energy,
             observations,
         },
         budget,

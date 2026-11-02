@@ -20,6 +20,8 @@ use std::rc::Rc;
 pub enum LcDeterminacy {
     /// A named continuous physical direction remains unconstrained.
     Underdetermined,
+    /// An exact contradiction excludes every original branch.
+    Impossible,
     /// The supported observation map determines the projection within declared uncertainty.
     DeterminedFinite,
     /// The observed projection retains a complete infinite discrete alias family.

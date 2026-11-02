@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-//! Correlated exact-time phase-pair projection with a proved complete bounded cycle family.
+//! Correlated phase-pair projections, complete aliases and positive scale eliminations.
 
 mod admit;
 mod aliases;
 pub use aliases::{LcAliasCover, LcAliasLattice, LcAliasWitness};
 mod project;
+mod scale;
 mod support;
 mod witness;
 
@@ -41,6 +42,15 @@ pub enum LcFreeDirection {
     AmplitudeScale,
 }
 
+/// Joint feasibility of all original constraints, separate from projection determinacy.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LcConsistency {
+    /// The original relation has a checked full-tuple witness.
+    Feasible,
+    /// Supplied elements, amplitudes, energy and starting phase satisfy every observation.
+    Overdetermined,
+}
+
 /// Complete common-lift freedom retained when the starting phase was not supplied.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LcPhaseGauge {
@@ -57,9 +67,9 @@ pub struct LcPairParameters {
     pub rate: Rational,
     /// Local lifted starting phase inside the correlated fibre at this rate.
     pub initial_phase: Rational,
-    /// Arbitrary positive impedance ratio fixing the free element scale.
+    /// Positive impedance parameter, used when original inputs leave the element scale free.
     pub ratio: Rational,
-    /// Arbitrary positive voltage magnitude fixing the free amplitude scale.
+    /// Positive voltage parameter, used when original inputs leave amplitude scale free.
     pub voltage: Rational,
     /// Common integer lift; zero is required when starting phase is supplied.
     pub gauge: Rational,
@@ -138,6 +148,7 @@ impl LcRelation {
         for value in cycles.iter().chain(&rate).chain(&inputs.rate) {
             bytes = bytes.saturating_add(storage::rational(value));
         }
+        bytes = bytes.saturating_add(inputs.scale.bytes());
         storage::retained(bytes.saturating_add(self.retained_payload_bytes()), budget)?;
         Ok(LcPairsCover(Rc::new(Data {
             relation: self.clone(),
@@ -190,10 +201,7 @@ impl LcPairsCover {
     /// Independent structural verdict for the requested physical projection.
     /// # Errors
     /// Refuses quantities whose projected set is not supplied by this closed adapter.
-    pub const fn determinacy(
-        &self,
-        quantity: LcQuantity,
-    ) -> Result<LcDeterminacy, LcRelationError> {
+    pub fn determinacy(&self, quantity: LcQuantity) -> Result<LcDeterminacy, LcRelationError> {
         match quantity {
             LcQuantity::Rate
             | LcQuantity::AngularFrequency
@@ -204,7 +212,11 @@ impl LcPairsCover {
             | LcQuantity::AmplitudeRatio
             | LcQuantity::VoltageAmplitude
             | LcQuantity::CurrentAmplitude
-            | LcQuantity::Energy => Ok(LcDeterminacy::Underdetermined),
+            | LcQuantity::Energy => Ok(if self.0.inputs.scale.bounded(quantity) {
+                LcDeterminacy::DeterminedFinite
+            } else {
+                LcDeterminacy::Underdetermined
+            }),
             _ => Err(LcRelationError::Projection),
         }
     }
@@ -212,7 +224,7 @@ impl LcPairsCover {
     /// Named continuous freedoms for each supported query, separate from finite uncertainty.
     /// # Errors
     /// Refuses unsupported projection quantities.
-    pub const fn free_directions(
+    pub fn free_directions(
         &self,
         quantity: LcQuantity,
     ) -> Result<&'static [LcFreeDirection], LcRelationError> {
@@ -221,12 +233,12 @@ impl LcPairsCover {
             | LcQuantity::AngularFrequency
             | LcQuantity::Product
             | LcQuantity::NaturalTime => Ok(&[]),
-            LcQuantity::Inductance | LcQuantity::Capacitance | LcQuantity::AmplitudeRatio => {
-                Ok(&[LcFreeDirection::ElementScale])
-            }
-            LcQuantity::VoltageAmplitude | LcQuantity::CurrentAmplitude | LcQuantity::Energy => {
-                Ok(&[LcFreeDirection::AmplitudeScale])
-            }
+            LcQuantity::Inductance
+            | LcQuantity::Capacitance
+            | LcQuantity::AmplitudeRatio
+            | LcQuantity::VoltageAmplitude
+            | LcQuantity::CurrentAmplitude
+            | LcQuantity::Energy => Ok(self.0.inputs.scale.freedom(quantity)),
             _ => Err(LcRelationError::Projection),
         }
     }
@@ -252,12 +264,28 @@ impl LcPairsCover {
             | LcQuantity::VoltageAmplitude
             | LcQuantity::CurrentAmplitude
             | LcQuantity::Energy => {
-                return LcInterval::new(Some(Rational::zero().into()), None, budget);
+                if let Some(bounds) = self.0.inputs.scale.bounds(quantity, &self.0.rate, budget)? {
+                    bounds
+                } else {
+                    return LcInterval::new(Some(Rational::zero().into()), None, budget);
+                }
             }
             _ => return Err(LcRelationError::Projection),
         };
         let [lower, upper] = bounds;
         LcInterval::new(Some(lower.into()), Some(upper.into()), budget)
+    }
+
+    /// Joint full-input consistency, backed by the retained original-equation witness.
+    #[must_use]
+    pub fn consistency(&self) -> LcConsistency {
+        let full_scales = self.0.inputs.scale.full_tuple;
+        let supplied_phase = self.0.inputs.fixed_phase;
+        if full_scales && supplied_phase {
+            LcConsistency::Overdetermined
+        } else {
+            LcConsistency::Feasible
+        }
     }
 
     /// Full correlated local starting-phase fibre at a specified recovered rate.

@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-//! Immutable autonomous LC constraints and exact point feasibility, without numerical authority.
+//! Immutable autonomous LC constraints, exact projection families and checked feasibility.
 
 mod forward;
+mod impossible;
 mod interval;
+pub use impossible::LcImpossible;
 mod pairs;
 mod quantity;
 mod storage;
@@ -11,8 +13,8 @@ mod witness;
 pub use forward::{LcCertainty, LcDeterminacy, LcForwardArc, LcForwardCover, LcPhaseEndpoint};
 pub use interval::LcInterval;
 pub use pairs::{
-    LcAliasCover, LcAliasLattice, LcAliasWitness, LcFreeDirection, LcPairParameters, LcPairsCover,
-    LcPhaseGauge,
+    LcAliasCover, LcAliasLattice, LcAliasWitness, LcConsistency, LcFreeDirection, LcPairParameters,
+    LcPairsCover, LcPhaseGauge,
 };
 pub use quantity::LcQuantity;
 pub use witness::{LcBranch, LcObservationValue, LcValues, LcWitness};
@@ -66,7 +68,7 @@ pub enum LcRelationError {
     /// This projection adapter does not cover the complete supplied constraint family.
     #[error("unsupported LC projection constraints")]
     Projection,
-    /// Proposed endpoint cycle indices do not have a complete exact floor-cell proof.
+    /// A proposed cycle domain lacks a complete exact coverage or exclusion proof.
     #[error("LC complete cycle cover is not proved")]
     CycleCover,
 }
