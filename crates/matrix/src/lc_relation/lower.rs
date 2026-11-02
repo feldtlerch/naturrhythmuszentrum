@@ -36,7 +36,7 @@ pub(super) fn family<P: Scalar + 'static>(
 }
 
 /// Affine endpoint evaluation carries both pi error and every rounded arithmetic operation.
-fn endpoint<P: Scalar + 'static>(
+pub(super) fn endpoint<P: Scalar + 'static>(
     endpoint: &LcPhaseEndpoint,
     pi: &PiConstant<P>,
     literals: LiteralLimits,

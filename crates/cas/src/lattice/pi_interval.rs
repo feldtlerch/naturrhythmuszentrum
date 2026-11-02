@@ -20,6 +20,11 @@ pub struct PiAffineEndpoint {
 }
 
 impl PiAffineEndpoint {
+    /// Mathematical coefficients created by the closed lattice checkers.
+    pub(super) const fn affine(rational: Rational, pi: Rational) -> Self {
+        Self { rational, pi }
+    }
+
     /// Rational and pi coefficients, without a rounded spelling of the circle constant.
     #[must_use]
     pub const fn coefficients(&self) -> (&Rational, &Rational) {
@@ -144,7 +149,7 @@ impl PiIntervalCover {
 }
 
 /// Conservative exact limb storage, separate from any numerical materialization.
-fn rational_bytes(value: &Rational) -> u64 {
+pub(super) fn rational_bytes(value: &Rational) -> u64 {
     let (numerator, denominator) = value.component_bits();
     numerator
         .div_ceil(8)
@@ -153,7 +158,7 @@ fn rational_bytes(value: &Rational) -> u64 {
 }
 
 /// A complete checked record must fit both exact output and staged-payload ceilings.
-fn retained(bytes: u64, budget: &Budget) -> Result<(), Fault> {
+pub(super) fn retained(bytes: u64, budget: &Budget) -> Result<(), Fault> {
     budget.check(BudgetKind::OutputBytes, bytes, AT)?;
     budget.check(BudgetKind::StagedPayloadBytes, bytes, AT)
 }

@@ -7,6 +7,8 @@ mod interval;
 pub use impossible::LcImpossible;
 mod pairs;
 mod quantity;
+mod time;
+pub use time::{LcTailOutcome, LcTailStatus, LcTimeBox, LcTimeTail, LcZeroTimes};
 mod storage;
 mod witness;
 

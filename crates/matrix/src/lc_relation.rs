@@ -4,6 +4,8 @@
 mod aliases;
 pub use aliases::{LcAliasProjection, LcNumericalAlias};
 mod lower;
+mod time;
+pub use time::{LcNumericalTail, LcNumericalTime, LcTimeProjection};
 mod pairs;
 pub use pairs::{LcNumericalQuantity, LcPairsProjection};
 

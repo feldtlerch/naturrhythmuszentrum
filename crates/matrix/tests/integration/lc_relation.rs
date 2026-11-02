@@ -4,6 +4,7 @@
 mod pairs;
 mod refusals;
 mod support;
+mod time;
 
 use crate::kernel_oracle::Rational as Oracle;
 use nrz_bindings::{LcCertainty, LcDeterminacy, LcQuantity as Q};

@@ -100,7 +100,8 @@ pub use lc_relation::{
     LcAliasCover, LcAliasLattice, LcAliasWitness, LcBranch, LcCertainty, LcConsistency,
     LcDeterminacy, LcForwardArc, LcForwardCover, LcFreeDirection, LcImpossible, LcInput,
     LcInterval, LcObservationValue, LcPairParameters, LcPairsCover, LcPhaseEndpoint, LcPhaseGauge,
-    LcQuantity, LcRelation, LcRelationError, LcValues, LcWitness,
+    LcQuantity, LcRelation, LcRelationError, LcTailOutcome, LcTailStatus, LcTimeBox, LcTimeTail,
+    LcValues, LcWitness, LcZeroTimes,
 };
 pub use measure::{Conversion, Measure, Scale};
 pub use pairing::{
