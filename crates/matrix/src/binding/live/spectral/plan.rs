@@ -42,6 +42,8 @@ pub(super) struct Plan<P: Scalar> {
 pub(super) enum Parameters<P: Scalar> {
     /// Original three independently owned exact constant spellings.
     Constants([String; 3]),
+    /// Rebound instances share one authenticated exact export owner.
+    Shared(super::LcSpectralSchema),
     /// Statistical requests alone own their additional input or evaluated parameters.
     Statistical(Box<super::statistics::Extension<P>>),
 }
@@ -51,13 +53,14 @@ impl<P: Scalar> LcSpectrum<P> {
     pub(super) fn constants(&self) -> &[String; 3] {
         match &self.0.parameters {
             Parameters::Constants(constants) => constants,
+            Parameters::Shared(schema) => schema.constants(),
             Parameters::Statistical(extension) => extension.base.constants(),
         }
     }
     /// Optional statistical state has no allocation in a deterministic request.
     pub(super) fn extension(&self) -> Option<&super::statistics::Extension<P>> {
         match &self.0.parameters {
-            Parameters::Constants(_) => None,
+            Parameters::Constants(_) | Parameters::Shared(_) => None,
             Parameters::Statistical(extension) => Some(extension),
         }
     }
@@ -136,7 +139,7 @@ impl<P: Scalar + 'static> LcSpectrum<P> {
 }
 
 /// Export constants from the sealed operator family; no sampled value supplies an exact coefficient.
-fn export(law: &LcSpectralLaw, budget: &mut Budget) -> Result<[String; 3], Error> {
+pub(super) fn export(law: &LcSpectralLaw, budget: &mut Budget) -> Result<[String; 3], Error> {
     let operator = law.operator();
     let upper = ExactConstant::from(operator.map().coefficients()[5].clone())
         .mul(operator.frame().entries()[1].magnitude(), budget)?;

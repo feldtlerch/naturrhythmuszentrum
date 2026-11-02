@@ -32,6 +32,7 @@ mod root_support;
 mod root_work;
 mod selected_joint;
 mod source_composition;
+mod spectral_batch;
 mod state;
 #[allow(
     dead_code,

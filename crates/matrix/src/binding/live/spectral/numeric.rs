@@ -18,23 +18,47 @@ pub(super) fn constants<P: Scalar>(
         .try_reserve_exact(3)
         .map_err(|_| HeapError::Capacity)?;
     for text in plan.constants() {
-        let work = u64::try_from(text.len())
-            .map_err(|_| HeapError::ExtentOverflow)?
-            .checked_mul(12)
-            .and_then(|count| count.checked_add(8))
-            .ok_or(HeapError::ExtentOverflow)?;
-        budget.work(work, AT)?;
-        let policy = plan.0.literals;
-        let limits = LiteralLimits::new(
-            policy.max_digits(),
-            policy.max_exponent(),
-            policy.max_work().min(work),
-        );
-        let value = NumericLiteral::new(text, limits)?.decode(context)?;
-        positive(value.enclosure(), budget)?;
-        result.push(value);
+        result.push(constant(text, plan.0.literals, context, budget)?);
     }
     result.try_into().map_err(|_| Error::Identity)
+}
+
+/// A schema's source-free coefficients occupy a fixed array, with no temporary vector allocation.
+pub(super) fn schema_constants<P: Scalar>(
+    schema: &super::LcSpectralSchema,
+    context: &ArithmeticContext,
+    budget: &mut Budget,
+) -> Result<[DecodedLiteral<P>; 3], Error> {
+    let values = schema.constants();
+    let policy = schema.literals();
+    Ok([
+        constant(&values[0], policy, context, budget)?,
+        constant(&values[1], policy, context, budget)?,
+        constant(&values[2], policy, context, budget)?,
+    ])
+}
+
+/// The existing literal charge, bounded decoder and positivity check are unchanged.
+fn constant<P: Scalar>(
+    text: &str,
+    policy: LiteralLimits,
+    context: &ArithmeticContext,
+    budget: &mut Budget,
+) -> Result<DecodedLiteral<P>, Error> {
+    let work = u64::try_from(text.len())
+        .map_err(|_| HeapError::ExtentOverflow)?
+        .checked_mul(12)
+        .and_then(|count| count.checked_add(8))
+        .ok_or(HeapError::ExtentOverflow)?;
+    budget.work(work, AT)?;
+    let limits = LiteralLimits::new(
+        policy.max_digits(),
+        policy.max_exponent(),
+        policy.max_work().min(work),
+    );
+    let value = NumericLiteral::new(text, limits)?.decode(context)?;
+    positive(value.enclosure(), budget)?;
+    Ok(value)
 }
 
 /// Center, full-family and original nominal schedules follow the same exact ordered law.

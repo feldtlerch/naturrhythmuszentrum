@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Strict positive-family spectral bounds retain the original theorem and every live input version.
 
+mod batch;
+pub use batch::{
+    LcSpectralBatch, LcSpectralBatchInventory, LcSpectralBatchLimits, LcSpectralStatus,
+};
+mod schema;
+pub use schema::LcSpectralSchema;
 mod angular;
 pub(crate) use angular::Origin as AngularFrequencyOrigin;
 pub use angular::{
@@ -207,6 +213,39 @@ impl Heap {
         budget.check(BudgetKind::OutputBytes, bytes, AT)?;
         Ok(LcSpectralEvaluation {
             plan: statistics::evaluated(plan, moments),
+            values,
+            coverage,
+            revision: context.revision(),
+            usage: [before, budget.usage()],
+        })
+    }
+}
+
+impl Heap {
+    /// The closed batch has already authenticated the shared schema and coefficient arithmetic key.
+    fn evaluate_lc_spectrum_from_constants<P: Scalar + 'static>(
+        &self,
+        plan: &LcSpectrum<P>,
+        constants: &[nrz_scalar::DecodedLiteral<P>; 3],
+        context: &ArithmeticContext,
+        budget: &mut Budget,
+    ) -> Result<LcSpectralEvaluation<P>, SpectralError> {
+        let before = budget.usage();
+        plan.validate(self)?;
+        if plan.extension().is_some() {
+            return Err(SpectralError::Identity);
+        }
+        let bytes = statistics::evaluation_bytes(plan)?;
+        let (values, coverage) = budget.with_retained_payload(bytes, AT, |budget| {
+            let (inputs, coverage) = input::capture(self, plan, budget)?;
+            Ok::<_, SpectralError>((
+                numeric::evaluate(&inputs, constants, context, budget)?,
+                coverage,
+            ))
+        })?;
+        budget.check(BudgetKind::OutputBytes, bytes, AT)?;
+        Ok(LcSpectralEvaluation {
+            plan: plan.clone(),
             values,
             coverage,
             revision: context.revision(),

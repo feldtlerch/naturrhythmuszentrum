@@ -23,9 +23,10 @@ pub use phasor::{
 };
 pub use spectral::{
     LcAngularFrequencyParameter, LcAngularFrequencyPublication, LcFrequencyPublication,
-    LcSourceBinding, LcSourceStatistics, LcSpectralEvaluation, LcSpectralPublication, LcSpectrum,
-    PublishedLcAngularFrequency, PublishedLcFrequency, PublishedLcSpectrum, SpectralError,
-    SpectralValue,
+    LcSourceBinding, LcSourceStatistics, LcSpectralBatch, LcSpectralBatchInventory,
+    LcSpectralBatchLimits, LcSpectralEvaluation, LcSpectralPublication, LcSpectralSchema,
+    LcSpectralStatus, LcSpectrum, PublishedLcAngularFrequency, PublishedLcFrequency,
+    PublishedLcSpectrum, SpectralError, SpectralValue,
 };
 mod derivatives;
 pub use derivatives::{
