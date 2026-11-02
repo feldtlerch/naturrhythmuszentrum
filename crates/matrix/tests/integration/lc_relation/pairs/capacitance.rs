@@ -78,7 +78,7 @@ fn render<P: Scalar>(exact: &LcCapacitanceCover) -> TestResult {
 }
 
 /// Exact arbitrary-precision comparisons avoid cross-product overflow in native endpoint oracles.
-fn contains<P: Scalar>(value: Enclosure<P>, expected: &Rational) -> TestResult {
+pub(super) fn contains<P: Scalar>(value: Enclosure<P>, expected: &Rational) -> TestResult {
     let decode = |value| -> TestResult<Rational> {
         let value = crate::kernel_oracle::Rational::binary(value)?;
         number(&format!("{}/{}", value.numerator, value.denominator))

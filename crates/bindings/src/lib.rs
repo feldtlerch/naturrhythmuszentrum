@@ -98,12 +98,12 @@ pub use evidence::{CheckedDeclarations, SnapshotError, SnapshotId};
 pub use kind::{CountDomain, Kind, UncertaintyMode};
 pub use lc_relation::{
     LcAliasCover, LcAliasLattice, LcAliasWitness, LcBranch, LcCapacitanceCover,
-    LcCapacitanceParameters, LcCertainty, LcConsistency, LcDeterminacy, LcForwardArc,
-    LcForwardCover, LcFreeDirection, LcHorizon, LcHorizonValue, LcImpossible, LcInput,
-    LcInputRefinement, LcInterval, LcObservationValue, LcPairParameters, LcPairRefinement,
-    LcPairsCover, LcPhaseEndpoint, LcPhaseGauge, LcQuantity, LcRefinementState,
-    LcRefinementSuccess, LcRelation, LcRelationError, LcTailOutcome, LcTailStatus, LcTimeBox,
-    LcTimeTail, LcValues, LcWitness, LcZeroTimes,
+    LcCapacitanceParameters, LcCertainty, LcClockCover, LcClockParameters, LcClockWitness,
+    LcConsistency, LcDeterminacy, LcForwardArc, LcForwardCover, LcFreeDirection, LcHorizon,
+    LcHorizonValue, LcImpossible, LcInput, LcInputRefinement, LcInterval, LcObservationValue,
+    LcPairParameters, LcPairRefinement, LcPairsCover, LcPhaseEndpoint, LcPhaseGauge, LcQuantity,
+    LcRefinementState, LcRefinementSuccess, LcRelation, LcRelationError, LcSharedClock,
+    LcTailOutcome, LcTailStatus, LcTimeBox, LcTimeTail, LcValues, LcWitness, LcZeroTimes,
 };
 pub use measure::{Conversion, Measure, Scale};
 pub use pairing::{

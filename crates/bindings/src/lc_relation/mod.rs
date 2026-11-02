@@ -2,8 +2,10 @@
 //! Immutable autonomous LC constraints, exact projection families and checked feasibility.
 
 mod capacitance;
+mod clock;
 mod forward;
 pub use capacitance::{LcCapacitanceCover, LcCapacitanceParameters};
+pub use clock::{LcClockCover, LcClockParameters, LcClockWitness, LcSharedClock};
 mod horizon;
 mod impossible;
 mod inclusion;
