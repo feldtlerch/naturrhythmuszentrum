@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Exact amplitude controls distinguish per-measurement support from one common gain.
 
+mod energy;
+
 use super::super::support::{TestResult, ledger};
 use super::support::{cycles, input, number, pi};
 use nrz_bindings::{

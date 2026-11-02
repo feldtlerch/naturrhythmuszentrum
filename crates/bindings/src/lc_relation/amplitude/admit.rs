@@ -144,9 +144,6 @@ fn original(
             match input.quantity() {
                 Q::Energy => {
                     let next = bounds(input.interval(), budget)?;
-                    if next[0] != next[1] {
-                        return Err(LcRelationError::Projection);
-                    }
                     if let Some(previous) = &mut energy {
                         intersect(previous, &next, budget)?;
                     } else {

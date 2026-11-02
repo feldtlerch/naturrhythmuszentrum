@@ -34,7 +34,7 @@ struct Question {
     measured: Bounds,
     /// One positive multiplicative error shared by all repeated measurements.
     gain: Bounds,
-    /// Supplied positive exact energy; absence leaves a continuous element scale.
+    /// Supplied finite positive energy support; absence leaves a continuous element scale.
     energy: Option<Bounds>,
     /// Conservative new exact ownership excluding original shared owners.
     bytes: u64,
@@ -92,8 +92,8 @@ struct Cover {
 impl LcAmplitudeSamples {
     /// Add separate positive amplitude intervals and one common positive gain.
     ///
-    /// The closed adapter supports either voltage or current amplitude and optional exact
-    /// positive energy. Other simultaneous physical scale constraints refuse explicitly.
+    /// The closed adapter supports either voltage or current amplitude and optional finite
+    /// positive energy intervals. Other simultaneous physical scale constraints refuse explicitly.
     /// Each original amplitude constraint must contain the complete measurement image.
     /// # Errors
     /// Refuses unsupported constraints, empty sample intersections and exhausted resources.
@@ -143,7 +143,7 @@ impl LcAmplitudeSamples {
         &self.0.gain
     }
 
-    /// Supplied exact positive energy; absence leaves energy free and positive.
+    /// Supplied finite positive energy support; absence leaves energy free and positive.
     #[must_use]
     pub fn energy(&self) -> Option<&Bounds> {
         self.0.energy.as_ref()
