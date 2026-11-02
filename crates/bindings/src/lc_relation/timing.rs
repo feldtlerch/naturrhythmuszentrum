@@ -4,9 +4,11 @@
 mod admit;
 mod exact;
 mod outer;
+mod shared;
 
 pub use exact::LcTimingCover;
 pub use outer::LcTimingOuterCover;
+pub use shared::{LcSharedTiming, LcSharedTimingCover, LcSharedTimingWitness};
 
 use super::{AT, LcRelation, LcRelationError, storage};
 use crate::Budget;

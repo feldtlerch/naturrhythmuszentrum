@@ -2,6 +2,7 @@
 //! Independent timing relaxation keeps original membership distinct from shared offsets.
 
 mod exact;
+mod shared;
 mod support;
 
 use super::support::{TestResult, ledger};

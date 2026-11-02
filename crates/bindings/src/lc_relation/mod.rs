@@ -20,7 +20,10 @@ mod quantity;
 mod time;
 mod timing;
 pub use time::{LcTailOutcome, LcTailStatus, LcTimeBox, LcTimeTail, LcZeroTimes};
-pub use timing::{LcSampleTimes, LcTimingCover, LcTimingOuterCover};
+pub use timing::{
+    LcSampleTimes, LcSharedTiming, LcSharedTimingCover, LcSharedTimingWitness, LcTimingCover,
+    LcTimingOuterCover,
+};
 mod storage;
 mod witness;
 
