@@ -4,7 +4,9 @@
 mod forward;
 mod horizon;
 mod impossible;
+mod inclusion;
 pub use horizon::{LcHorizon, LcHorizonValue};
+pub use inclusion::LcInputRefinement;
 mod interval;
 pub use impossible::LcImpossible;
 mod pairs;
@@ -18,7 +20,7 @@ pub use forward::{LcCertainty, LcDeterminacy, LcForwardArc, LcForwardCover, LcPh
 pub use interval::LcInterval;
 pub use pairs::{
     LcAliasCover, LcAliasLattice, LcAliasWitness, LcConsistency, LcFreeDirection, LcPairParameters,
-    LcPairsCover, LcPhaseGauge,
+    LcPairRefinement, LcPairsCover, LcPhaseGauge, LcRefinementState, LcRefinementSuccess,
 };
 pub use quantity::LcQuantity;
 pub use witness::{LcBranch, LcObservationValue, LcValues, LcWitness};

@@ -5,6 +5,7 @@ mod aliases;
 mod horizon;
 mod horizon_checks;
 mod impossible;
+mod refinement;
 mod refusals;
 mod scale;
 mod support;

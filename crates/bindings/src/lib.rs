@@ -99,9 +99,10 @@ pub use kind::{CountDomain, Kind, UncertaintyMode};
 pub use lc_relation::{
     LcAliasCover, LcAliasLattice, LcAliasWitness, LcBranch, LcCertainty, LcConsistency,
     LcDeterminacy, LcForwardArc, LcForwardCover, LcFreeDirection, LcHorizon, LcHorizonValue,
-    LcImpossible, LcInput, LcInterval, LcObservationValue, LcPairParameters, LcPairsCover,
-    LcPhaseEndpoint, LcPhaseGauge, LcQuantity, LcRelation, LcRelationError, LcTailOutcome,
-    LcTailStatus, LcTimeBox, LcTimeTail, LcValues, LcWitness, LcZeroTimes,
+    LcImpossible, LcInput, LcInputRefinement, LcInterval, LcObservationValue, LcPairParameters,
+    LcPairRefinement, LcPairsCover, LcPhaseEndpoint, LcPhaseGauge, LcQuantity, LcRefinementState,
+    LcRefinementSuccess, LcRelation, LcRelationError, LcTailOutcome, LcTailStatus, LcTimeBox,
+    LcTimeTail, LcValues, LcWitness, LcZeroTimes,
 };
 pub use measure::{Conversion, Measure, Scale};
 pub use pairing::{

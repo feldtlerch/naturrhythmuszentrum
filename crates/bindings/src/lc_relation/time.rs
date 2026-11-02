@@ -2,6 +2,7 @@
 //! Complete inverse zero times with separate covering and total-existence evidence.
 
 mod rectangle;
+mod source;
 
 use super::{AT, LcCertainty, LcDeterminacy, LcRelation, LcRelationError, LcWitness, storage};
 use crate::{Budget, Descriptor, LcQuantity};
@@ -11,6 +12,7 @@ use nrz_cas::{
     limits::BudgetUsage,
 };
 use rectangle::Rectangle;
+use source::Source;
 use std::rc::Rc;
 
 pub use nrz_cas::lattice::PiZeroBox as LcTimeBox;
@@ -35,8 +37,8 @@ struct Data {
     relation: LcRelation,
     /// Complete mathematical family, including the zero-spread exception.
     family: PiZeroFamily,
-    /// Checked rectangular parameter map, keeping the chosen positive energy.
-    rectangle: Rectangle,
+    /// Original total feasibility map, including every pair constraint when present.
+    source: Source,
     /// Coherent duration difference meaning shared by all boxes and the tail.
     descriptor: Descriptor,
     /// Before/after exact checking snapshots.
@@ -83,24 +85,61 @@ impl LcRelation {
         let before = budget.usage();
         let (rectangle, rate) = Rectangle::check(self, budget)?;
         let family = PiZeroFamily::check(rate, budget)?;
-        let descriptor = LcQuantity::NaturalTime.descriptor()?;
-        let bytes = family
-            .retained_payload_bytes()
-            .saturating_add(rectangle.bytes())
-            .saturating_add(2_048);
-        storage::retained(bytes.saturating_add(self.retained_payload_bytes()), budget)?;
-        Ok(LcZeroTimes(Rc::new(Data {
-            relation: self.clone(),
+        LcZeroTimes::new(
+            self.clone(),
             family,
-            rectangle,
-            descriptor,
-            usage: [before, budget.usage()],
-            bytes,
-        })))
+            Source::Rectangle(rectangle),
+            &before,
+            budget,
+        )
     }
 }
 
 impl LcZeroTimes {
+    /// Preserve a pair source whose exact zero initial phase has already been checked.
+    pub(super) fn pairs(
+        cover: crate::LcPairsCover,
+        before: &BudgetUsage,
+        budget: &mut Budget,
+    ) -> Result<Self, LcRelationError> {
+        let family = PiZeroFamily::check(cover.rate().clone(), budget)?;
+        Self::new(
+            cover.relation().clone(),
+            family,
+            Source::Pairs(cover),
+            before,
+            budget,
+        )
+    }
+
+    /// Both admitted sources keep one original clock and their complete total feasibility map.
+    fn new(
+        relation: LcRelation,
+        family: PiZeroFamily,
+        source: Source,
+        before: &BudgetUsage,
+        budget: &mut Budget,
+    ) -> Result<Self, LcRelationError> {
+        budget.work(1, AT)?;
+        let descriptor = LcQuantity::NaturalTime.descriptor()?;
+        let bytes = family
+            .retained_payload_bytes()
+            .saturating_add(source.bytes())
+            .saturating_add(2_048);
+        storage::retained(
+            bytes.saturating_add(relation.retained_payload_bytes()),
+            budget,
+        )?;
+        Ok(Self(Rc::new(Data {
+            relation,
+            family,
+            source,
+            descriptor,
+            usage: [*before, budget.usage()],
+            bytes,
+        })))
+    }
+
     /// Identity of the complete immutable time question, not equality of rate endpoints.
     #[must_use]
     pub fn shares_allocation(&self, other: &Self) -> bool {
@@ -125,6 +164,15 @@ impl LcZeroTimes {
         &self.0.family
     }
 
+    /// Original correlated pair source, including its complete cycle tuple and scale map.
+    #[must_use]
+    pub fn pairs_cover(&self) -> Option<&crate::LcPairsCover> {
+        match &self.0.source {
+            Source::Pairs(cover) => Some(cover),
+            Source::Rectangle(_) => None,
+        }
+    }
+
     /// Exact zero target angle, with no rounded phase representative.
     #[must_use]
     pub fn target_phase(&self) -> Rational {
@@ -137,7 +185,7 @@ impl LcZeroTimes {
         LcDeterminacy::DeterminedInfinite
     }
 
-    /// Complete coverage and nonemptiness follow from the admitted rectangle map.
+    /// Complete coverage and nonemptiness follow from the retained total source map.
     #[must_use]
     pub const fn certainty(&self) -> LcCertainty {
         LcCertainty::Certified
@@ -195,7 +243,7 @@ impl LcZeroTimes {
         budget: &mut Budget,
     ) -> Result<LcWitness, LcRelationError> {
         self.0
-            .rectangle
+            .source
             .witness(&self.0.relation, self.0.family.rate(), rate, budget)
     }
 
@@ -241,10 +289,11 @@ impl LcTimeTail {
         self.existence.as_ref()
     }
 
-    /// Add total feasibility using the admitted independent rectangle parameter map.
+    /// Add total feasibility using the admitted original source parameter map.
     ///
     /// For every `t` in a positive member, `a=2*pi*n/t` lies in the original rate support.
-    /// The checked map `L=C=1/a`, `V=I=sqrt(2*E*a)` realizes every such positive rate.
+    /// The independent map `L=C=1/a`, `V=I=sqrt(2*E*a)`, or the retained known-phase
+    /// pair map with its original scale constraints, realizes every such positive rate.
     /// Continuous positive operations extend this map to all real rates, not only samples.
     /// # Errors
     /// Refuses exact original-equation checking or exhausted resources; the prior tail survives.

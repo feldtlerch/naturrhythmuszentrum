@@ -6,6 +6,9 @@ mod aliases;
 pub use aliases::{LcAliasCover, LcAliasLattice, LcAliasWitness};
 mod horizon;
 mod project;
+mod refinement;
+mod time;
+pub use refinement::{LcPairRefinement, LcRefinementState, LcRefinementSuccess};
 mod scale;
 mod support;
 mod witness;
@@ -119,6 +122,31 @@ impl LcRelation {
         let before = budget.usage();
         let inputs = admit::Inputs::check(self, &cycles, budget)?;
         let pi = pi.check(budget)?;
+        self.finish_pairs(inputs, cycles, pi, &before, budget)
+    }
+
+    /// Reuse already checked exact constant evidence during compatible refinements.
+    pub(super) fn pairs_cover_checked(
+        &self,
+        cycles: Vec<Rational>,
+        pi: CheckedPiBounds,
+        budget: &mut Budget,
+    ) -> Result<LcPairsCover, LcRelationError> {
+        let before = budget.usage();
+        budget.work(1, AT)?;
+        let inputs = admit::Inputs::check(self, &cycles, budget)?;
+        self.finish_pairs(inputs, cycles, pi, &before, budget)
+    }
+
+    /// Whole original strip projection and feasibility, shared by fresh and retained-pi routes.
+    fn finish_pairs(
+        &self,
+        inputs: admit::Inputs,
+        cycles: Vec<Rational>,
+        pi: CheckedPiBounds,
+        before: &BudgetUsage,
+        budget: &mut Budget,
+    ) -> Result<LcPairsCover, LcRelationError> {
         project::branches(
             &inputs.strips,
             &inputs.rate,
@@ -158,13 +186,19 @@ impl LcRelation {
             rate,
             pi,
             witness,
-            usage: [before, budget.usage()],
+            usage: [*before, budget.usage()],
             bytes,
         })))
     }
 }
 
 impl LcPairsCover {
+    /// Exact immutable joint-cover identity, independent of endpoint coincidence.
+    #[must_use]
+    pub fn shares_allocation(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+
     /// Original simultaneous relation retained by every derived answer.
     #[must_use]
     pub fn relation(&self) -> &LcRelation {
