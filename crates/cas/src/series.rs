@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Exact finite objects modulo a positive power of the declared increment.
 
+mod model;
+pub use model::{SeriesBinaryRow, SeriesCertificate, SeriesProductRow, SeriesStatement};
+
 use crate::budget::{Budget, BudgetKind};
 use crate::encoding::Encoder;
 use crate::error::{Fault, InvalidCode, Location};

@@ -10,6 +10,7 @@ mod representation;
 mod search;
 mod series_object;
 mod series_object_work;
+mod series_scalar;
 mod square_free;
 
 mod case_refinement;
