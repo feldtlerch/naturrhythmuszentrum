@@ -36,11 +36,16 @@ pub use phase::{LcPhaseCover, LcPhaseParameters, LcPhaseWitness, LcSharedPhase};
 mod quantity;
 mod time;
 mod timing;
+pub use shared::{
+    LcSharedMeasurementCover, LcSharedMeasurementParameters, LcSharedMeasurementWitness,
+    LcSharedMeasurements,
+};
 pub use time::{LcTailOutcome, LcTailStatus, LcTimeBox, LcTimeTail, LcZeroTimes};
 pub use timing::{
     LcSampleTimes, LcSharedTiming, LcSharedTimingCover, LcSharedTimingWitness, LcTimingCover,
     LcTimingOuterCover,
 };
+mod shared;
 mod storage;
 mod witness;
 

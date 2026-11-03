@@ -8,6 +8,7 @@ mod element;
 mod exact;
 mod phase;
 mod shared;
+mod shared_errors;
 mod support;
 
 use super::support::{TestResult, ledger};

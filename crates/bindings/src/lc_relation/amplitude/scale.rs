@@ -89,7 +89,7 @@ pub(super) fn bounds(
 }
 
 /// Original physical equations solve every scale from positive rate, amplitude and energy.
-pub(super) fn coordinate(
+pub(in crate::lc_relation) fn coordinate(
     channel: Q,
     quantity: Q,
     rate: &Rational,

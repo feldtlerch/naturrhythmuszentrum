@@ -3,7 +3,7 @@
 
 mod admit;
 mod project;
-mod scale;
+pub(super) mod scale;
 mod witness;
 
 use super::{AT, LcRelationError, storage};
