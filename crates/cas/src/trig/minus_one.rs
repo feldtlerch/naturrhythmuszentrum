@@ -492,26 +492,12 @@ impl Route<'_> {
     }
 }
 
-/// Recognize only the two original spellings, borrowing canonical rational metadata.
-fn supported_original(cas: &Cas, original: &Handle, budget: &mut Budget) -> Result<bool, Fault> {
-    budget.work(1, AT)?;
-    let value = cas.state.expression(cas.checked(original)?)?;
-    let (literal, negative) = match value.operator {
-        Operator::Rational(_) => (value, true),
-        Operator::Neg => {
-            budget.work(1, AT)?;
-            let [child] = value.operands.as_slice() else {
-                return Err(Fault::invalid(InvalidCode::EndpointMismatch, AT));
-            };
-            (cas.state.expression(*child)?, false)
-        }
-        _ => return Ok(false),
-    };
-    let Operator::Rational(value) = &literal.operator else {
-        return Ok(false);
-    };
-    value.check(budget, AT)?;
-    Ok(value.is_negative() == negative && value.component_bits() == (1, 1))
+/// Only the typed guarded-transport capability refusal becomes an unresolved recipe.
+const fn unsupported_transport(fault: &Fault) -> bool {
+    matches!(
+        fault.kind,
+        FaultKind::Invalid(InvalidCode::ScalarTransportUnsupported)
+    )
 }
 
 impl Cas {
@@ -519,8 +505,8 @@ impl Cas {
     ///
     /// The named recipe adds no primitive key. Its portable witness retains congruence,
     /// parity at one, the one-value theorem, negation congruence and explicit totality closure.
-    /// Original spellings other than literal minus one and Neg(1) are unresolved.
-    /// A scalar-view capability refusal is mapped to `TrigRecipeOutcome::Unresolved`
+    /// Checked original equalities retain their proved requirements and unresolved residuals.
+    /// Only `InvalidCode::ScalarTransportUnsupported` maps to `TrigRecipeOutcome::Unresolved`
     /// after transaction rollback; malformed evidence remains an invalid-input fault.
     /// # Errors
     /// Refuses malformed original joins and exhausted resources.
@@ -577,9 +563,6 @@ impl Cas {
                     if *value != Rational::from_ratio(-1, 1, budget)? {
                         return Ok(None);
                     }
-                    if !supported_original(cas, &original, budget)? {
-                        return Ok(None);
-                    }
                     Ok(Some((
                         equality.judgment.context.clone(),
                         domain.clone(),
@@ -602,13 +585,39 @@ impl Cas {
         match result {
             Ok(Some(witness)) => Ok(TrigRecipeOutcome::Proved(Box::new(witness))),
             Ok(None) => Ok(TrigRecipeOutcome::Unresolved),
-            Err(Fault {
-                kind: FaultKind::Invalid(InvalidCode::UnsupportedFragment),
-                location,
-            }) if location.operation == "scalar statement view" => {
-                Ok(TrigRecipeOutcome::Unresolved)
-            }
+            Err(fault) if unsupported_transport(&fault) => Ok(TrigRecipeOutcome::Unresolved),
             Err(fault) => Err(fault),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::unsupported_transport;
+    use crate::error::{Fault, InvalidCode, Location};
+
+    /// Classification follows the typed meaning independently of diagnostic wording.
+    /// ´test:unit:trig-minus-one-transport-classification´
+    #[test]
+    fn trig_minus_one_transport_classification() {
+        for location in [
+            "scalar guarded-region transport",
+            "scalar statement view",
+            "diagnostic spelling",
+        ] {
+            let at = Location::new(location);
+            assert!(unsupported_transport(&Fault::invalid(
+                InvalidCode::ScalarTransportUnsupported,
+                at
+            )));
+            assert!(!unsupported_transport(&Fault::invalid(
+                InvalidCode::UnsupportedFragment,
+                at
+            )));
+            assert!(!unsupported_transport(&Fault::invalid(
+                InvalidCode::Reference,
+                at
+            )));
         }
     }
 }

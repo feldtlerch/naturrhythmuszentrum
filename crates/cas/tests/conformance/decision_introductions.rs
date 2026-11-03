@@ -20,6 +20,8 @@ mod pi;
 mod refusals;
 #[path = "decision_introductions/resources.rs"]
 mod resources;
+#[path = "decision_introductions/scalar_transport.rs"]
+mod scalar_transport;
 #[path = "decision_introductions/selection.rs"]
 mod selection;
 #[path = "decision_introductions/sign.rs"]

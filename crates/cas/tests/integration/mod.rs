@@ -12,6 +12,7 @@ mod square_free;
 mod cases;
 mod contexts;
 mod endpoint_hypotheses;
+mod scalar_transport;
 
 mod boundary;
 mod distributions;

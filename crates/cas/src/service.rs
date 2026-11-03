@@ -522,7 +522,9 @@ fn outcome(
                 blocker: fault,
                 usage: *usage,
             },
-            FaultKind::Invalid(InvalidCode::UnsupportedFragment) => Outcome::Unresolved {
+            FaultKind::Invalid(
+                InvalidCode::UnsupportedFragment | InvalidCode::ScalarTransportUnsupported,
+            ) => Outcome::Unresolved {
                 solve_reason: None,
                 request: record,
                 consistency: ContextConsistency::Unknown,
@@ -613,4 +615,193 @@ fn completed_outcome(record: Handle, result: Option<SearchResult>, usage: &Budge
 /// Prepared input inconsistencies remain values.
 const fn invalid() -> Fault {
     Fault::invalid(InvalidCode::Reference, AT)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain_model::{
+        AmbientDomain, ContextDraft, HeaderDraft, Layer, RegionDraft, RegionExpr,
+    };
+    use crate::graph::{Draft, ExpressionDraft, Reference};
+    use crate::model::{AtomicSort, Environment, Field, Operator, PredicateKind, Sort};
+    use crate::number::Rational;
+    use crate::proof_model::{DomainContract, GuardedObligation, Judgment, Statement};
+    use crate::request_model::CoveredInput;
+    use crate::task::Task;
+
+    type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
+
+    fn budget() -> Result<Budget, Fault> {
+        Budget::new(Limits {
+            work: 2_000_000_000,
+            ..Limits::default()
+        })
+    }
+
+    fn real() -> Sort {
+        Sort::Value(AtomicSort::Scalar(Field::Real))
+    }
+
+    fn region(expression: RegionExpr) -> Draft {
+        Draft::Region(RegionDraft {
+            header: Reference::Local(0),
+            scope: vec![],
+            ambient: AmbientDomain::Assignments,
+            expression,
+        })
+    }
+
+    fn fixture() -> TestResult<(Cas, Vec<Handle>)> {
+        let mut cas = Cas::new(budget()?.limits().clone())?;
+        let nodes = cas.admit(
+            &[
+                Draft::Header(HeaderDraft::Core(Environment::default())),
+                region(RegionExpr::Ambient),
+                Draft::Context(ContextDraft::Root {
+                    header: Reference::Local(0),
+                    admissible: Reference::Local(1),
+                    assumptions: vec![],
+                }),
+                Draft::Expression(ExpressionDraft {
+                    header: Reference::Local(0),
+                    scope: vec![],
+                    space: None,
+                    sort: real(),
+                    operator: Operator::Rational(Rational::one()),
+                    binding: None,
+                    operands: vec![],
+                }),
+                Draft::Condition {
+                    header: Reference::Local(0),
+                    scope: vec![],
+                    kind: PredicateKind::NonZero,
+                    arguments: vec![Reference::Local(3)],
+                },
+                region(RegionExpr::GuardTrue {
+                    base: Reference::Local(1),
+                    predicate: Reference::Local(4),
+                }),
+                Draft::Context(ContextDraft::Local {
+                    parent: Reference::Local(2),
+                    region: Reference::Local(5),
+                    hypotheses: vec![],
+                }),
+            ],
+            &mut budget()?,
+        )?;
+        Ok((cas, nodes))
+    }
+
+    fn claim(cas: &mut Cas, nodes: &[Handle], kind: u8) -> TestResult<Judgment> {
+        let m = cas.admissible_region(&nodes[6])?;
+        let expression = if kind == 0 {
+            RegionExpr::Meet(vec![Reference::Existing(nodes[1].clone())])
+        } else {
+            RegionExpr::Meet(vec![
+                Reference::Existing(m.clone()),
+                Reference::Existing(nodes[5].clone()),
+            ])
+        };
+        let transported = cas
+            .admit(
+                &[Draft::Region(RegionDraft {
+                    header: Reference::Existing(nodes[0].clone()),
+                    scope: vec![],
+                    ambient: AmbientDomain::Assignments,
+                    expression,
+                })],
+                &mut budget()?,
+            )?
+            .remove(0);
+        Ok(Judgment {
+            context: nodes[6].clone(),
+            layer: Layer::Pointwise,
+            space: None,
+            statement: Statement::Equality {
+                left: nodes[3].clone(),
+                right: nodes[3].clone(),
+                domain: m,
+                domain_contract: DomainContract::DefinedAndEqual,
+            },
+            residuals: vec![GuardedObligation {
+                home: nodes[if kind == 2 { 2 } else { 6 }].clone(),
+                scope: vec![],
+                layer: Layer::Pointwise,
+                space: None,
+                region: if kind == 3 {
+                    nodes[3].clone()
+                } else {
+                    transported
+                },
+                predicate: nodes[4].clone(),
+            }],
+        })
+    }
+
+    /// Actual transport refusals preserve request classification and candidate rollback.
+    /// ´test:unit:scalar-transport-request-outcome´
+    #[test]
+    fn scalar_transport_request_outcome() -> TestResult {
+        for kind in 0..4 {
+            let (mut cas, nodes) = fixture()?;
+            let claim = claim(&mut cas, &nodes, kind)?;
+            let root = cas.materialize_derived(&nodes[3], &nodes[3], &mut budget()?)?;
+            let receipt = cas.walk_derived(&root, &mut budget()?)?.receipt;
+            let request = Request {
+                task: Task::Simplify,
+                context: nodes[6].clone(),
+                inputs: vec![CoveredInput { root, receipt }],
+                premises: vec![],
+                limits: crate::budget::LimitsOverride::default(),
+            };
+            let mut ledger = budget()?;
+            let limits = ledger.limits().clone();
+            let (record, unsupported) =
+                cas.prepare_execution(&request, &SearchPolicy::default(), &limits, &mut ledger)?;
+            assert!(!unsupported);
+            let before = cas.canonical_snapshot(&mut budget()?)?;
+            let header = cas.checked(&nodes[0])?;
+            // Feed the completion classifier an actual conversion fault, not a fabricated code.
+            // The candidate allocation makes rollback observable independently of classification.
+            let result = cas.transaction(&mut ledger, |cas, ledger| {
+                cas.generated(
+                    header,
+                    Operator::Rational(Rational::from_ratio(97, 1, ledger)?),
+                    real(),
+                    &[],
+                    ledger,
+                )?;
+                crate::proof_view::scalar_claim(cas, &claim, ledger)
+            });
+            let fault = result.err().ok_or("unsupported scalar view accepted")?;
+            let code = match kind {
+                0 | 1 => InvalidCode::ScalarTransportUnsupported,
+                2 => InvalidCode::UnsupportedFragment,
+                _ => InvalidCode::Reference,
+            };
+            assert_eq!(fault.kind, FaultKind::Invalid(code));
+            let actual = outcome(
+                record.clone(),
+                Execution {
+                    result: None,
+                    fault: Some(fault),
+                },
+                &ledger.usage(),
+                &BudgetUsage::default(),
+            );
+            match actual {
+                Outcome::Unresolved {
+                    request, blocker, ..
+                } if kind < 3 => {
+                    assert_eq!(request, record);
+                    assert_eq!(blocker, Some(fault));
+                }
+                Outcome::Invalid { fault: actual, .. } if kind == 3 => assert_eq!(actual, fault),
+                other => return Err(format!("changed scalar capability outcome: {other:?}").into()),
+            }
+            assert_eq!(cas.canonical_snapshot(&mut budget()?)?, before);
+        }
+        Ok(())
+    }
 }

@@ -193,7 +193,14 @@ fn distribution_native_shortcut_snapshot() -> TestResult {
     assert!(execution.fault.is_none());
     assert!(reused.cost < result.cost);
     assert!(reused.primitive_steps > reused.statistics.transitions);
-    assert!(crate::proof_view::scalar_claim(&fixture.base.cas, reused.witness.judgment()).is_err());
+    assert!(
+        crate::proof_view::scalar_claim(
+            &fixture.base.cas,
+            reused.witness.judgment(),
+            &mut budget()?
+        )
+        .is_err()
+    );
     crate::case_producer::replay(&fixture.base.cas, &reused.witness, &mut budget()?)?;
     Ok(())
 }

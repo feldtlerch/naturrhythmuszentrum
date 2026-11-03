@@ -17,7 +17,7 @@ fn scalar_witness(
     budget: &mut Budget,
 ) -> Result<crate::scalar_model::VerifiedWitness, Fault> {
     cas.checked(value.proof())?;
-    let claim = crate::proof_view::scalar_claim(cas, value.judgment())?;
+    let claim = crate::proof_view::scalar_claim(cas, value.judgment(), budget)?;
     let mut hypotheses = Vec::new();
     hypotheses
         .try_reserve_exact(value.hypotheses.len())
@@ -72,7 +72,7 @@ impl Cas {
             );
         }
         let witness = scalar_witness(self, witness, budget)?;
-        let expected = crate::proof_view::scalar_claim(self, expected)?;
+        let expected = crate::proof_view::scalar_claim(self, expected, budget)?;
         self.register_scalar_derived(&witness, &expected, cost, budget)
     }
 
@@ -95,7 +95,7 @@ impl Cas {
             return self.register_typed_derived(witness, expected, policy, cost, budget);
         }
         let witness = scalar_witness(self, witness, budget)?;
-        let expected = crate::proof_view::scalar_claim(self, expected)?;
+        let expected = crate::proof_view::scalar_claim(self, expected, budget)?;
         self.register_scalar_derived_with_policy(&witness, &expected, policy, cost, budget)
     }
 
@@ -118,7 +118,7 @@ impl Cas {
                 cas.certify_typed_frozen_cost(judgment, policy, budget)
             });
         }
-        let claim = crate::proof_view::scalar_claim(self, judgment)?;
+        let claim = crate::proof_view::scalar_claim(self, judgment, budget)?;
         self.certify_scalar_frozen_cost(&claim, policy, budget)
     }
 }
