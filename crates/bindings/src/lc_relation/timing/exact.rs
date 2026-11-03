@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Exact uncertain timestamps retain the joint phase/rate domain and restore original times.
 
+mod horizon;
 mod prepare;
 mod restore;
 

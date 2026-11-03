@@ -2,6 +2,7 @@
 //! One shared clock offset and independent sample errors remain separate joint constraints.
 
 mod admit;
+mod horizon;
 mod project;
 mod witness;
 

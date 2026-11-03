@@ -2,6 +2,7 @@
 //! An explicit bounded clock offset remains shared by every original timestamp.
 
 mod admit;
+mod horizon;
 mod project;
 mod witness;
 

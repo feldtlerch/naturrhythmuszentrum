@@ -12,6 +12,7 @@ mod refinement;
 mod refusals;
 mod scale;
 mod support;
+mod timing_horizon;
 
 use super::support::{TestResult, contains, ledger, number};
 use crate::kernel_oracle::Rational as Oracle;

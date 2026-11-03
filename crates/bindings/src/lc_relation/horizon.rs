@@ -2,7 +2,7 @@
 //! Published forward certainty horizons retain their exact joint phase/rate derivation.
 
 use super::{AT, LcCertainty, LcPairsCover, LcRelation, LcRelationError, LcZeroTimes, storage};
-use crate::{Budget, Descriptor, LcQuantity};
+use crate::{Budget, Descriptor, LcClockCover, LcQuantity, LcSharedTimingCover, LcTimingCover};
 use nrz_cas::{
     Rational,
     lattice::PiWidthHorizon,
@@ -13,13 +13,19 @@ use std::rc::Rc;
 
 pub use nrz_cas::lattice::PiHorizonValue as LcHorizonValue;
 
-/// Original joint feasible set; neither alternative replaces it with marginal boxes.
+/// Original joint feasible set; every source retains its physical and measurement constraints.
 #[derive(Clone, Debug)]
 enum Source {
     /// Independent positive rate rectangle with exact starting phase zero.
     Rectangle(LcZeroTimes),
     /// Retained correlated phase-at-rate fibres and complete original cycle branch.
     Pairs(LcPairsCover),
+    /// Original independent timestamp intervals and complete physical phase/rate fibres.
+    Timing(LcTimingCover),
+    /// Original physical initial phase correlated with one shared clock offset.
+    Clock(LcClockCover),
+    /// Both original timing layers, with physical initial phase zero.
+    SharedTiming(LcSharedTimingCover),
 }
 
 impl Source {
@@ -28,6 +34,9 @@ impl Source {
         match self {
             Self::Rectangle(cover) => cover.relation(),
             Self::Pairs(cover) => cover.relation(),
+            Self::Timing(cover) => cover.relation(),
+            Self::Clock(cover) => cover.relation(),
+            Self::SharedTiming(cover) => cover.relation(),
         }
     }
 
@@ -36,11 +45,14 @@ impl Source {
         match self {
             Self::Rectangle(cover) => cover.retained_payload_bytes(),
             Self::Pairs(cover) => cover.retained_payload_bytes(),
+            Self::Timing(cover) => cover.retained_payload_bytes(),
+            Self::Clock(cover) => cover.retained_payload_bytes(),
+            Self::SharedTiming(cover) => cover.retained_payload_bytes(),
         }
     }
 }
 
-/// Eventual loss of phase exclusion after an explicit future reference, in original clock seconds.
+/// Eventual loss of phase exclusion after an explicit future reference, in actual coherent seconds from the original epoch.
 #[derive(Clone, Debug)]
 pub struct LcHorizon(Rc<Data>);
 
@@ -100,6 +112,63 @@ impl LcHorizon {
         let pi = source.pi_bounds().clone();
         Self::new(
             Source::Pairs(source),
+            extrema,
+            reference,
+            pi,
+            before,
+            budget,
+        )
+    }
+
+    /// Retain original independent timing instead of publishing the auxiliary strip relation.
+    pub(super) fn timing(
+        source: LcTimingCover,
+        extrema: [[Rational; 2]; 2],
+        reference: Rational,
+        pi: CheckedPiBounds,
+        before: &BudgetUsage,
+        budget: &mut Budget,
+    ) -> Result<Self, LcRelationError> {
+        Self::new(
+            Source::Timing(source),
+            extrema,
+            reference,
+            pi,
+            before,
+            budget,
+        )
+    }
+
+    /// Actual-time future phases retain the physical initial-phase/shared-clock correlation.
+    pub(super) fn clock(
+        source: LcClockCover,
+        extrema: [[Rational; 2]; 2],
+        reference: Rational,
+        pi: CheckedPiBounds,
+        before: &BudgetUsage,
+        budget: &mut Budget,
+    ) -> Result<Self, LcRelationError> {
+        Self::new(
+            Source::Clock(source),
+            extrema,
+            reference,
+            pi,
+            before,
+            budget,
+        )
+    }
+
+    /// Both original timing layers survive the known-zero actual-time horizon derivation.
+    pub(super) fn shared_timing(
+        source: LcSharedTimingCover,
+        extrema: [[Rational; 2]; 2],
+        reference: Rational,
+        pi: CheckedPiBounds,
+        before: &BudgetUsage,
+        budget: &mut Budget,
+    ) -> Result<Self, LcRelationError> {
+        Self::new(
+            Source::SharedTiming(source),
             extrema,
             reference,
             pi,
@@ -187,7 +256,10 @@ impl LcHorizon {
     pub fn pairs_cover(&self) -> Option<&LcPairsCover> {
         match &self.0.source {
             Source::Pairs(cover) => Some(cover),
-            Source::Rectangle(_) => None,
+            Source::Rectangle(_)
+            | Source::Timing(_)
+            | Source::Clock(_)
+            | Source::SharedTiming(_) => None,
         }
     }
 
@@ -196,7 +268,42 @@ impl LcHorizon {
     pub fn zero_times(&self) -> Option<&LcZeroTimes> {
         match &self.0.source {
             Source::Rectangle(cover) => Some(cover),
-            Source::Pairs(_) => None,
+            Source::Pairs(_) | Source::Timing(_) | Source::Clock(_) | Source::SharedTiming(_) => {
+                None
+            }
+        }
+    }
+
+    /// Original independent timestamp owner, including its unchanged observation inventory.
+    #[must_use]
+    pub fn timing_cover(&self) -> Option<&LcTimingCover> {
+        match &self.0.source {
+            Source::Timing(cover) => Some(cover),
+            Source::Rectangle(_)
+            | Source::Pairs(_)
+            | Source::Clock(_)
+            | Source::SharedTiming(_) => None,
+        }
+    }
+
+    /// Original shared clock; the horizon's future argument is actual time, never a reported reading.
+    #[must_use]
+    pub fn clock_cover(&self) -> Option<&LcClockCover> {
+        match &self.0.source {
+            Source::Clock(cover) => Some(cover),
+            Source::Rectangle(_)
+            | Source::Pairs(_)
+            | Source::Timing(_)
+            | Source::SharedTiming(_) => None,
+        }
+    }
+
+    /// Original independent-error/shared-offset owner for an actual-time horizon.
+    #[must_use]
+    pub fn shared_timing_cover(&self) -> Option<&LcSharedTimingCover> {
+        match &self.0.source {
+            Source::SharedTiming(cover) => Some(cover),
+            Source::Rectangle(_) | Source::Pairs(_) | Source::Timing(_) | Source::Clock(_) => None,
         }
     }
 
