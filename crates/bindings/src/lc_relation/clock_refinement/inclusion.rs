@@ -2,7 +2,7 @@
 //! Whole-question inclusion checks original physical inputs and every declared measurement support.
 
 use super::{AT, LcRelationError, Question, storage};
-use crate::{Budget, LcInputRefinement, LcSharedClock, LcSharedTiming};
+use crate::{Budget, LcInputRefinement, LcSampleTimes, LcSharedClock, LcSharedTiming};
 use nrz_cas::{Rational, limits::BudgetUsage};
 use std::{cmp::Ordering, rc::Rc};
 
@@ -90,7 +90,45 @@ impl LcSharedTiming {
     }
 }
 
+impl LcSampleTimes {
+    /// Check original physical input inclusion with unchanged independent-error nominal coordinates.
+    /// # Errors
+    /// Refuses weakened physical inputs, changed old nominal coordinates or exhausted resources.
+    pub fn refinement_inputs(
+        &self,
+        refined: &Self,
+        budget: &mut Budget,
+    ) -> Result<LcClockRefinementInputs, LcRelationError> {
+        let before = budget.usage();
+        budget.work(1, AT)?;
+        let original = self
+            .relation()
+            .refinement_inputs(refined.relation(), budget)?;
+        nominals(self.nominal_times(), refined.nominal_times(), budget)?;
+        for (previous, next) in self.errors().iter().zip(refined.errors()) {
+            contained(previous, next, budget)?;
+        }
+        finish(
+            Question::Timing(self.clone()),
+            Question::Timing(refined.clone()),
+            original,
+            &before,
+            budget,
+        )
+    }
+}
+
 impl LcClockRefinementInputs {
+    /// Previous independent timing question, when applicable.
+    #[must_use]
+    pub fn previous_timing(&self) -> Option<&LcSampleTimes> {
+        self.0.previous.timing()
+    }
+    /// Refined independent timing question, when applicable.
+    #[must_use]
+    pub fn refined_timing(&self) -> Option<&LcSampleTimes> {
+        self.0.refined.timing()
+    }
     /// Original physical-input inclusion; measurement-domain inclusion is retained by this owner.
     #[must_use]
     pub fn original_inputs(&self) -> &LcInputRefinement {
@@ -136,6 +174,16 @@ fn declarations(
     new_offset: &[Rational; 2],
     budget: &mut Budget,
 ) -> Result<(), LcRelationError> {
+    nominals(previous, next, budget)?;
+    contained(old_offset, new_offset, budget)
+}
+
+/// Existing sample identities retain their exact nominal coordinates in every measurement model.
+fn nominals(
+    previous: &[Rational],
+    next: &[Rational],
+    budget: &mut Budget,
+) -> Result<(), LcRelationError> {
     budget.work(1, AT)?;
     if previous.len() > next.len() {
         return Err(LcRelationError::Observation);
@@ -146,7 +194,7 @@ fn declarations(
             return Err(LcRelationError::Containment);
         }
     }
-    contained(old_offset, new_offset, budget)
+    Ok(())
 }
 
 /// Signed offset/error supports preserve both endpoints under one cumulative ledger.

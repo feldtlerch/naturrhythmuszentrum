@@ -64,7 +64,7 @@ impl LcSampleTimes {
     }
 
     /// Reuse already checked exact circle evidence in a derived joint timing owner.
-    pub(in crate::lc_relation::timing) fn pairs_cover_checked(
+    pub(in crate::lc_relation) fn pairs_cover_checked(
         &self,
         cycles: Vec<Rational>,
         pi: nrz_cas::pi_bounds::CheckedPiBounds,
@@ -137,6 +137,12 @@ impl LcSampleTimes {
 }
 
 impl LcTimingCover {
+    /// Identity of the complete certified original timing cover and its exact evidence.
+    #[must_use]
+    pub fn shares_allocation(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+
     /// Select additional actual-time intersections using retained lifted phases and prepared constants.
     pub(in crate::lc_relation::timing) fn witness_in_time_boxes(
         &self,

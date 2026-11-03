@@ -2,7 +2,7 @@
 //! Exhausted solving retains the old certified clock cover, horizon and complete refined input question.
 
 use super::{AT, Cover, LcClockRefinementInputs, LcRelationError, check, storage};
-use crate::{Budget, LcClockCover, LcHorizon, LcSharedTimingCover};
+use crate::{Budget, LcClockCover, LcHorizon, LcSharedTimingCover, LcTimingCover};
 use nrz_cas::{Rational, limits::BudgetUsage};
 
 /// A complete nonempty refinement with explicit rate/product inclusion and no-earlier horizon evidence.
@@ -88,7 +88,33 @@ impl LcSharedTimingCover {
     }
 }
 
+impl LcTimingCover {
+    /// Attempt independent timing refinement while retaining the previous cover and common-reference horizon.
+    /// # Errors
+    /// Refuses foreign source authorities or preflight exhaustion; failed solving retains an undecided attempt.
+    pub fn refine(
+        &self,
+        inclusion: &LcClockRefinementInputs,
+        previous_horizon: &LcHorizon,
+        cycles: Vec<Rational>,
+        budget: &mut Budget,
+    ) -> Result<LcClockRefinement, LcRelationError> {
+        attempt(
+            Cover::Timing(self.clone()),
+            inclusion,
+            previous_horizon,
+            cycles,
+            budget,
+        )
+    }
+}
+
 impl LcClockRefinementSuccess {
+    /// Complete refined independent timing family, when applicable.
+    #[must_use]
+    pub const fn timing_cover(&self) -> Option<&LcTimingCover> {
+        self.cover.timing()
+    }
     /// Complete refined single-clock family, when applicable.
     #[must_use]
     pub const fn clock_cover(&self) -> Option<&LcClockCover> {
@@ -117,6 +143,11 @@ impl LcClockRefinementSuccess {
 }
 
 impl LcClockRefinement {
+    /// Previous certified independent timing family, retained in every state.
+    #[must_use]
+    pub const fn previous_timing(&self) -> Option<&LcTimingCover> {
+        self.previous.timing()
+    }
     /// Previous certified single-clock family, retained in every state.
     #[must_use]
     pub const fn previous_clock(&self) -> Option<&LcClockCover> {

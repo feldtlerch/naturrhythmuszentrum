@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Whole-question clock refinement preserves physical witnesses, both coordinate contracts and old evidence.
 
+mod independent;
 mod refusals;
 mod support;
 mod work;
