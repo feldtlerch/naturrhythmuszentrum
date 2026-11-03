@@ -34,6 +34,8 @@ mod pairs;
 mod phase;
 pub use phase::{LcPhaseCover, LcPhaseParameters, LcPhaseWitness, LcSharedPhase};
 mod quantity;
+mod quiescent;
+pub use quiescent::{LcQuiescentCover, LcQuiescentOutcome, LcQuiescentQuery};
 mod time;
 mod timing;
 pub use shared::{
