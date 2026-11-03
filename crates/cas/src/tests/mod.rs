@@ -11,6 +11,7 @@ mod conditions;
 mod boundary;
 mod distributions;
 mod scalar_transport;
+mod series_object;
 mod trig_minus_one_transport;
 
 mod region_cache;

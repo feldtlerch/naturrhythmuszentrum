@@ -346,6 +346,12 @@ fn describe_remaining(
 ) -> Result<(), Fault> {
     match cas.state.node(id)? {
         Vertex::Solve(value) => describe_solve(cas, value, record, out)?,
+        Vertex::SeriesObject(value) => {
+            record.tag = 38;
+            value.encode(out, &mut |handle, out| {
+                object(out, &mut record.references, handle.logical_id())
+            })?;
+        }
         Vertex::CaseArm(value) => {
             record.tag = 4;
             record.layer = Layer::Pointwise;

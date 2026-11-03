@@ -19,6 +19,11 @@ pub(crate) fn rebuild(
 ) -> Result<Draft, Fault> {
     let header = Reference::Existing(cas.handle(crate::descriptor::metadata(&cas.state, id)?.0));
     match cas.state.node(id)? {
+        Vertex::SeriesObject(value) => {
+            let mut value = value.resolve(&mut |handle| resolve(handle.logical_id()))?;
+            value.scope = scope;
+            Ok(Draft::SeriesObject(value))
+        }
         Vertex::Expression(v) => expression(v, header, scope, operator, resolve),
         Vertex::Solve(value) => solve(value, scope, resolve),
         Vertex::Condition(v) => Ok(Draft::Condition {

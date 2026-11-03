@@ -296,6 +296,12 @@ pub(crate) fn decode(
             )?
         }
         8 | 37 => context(cas, tag == 37, reader, records)?,
+        38 => {
+            if layer != Layer::Logic || space.is_some() {
+                return Err(invalid());
+            }
+            series_object(cas, reader, records)?
+        }
         13..=36 => {
             if layer != Layer::Logic || space.is_some() {
                 return Err(invalid());
@@ -331,6 +337,50 @@ pub(crate) fn decode(
         return Err(invalid());
     }
     Ok(value)
+}
+
+/// Bound the positive coefficient vector before allocation and ordinary object admission.
+fn series_object(
+    cas: &mut Cas,
+    reader: &mut Reader<'_, '_>,
+    records: &[Decoded],
+) -> Result<Handle, Fault> {
+    let field = reference(reader, records)?;
+    let centre = reference(reader, records)?;
+    let variable = reference(reader, records)?;
+    let scope = reader.scope()?;
+    let context = reference(reader, records)?;
+    if reader.byte()? != 0 {
+        return Err(invalid());
+    }
+    let order = reader.index()?;
+    let count = reader.count(BudgetKind::JetEntries, 4, 64)?;
+    if u64::from(order) != crate::graph::size(count, AT)? || order == 0 {
+        return Err(invalid());
+    }
+    reader
+        .budget
+        .check(BudgetKind::JetOrder, u64::from(order - 1), AT)?;
+    let mut coefficients = Vec::new();
+    coefficients
+        .try_reserve_exact(count)
+        .map_err(|_| Fault::allocation(AT))?;
+    for _ in 0..count {
+        coefficients.push(reference(reader, records)?);
+    }
+    admit(
+        cas,
+        Draft::SeriesObject(crate::series::SeriesObject {
+            field,
+            centre,
+            variable,
+            scope,
+            context,
+            order,
+            coefficients,
+        }),
+        reader,
+    )
 }
 
 /// Read a literal attachment only when its operator explicitly requires that exact kind.

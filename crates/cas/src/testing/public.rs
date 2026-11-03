@@ -5,6 +5,15 @@
 //!
 //! Inline unit tests never import this harness. Crate-only fixture sources are not included.
 
+#[expect(clippy::redundant_pub_crate, reason = "shared formal object fixtures")]
+pub(crate) mod series;
+
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "shared formal object boundaries"
+)]
+pub(crate) mod series_work;
+
 #[expect(
     clippy::redundant_pub_crate,
     reason = "shared public totality fixtures"

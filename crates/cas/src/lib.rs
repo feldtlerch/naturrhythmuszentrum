@@ -770,4 +770,5 @@ mod primitive_unique;
 )]
 mod pullback_polynomial;
 
+pub mod series;
 pub mod solving;

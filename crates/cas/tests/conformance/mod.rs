@@ -8,6 +8,8 @@ mod numbers;
 mod proofs;
 mod representation;
 mod search;
+mod series_object;
+mod series_object_work;
 mod square_free;
 
 mod case_refinement;
