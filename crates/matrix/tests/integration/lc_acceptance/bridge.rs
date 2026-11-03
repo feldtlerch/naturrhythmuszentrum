@@ -352,10 +352,10 @@ fn restored_coordinate_owner_costs_and_boundaries() -> TestResult {
     let ordinary = super::state_fixture::plan(fixture.law.state().entries())?;
     let statistical = super::state_fixture::covariance_plan(fixture.law.state().entries())?;
     for (plan, covariance, operation, profile) in [
-        (&ordinary, false, 2, [13_455, 83_769, 76_380]),
-        (&statistical, true, 0, [51_080, 81_100, 80_948]),
-        (&statistical, true, 1, [48_001, 81_876, 81_772]),
-        (&statistical, true, 2, [13_455, 103_977, 96_588]),
+        (&ordinary, false, 2, [13_455, 83_979, 76_590]),
+        (&statistical, true, 0, [51_610, 81_310, 81_158]),
+        (&statistical, true, 1, [48_531, 82_086, 81_982]),
+        (&statistical, true, 2, [13_455, 104_187, 96_798]),
     ] {
         owner_boundaries(plan, covariance, operation, profile)?;
     }

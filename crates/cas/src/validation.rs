@@ -162,6 +162,15 @@ pub(crate) fn draft_payload(drafts: &[Draft], budget: &mut Budget) -> Result<Dra
             .checked_mul(3)
             .and_then(|n| n.checked_add(256))
             .ok_or_else(|| Fault::capacity(BudgetKind::StagedPayloadBytes, AT))?;
+        let amount = if let Draft::SeriesObject(value) = draft {
+            size(value.coefficients.len(), AT)?
+                .checked_add(4)
+                .and_then(|n| n.checked_mul(64))
+                .and_then(|n| n.checked_add(amount))
+                .ok_or_else(|| Fault::capacity(BudgetKind::StagedPayloadBytes, AT))?
+        } else {
+            amount
+        };
         work = work
             .checked_add(amount)
             .ok_or_else(|| Fault::capacity(BudgetKind::Work, AT))?;
@@ -187,6 +196,9 @@ pub(crate) fn draft_payload(drafts: &[Draft], budget: &mut Budget) -> Result<Dra
 /// Measure a draft's complete nonrecursive payload through a bounded key sink.
 fn encode_draft(draft: &Draft, out: &mut Encoder<'_>) -> Result<(), Fault> {
     match draft {
+        Draft::SeriesObject(value) => {
+            value.encode(out, &mut crate::domain_encoding::reference)?;
+        }
         Draft::Solve(value) => {
             out.byte(value.tag())?;
             value.encode(out, &mut crate::domain_encoding::reference)?;

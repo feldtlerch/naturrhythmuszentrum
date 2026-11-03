@@ -28,6 +28,8 @@ impl Location {
 /// The reason a value cannot be admitted.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum InvalidCode {
+    /// A well-formed formal-series request exceeds the admitted finite object fragment.
+    SeriesUnsupported,
     /// No admitted exact certificate checker supports this predicate or arithmetic origin.
     UnsupportedCertificate,
     /// The proposed option is not an association of the exact native case.

@@ -80,6 +80,10 @@ const AT: Location = Location::new("typed syntax descriptor");
 /// Borrow metadata without interpreting a non-expression as scalar syntax.
 pub(crate) fn metadata(state: &State, id: LogicalId) -> Result<(LogicalId, &Scope), Fault> {
     match state.node(id)? {
+        Vertex::SeriesObject(value) => Ok((
+            state.context(value.context.logical_id())?.header_id,
+            &value.scope,
+        )),
         Vertex::Solve(value) => crate::solving::graph::metadata(state, value)?
             .ok_or_else(|| Fault::invalid(InvalidCode::Reference, AT)),
         Vertex::Expression(v) => Ok((v.header, &v.scope)),
@@ -140,6 +144,16 @@ pub(crate) fn children(
 ) -> Result<Vec<(SyntaxRole, LogicalId)>, Fault> {
     let mut out = Vec::new();
     match state.node(id)? {
+        Vertex::SeriesObject(value) => {
+            for (position, dependency) in value.references().enumerate() {
+                push(
+                    &mut out,
+                    SyntaxRole::Semantic(crate::graph::position_u32(position)?),
+                    dependency.logical_id(),
+                    budget,
+                )?;
+            }
+        }
         Vertex::Expression(v) => {
             attachment_children(v.attachment.as_ref(), &mut out, budget)?;
             if let Some(domain) = v.domain {
@@ -163,7 +177,7 @@ pub(crate) fn children(
                 }
             }
         }
-        Vertex::Header(_) => {}
+        Vertex::Header(_) | Vertex::Context(_) => {}
         Vertex::Condition(v) => family(&mut out, &v.arguments, SyntaxRole::Operand, budget)?,
         Vertex::Region(v) => {
             region_children(&v.expression, &mut out, budget)?;
@@ -312,6 +326,7 @@ fn payload(
             test_family: v.test_family.clone(),
         })),
         Vertex::SourceForm(v) => SyntaxNode::SourceForm(v.kind),
+        Vertex::SeriesObject(v) => SyntaxNode::SeriesObject(v.clone()),
         _ => return Err(Fault::invalid(InvalidCode::Reference, AT)),
     })
 }
@@ -400,7 +415,7 @@ fn attachment_children(
 pub(crate) fn fixed_axis(state: &State, id: LogicalId) -> Result<bool, Fault> {
     use crate::solving::SolveDraft;
     Ok(match state.node(id)? {
-        Vertex::Header(_) => true,
+        Vertex::Header(_) | Vertex::Context(_) => true,
         Vertex::Solve(value) => matches!(
             value.as_ref(),
             SolveDraft::ScalarSpace(_)
@@ -432,7 +447,7 @@ pub(crate) fn occurrence_children(
         budget.work(1, AT)?;
         let global = match state.node(dependency.1)? {
             Vertex::Solve(value) => crate::solving::graph::metadata(state, value)?.is_none(),
-            Vertex::Header(_) => true,
+            Vertex::Header(_) | Vertex::Context(_) => true,
             _ => false,
         };
         if !global {

@@ -109,6 +109,13 @@ fn rule_conditions(
 ) -> Result<(ScopedConditions, Option<crate::scalar_model::CheckedStep>), Fault> {
     let mut scalar_view = None;
     let conditions = match draft.rule {
+        Primitive::SeriesTruncate
+        | Primitive::SeriesAdd
+        | Primitive::SeriesScale
+        | Primitive::SeriesMul
+        | Primitive::SeriesCoefficient => {
+            crate::series::check::check(cas, draft, premises, budget)?
+        }
         Primitive::SinOdd | Primitive::CosEven | Primitive::AtanOdd => {
             crate::trig::parity::check(cas, draft, premises, budget)?
         }
@@ -345,6 +352,9 @@ impl Cas {
                 self.checked(&guarded.predicate)?,
                 Edge::Obligation(u32::try_from(index).map_err(|_| invalid())?),
             ));
+        }
+        if matches!(application.judgment.statement, Statement::Series(_)) {
+            return self.publish_series(application, &edges, budget);
         }
         self.with_state(|cas, state| {
             let id = cas.insert(

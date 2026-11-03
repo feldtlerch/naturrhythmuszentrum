@@ -34,6 +34,8 @@ use intern::{InternIndex, StoreToken};
 /// A disjoint namespace for logical identifiers.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum VertexKind {
+    /// Exact finite formal-series syntax.
+    SeriesObject,
     /// A store-local anonymous checked judgment.
     AnonymousLemma,
     /// Exact `ParameterBase` syntax.
@@ -123,6 +125,7 @@ impl VertexKind {
     /// Stable encoding independent of Rust enum layout.
     pub(crate) const fn tag(self) -> u8 {
         match self {
+            Self::SeriesObject => 41,
             Self::AnonymousLemma => 40,
             Self::Source => 0,
             Self::Context => 1,
@@ -268,6 +271,8 @@ pub struct OccurrenceDraft {
 /// One flat draft node. Arbitrary identity/proof nodes cannot be supplied here.
 #[derive(Clone, Debug)]
 pub enum Draft {
+    /// Admit a finite formal object without creating arithmetic evidence.
+    SeriesObject(crate::series::SeriesObject),
     /// Admit typed solving syntax without creating evidence.
     Solve(crate::solving::SolveDraft),
     /// A root slot selected jointly with all other slots.
@@ -497,6 +502,8 @@ pub(crate) struct RequestRecord {
 /// One authoritative heterogeneous vertex weight.
 #[derive(Clone, Debug)]
 pub(crate) enum Vertex {
+    /// Complete immutable formal-series syntax.
+    SeriesObject(Box<crate::series::SeriesObject<Handle>>),
     /// Checked content-keyed evidence, retained in the authoritative graph.
     AnonymousLemma(Box<lemmas::AnonymousLemma>),
     /// Immutable exact solving payload with checked handles.
@@ -1353,6 +1360,9 @@ impl Cas {
         }
         let at = Location::new("transaction");
         for draft in drafts {
+            if let Draft::SeriesObject(value) = draft {
+                value.preflight(budget)?;
+            }
             if let Draft::Solve(value) = draft {
                 crate::solving::graph::preflight(value, budget)?;
             }
@@ -1523,6 +1533,7 @@ impl Cas {
         budget: &mut Budget,
     ) -> Result<LogicalId, Fault> {
         match draft {
+            Draft::SeriesObject(value) => self.admit_series(state, value, locals, pending, budget),
             Draft::Solve(value) => self.admit_solve(state, value, locals, pending, budget),
             Draft::RootValue { .. } | Draft::ExactCoefficient { .. } => {
                 self.admit_solve_literal(state, draft, locals, pending, budget)
@@ -2086,6 +2097,7 @@ pub(crate) fn vertex_key(
     let mut out = Encoder::new(budget, Location::new("structural key"));
     out.byte(kind.tag())?;
     match vertex {
+        Vertex::SeriesObject(value) => value.encode(&mut out, &mut crate::statement::handle)?,
         Vertex::AnonymousLemma(node) => node.encode(&mut out)?,
         Vertex::Solve(value) => value.encode(&mut out, &mut crate::statement::handle)?,
         Vertex::Header(_)
@@ -2164,6 +2176,7 @@ pub(crate) fn vertex_key(
 /// Classify a graph-owned record without exposing physical indices.
 const fn vertex_kind(vertex: &Vertex) -> VertexKind {
     match vertex {
+        Vertex::SeriesObject(_) => VertexKind::SeriesObject,
         Vertex::AnonymousLemma(_) => VertexKind::AnonymousLemma,
         Vertex::Solve(value) => value.kind(),
         Vertex::Header(_) => VertexKind::Header,

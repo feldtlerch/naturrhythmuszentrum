@@ -239,13 +239,13 @@ fn complete_answer_cumulative_ledger() -> TestResult {
 #[test]
 fn complete_answer_registry_inventory() {
     use nrz_cas::proof::{PRIMITIVES, Primitive};
-    assert_eq!(PRIMITIVES.len(), 89);
+    assert_eq!(PRIMITIVES.len(), 94);
     assert_eq!(
         PRIMITIVES
             .iter()
             .filter(|rule| rule.specification().available)
             .count(),
-        87
+        92
     );
     assert_eq!(
         PRIMITIVES

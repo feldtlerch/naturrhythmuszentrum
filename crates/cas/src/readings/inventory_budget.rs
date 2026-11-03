@@ -68,7 +68,7 @@ pub(super) fn table_meter(
     }
     for (key, (_, descriptor)) in assigned {
         let key_bytes = match key {
-            Key::Object(_) => 32,
+            Key::Object(_) | Key::SeriesStatement(_) | Key::SeriesCertificate(_) => 32,
             Key::Guard(bytes) | Key::Statement(bytes) | Key::Conclusion(bytes) => {
                 size(bytes.len(), AT)?
             }

@@ -42,7 +42,7 @@ const fn named(
 /// Every native and solving primitive in the same ASCII key order as `PRIMITIVES`.
 ///
 /// Unavailable schemas remain represented assumptions and cannot certify an application.
-pub static PRIMITIVE_SCHEMAS: [PrimitiveSchema; 89] = [
+pub static PRIMITIVE_SCHEMAS: [PrimitiveSchema; 94] = [
     named(
         Primitive::CaseCongruence,
         "thm:cas:primitive-case-congruence",
@@ -470,10 +470,40 @@ pub static PRIMITIVE_SCHEMAS: [PrimitiveSchema; 89] = [
         "Typed refinement certificate with original root selection, existence, coefficient relation and every required sign or compatibility premise.",
     ),
     named(
+        Primitive::SeriesAdd,
+        "thm:cas:primitive-series-add",
+        "Coefficientwise addition checks every exact sum at the recorded common order. Only object form 0 executes under the version-one contract.",
+        "Ordered checked truncations for precisely the higher-order inputs.",
+    ),
+    named(
         Primitive::SeriesCaseRestrict,
         "thm:cas:primitive-series-case-restrict",
         "Checked side jets and exact polynomial remainders determine the stated finite series.",
         "One jet per required approach, centre ownership when required, and exact polynomial remainder certificates.",
+    ),
+    named(
+        Primitive::SeriesCoefficient,
+        "thm:cas:primitive-series-coefficient",
+        "Extraction checks the exact coefficient at the original bounded index. Only object form 0 executes under the version-one contract.",
+        "No ordered proof premises; the complete original object and exact coefficient value.",
+    ),
+    named(
+        Primitive::SeriesMul,
+        "thm:cas:primitive-series-mul",
+        "Truncated multiplication checks every convolution pair and partial sum at the recorded common order. Only object form 0 executes under the version-one contract.",
+        "Ordered checked truncations for precisely the higher-order inputs.",
+    ),
+    named(
+        Primitive::SeriesScale,
+        "thm:cas:primitive-series-scale",
+        "Exact scalar multiplication checks every coefficient product without changing order. Only object form 0 executes under the version-one contract.",
+        "Slot zero is an ordinary checked `PredicateFact` for Defined(s) on the complete operation context; all conditions survive.",
+    ),
+    named(
+        Primitive::SeriesTruncate,
+        "thm:cas:primitive-series-truncate",
+        "Restriction compares every retained coefficient and the complete increment-ring metadata. Only object form 0 executes under the version-one contract.",
+        "No ordered proof premises; the original object and proposed positive-order restriction.",
     ),
     named(
         Primitive::Solve(crate::solving::SolveSchema::ParameterImageCoverage),
@@ -584,15 +614,21 @@ impl Primitive {
     #[must_use]
     pub const fn formal_schema(self) -> &'static PrimitiveSchema {
         match self {
-            Self::AtanOdd => &PRIMITIVE_SCHEMAS[80],
-            Self::AtanOne => &PRIMITIVE_SCHEMAS[81],
-            Self::AtanZero => &PRIMITIVE_SCHEMAS[82],
-            Self::CosEven => &PRIMITIVE_SCHEMAS[83],
-            Self::CosHalfPi => &PRIMITIVE_SCHEMAS[84],
-            Self::TrigDefined => &PRIMITIVE_SCHEMAS[85],
-            Self::HalfPiWitness => &PRIMITIVE_SCHEMAS[86],
-            Self::SinHalfPi => &PRIMITIVE_SCHEMAS[87],
-            Self::SinOdd => &PRIMITIVE_SCHEMAS[88],
+            Self::SeriesAdd => &PRIMITIVE_SCHEMAS[71],
+            Self::SeriesCoefficient => &PRIMITIVE_SCHEMAS[73],
+            Self::SeriesMul => &PRIMITIVE_SCHEMAS[74],
+            Self::SeriesScale => &PRIMITIVE_SCHEMAS[75],
+            Self::SeriesTruncate => &PRIMITIVE_SCHEMAS[76],
+
+            Self::AtanOdd => &PRIMITIVE_SCHEMAS[85],
+            Self::AtanOne => &PRIMITIVE_SCHEMAS[86],
+            Self::AtanZero => &PRIMITIVE_SCHEMAS[87],
+            Self::CosEven => &PRIMITIVE_SCHEMAS[88],
+            Self::CosHalfPi => &PRIMITIVE_SCHEMAS[89],
+            Self::TrigDefined => &PRIMITIVE_SCHEMAS[90],
+            Self::HalfPiWitness => &PRIMITIVE_SCHEMAS[91],
+            Self::SinHalfPi => &PRIMITIVE_SCHEMAS[92],
+            Self::SinOdd => &PRIMITIVE_SCHEMAS[93],
             Self::Solve(schema) => solving(schema),
             Self::CaseCongruence => &PRIMITIVE_SCHEMAS[0],
             Self::CaseDomain => &PRIMITIVE_SCHEMAS[1],
@@ -651,8 +687,8 @@ impl Primitive {
             Self::SquareFree => &PRIMITIVE_SCHEMAS[62],
             Self::RegionConstruct => &PRIMITIVE_SCHEMAS[66],
             Self::RegionDecide => &PRIMITIVE_SCHEMAS[67],
-            Self::SeriesCaseRestrict => &PRIMITIVE_SCHEMAS[71],
-            Self::SumCaseSplit => &PRIMITIVE_SCHEMAS[79],
+            Self::SeriesCaseRestrict => &PRIMITIVE_SCHEMAS[72],
+            Self::SumCaseSplit => &PRIMITIVE_SCHEMAS[84],
         }
     }
 }
@@ -674,13 +710,13 @@ const fn solving(schema: SolveSchema) -> &'static PrimitiveSchema {
         SolveSchema::BinomialCoverage => &PRIMITIVE_SCHEMAS[68],
         SolveSchema::RealIsolationAndOrder => &PRIMITIVE_SCHEMAS[69],
         SolveSchema::RootSelectionRefinement => &PRIMITIVE_SCHEMAS[70],
-        SolveSchema::ParameterImageCoverage => &PRIMITIVE_SCHEMAS[72],
-        SolveSchema::ImplicitFunctionBranch => &PRIMITIVE_SCHEMAS[73],
-        SolveSchema::Membership => &PRIMITIVE_SCHEMAS[74],
-        SolveSchema::MultiplicityTransfer => &PRIMITIVE_SCHEMAS[75],
-        SolveSchema::ProductCompleteness => &PRIMITIVE_SCHEMAS[76],
-        SolveSchema::TotalPredicateSplit => &PRIMITIVE_SCHEMAS[77],
-        SolveSchema::SolutionTransport => &PRIMITIVE_SCHEMAS[78],
+        SolveSchema::ParameterImageCoverage => &PRIMITIVE_SCHEMAS[77],
+        SolveSchema::ImplicitFunctionBranch => &PRIMITIVE_SCHEMAS[78],
+        SolveSchema::Membership => &PRIMITIVE_SCHEMAS[79],
+        SolveSchema::MultiplicityTransfer => &PRIMITIVE_SCHEMAS[80],
+        SolveSchema::ProductCompleteness => &PRIMITIVE_SCHEMAS[81],
+        SolveSchema::TotalPredicateSplit => &PRIMITIVE_SCHEMAS[82],
+        SolveSchema::SolutionTransport => &PRIMITIVE_SCHEMAS[83],
     }
 }
 

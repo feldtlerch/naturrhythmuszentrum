@@ -523,7 +523,9 @@ fn outcome(
                 usage: *usage,
             },
             FaultKind::Invalid(
-                InvalidCode::UnsupportedFragment | InvalidCode::ScalarTransportUnsupported,
+                InvalidCode::UnsupportedFragment
+                | InvalidCode::ScalarTransportUnsupported
+                | InvalidCode::SeriesUnsupported,
             ) => Outcome::Unresolved {
                 solve_reason: None,
                 request: record,
@@ -656,7 +658,14 @@ mod tests {
         let mut cas = Cas::new(budget()?.limits().clone())?;
         let nodes = cas.admit(
             &[
-                Draft::Header(HeaderDraft::Core(Environment::default())),
+                Draft::Header(HeaderDraft::Core(Environment {
+                    declarations: vec![crate::model::Declaration {
+                        key: "series-coordinate".into(),
+                        display_name: "x".into(),
+                        sort: real(),
+                    }],
+                    ..Environment::default()
+                })),
                 region(RegionExpr::Ambient),
                 Draft::Context(ContextDraft::Root {
                     header: Reference::Local(0),
@@ -743,7 +752,7 @@ mod tests {
     /// ´test:unit:scalar-transport-request-outcome´
     #[test]
     fn scalar_transport_request_outcome() -> TestResult {
-        for kind in 0..4 {
+        for kind in 0..5 {
             let (mut cas, nodes) = fixture()?;
             let claim = claim(&mut cas, &nodes, kind)?;
             let root = cas.materialize_derived(&nodes[3], &nodes[3], &mut budget()?)?;
@@ -772,12 +781,49 @@ mod tests {
                     &[],
                     ledger,
                 )?;
+                if kind == 4 {
+                    let variable = cas.generated(
+                        header,
+                        Operator::Free("series-coordinate".into()),
+                        real(),
+                        &[],
+                        ledger,
+                    )?;
+                    let field = cas
+                        .admit(
+                            &[crate::graph::Draft::Solve(
+                                crate::solving::SolveDraft::CoefficientDomain(
+                                    crate::solving::CoefficientDomainData::Gaussian,
+                                ),
+                            )],
+                            ledger,
+                        )?
+                        .pop()
+                        .ok_or_else(|| Fault::invalid(InvalidCode::Reference, AT))?;
+                    cas.admit(
+                        &[crate::graph::Draft::SeriesObject(
+                            crate::series::SeriesObject {
+                                field: crate::graph::Reference::Existing(field),
+                                centre: crate::graph::Reference::Existing(nodes[3].clone()),
+                                variable: crate::graph::Reference::Existing(cas.handle(variable)),
+                                scope: Vec::new(),
+                                context: crate::graph::Reference::Existing(nodes[6].clone()),
+                                order: 1,
+                                coefficients: vec![crate::graph::Reference::Existing(
+                                    nodes[3].clone(),
+                                )],
+                            },
+                        )],
+                        ledger,
+                    )?;
+                }
                 crate::proof_view::scalar_claim(cas, &claim, ledger)
             });
             let fault = result.err().ok_or("unsupported scalar view accepted")?;
             let code = match kind {
                 0 | 1 => InvalidCode::ScalarTransportUnsupported,
                 2 => InvalidCode::UnsupportedFragment,
+                4 => InvalidCode::SeriesUnsupported,
                 _ => InvalidCode::Reference,
             };
             assert_eq!(fault.kind, FaultKind::Invalid(code));
@@ -793,7 +839,7 @@ mod tests {
             match actual {
                 Outcome::Unresolved {
                     request, blocker, ..
-                } if kind < 3 => {
+                } if kind != 3 => {
                     assert_eq!(request, record);
                     assert_eq!(blocker, Some(fault));
                 }

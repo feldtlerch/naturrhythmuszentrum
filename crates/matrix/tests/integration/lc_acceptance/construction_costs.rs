@@ -13,16 +13,16 @@ fn lc_acceptance_construction_costs_and_boundaries() -> TestResult {
     let spectral = crate::spectral_testing::Fixture::new(["5", "1/10", "1/2000"])?;
     let entries = spectral.law.state().entries();
     let plan = state_fixture::plan(entries)?;
-    assert_eq!(plan.construction, [25_805, 52_236, 325_742, 493_648]);
+    assert_eq!(plan.construction, [25_805, 52_236, 325_742, 494_498]);
     assert_eq!(
         [
             plan.contract.frame().retained_payload_bytes(),
             plan.contract.normalization().retained_payload_bytes(),
             plan.contract.restoration().retained_payload_bytes()
         ],
-        [20_464, 31_662, 31_662]
+        [20_464, 31_767, 31_767]
     );
-    for (kind, needed) in [493_648, 187_352, 63_324].into_iter().enumerate() {
+    for (kind, needed) in [494_498, 187_457, 63_534].into_iter().enumerate() {
         for (limit, success) in [(needed, true), (needed - 1, false)] {
             assert_eq!(
                 state_fixture::plan_with_budget(entries, &mut policy(kind, limit, 0)?).is_ok(),
@@ -30,7 +30,7 @@ fn lc_acceptance_construction_costs_and_boundaries() -> TestResult {
             );
         }
     }
-    assert!(state_fixture::plan_with_budget(entries, &mut policy(0, 493_648, 1)?).is_err());
+    assert!(state_fixture::plan_with_budget(entries, &mut policy(0, 494_498, 1)?).is_err());
     Ok(())
 }
 

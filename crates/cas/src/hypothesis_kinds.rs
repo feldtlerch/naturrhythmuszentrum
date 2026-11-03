@@ -16,6 +16,8 @@ mod classify;
 /// A kind is an assumed shape; a checked proof of an instance remains evidence for that instance.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum HypothesisKind {
+    /// A checked finite formal-series computation.
+    SeriesEvidence,
     /// The original Real operand equals Pi times half its retained concrete integer.
     HalfPiWitness,
     /// The original subject lies between ordered endpoints on the complete stated box.
@@ -125,7 +127,7 @@ pub enum HypothesisKind {
 }
 
 /// Every formal hypothesis kind in register order.
-pub const HYPOTHESIS_KINDS: [HypothesisKind; 53] = [
+pub const HYPOTHESIS_KINDS: [HypothesisKind; 54] = [
     HypothesisKind::DomainGuard,
     HypothesisKind::NonZero,
     HypothesisKind::StrictSign,
@@ -179,10 +181,11 @@ pub const HYPOTHESIS_KINDS: [HypothesisKind; 53] = [
     HypothesisKind::LatticeNearestSelection,
     HypothesisKind::Enclosure,
     HypothesisKind::HalfPiWitness,
+    HypothesisKind::SeriesEvidence,
 ];
 
 /// The named assumed shape of every supported hypothesis kind.
-pub static HYPOTHESIS_SCHEMAS: [LemmaSchema; 53] = [
+pub static HYPOTHESIS_SCHEMAS: [LemmaSchema; 54] = [
     LemmaSchema {
         name: "hyp.domain-guard",
         label: "assum:cas:hyp-domain-guard",
@@ -607,6 +610,14 @@ pub static HYPOTHESIS_SCHEMAS: [LemmaSchema; 53] = [
         statement: "The original Real operand equals Pi times half its retained concrete integer.",
         premises: "Exact original operand, canonical integer, context and domain; a retained statement alone supplies no recognition authority.",
     },
+    LemmaSchema {
+        name: "hyp.series-evidence",
+        label: "assum:cas:hyp-series-evidence",
+        version: 1,
+        standing: crate::proof::Standing::Hypothesis,
+        statement: "The exact finite formal-series computation holds at its recorded order.",
+        premises: "Original object metadata, ordered restrictions and ordinary scalar-definedness evidence; classification supplies no proof.",
+    },
 ];
 
 impl HypothesisKind {
@@ -614,6 +625,7 @@ impl HypothesisKind {
     #[must_use]
     pub const fn formal_schema(self) -> &'static LemmaSchema {
         match self {
+            Self::SeriesEvidence => &HYPOTHESIS_SCHEMAS[53],
             Self::HalfPiWitness => &HYPOTHESIS_SCHEMAS[52],
             Self::Enclosure => &HYPOTHESIS_SCHEMAS[51],
             Self::LatticeNearestSelection => &HYPOTHESIS_SCHEMAS[50],
@@ -676,6 +688,7 @@ impl PremiseShape {
     #[must_use]
     pub const fn hypothesis_kind(self) -> HypothesisKind {
         match self {
+            Self::SeriesEvidence => HypothesisKind::SeriesEvidence,
             Self::SolveEvidence => HypothesisKind::SolveEvidence,
             Self::DistributionEvidence => HypothesisKind::DistributionEvidence,
             Self::BoundaryEvidence => HypothesisKind::BoundaryEvidence,

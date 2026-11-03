@@ -155,6 +155,7 @@ impl<'a> Source<'a> {
         match cas.state.node(*application)? {
             Vertex::Application(value) => Ok(Self::Scalar(value)),
             Vertex::ScopedApplication(value) => Ok(Self::Scoped(value)),
+            Vertex::AnonymousLemma(_) => Ok(Self::Scoped(cas.series_application(*application)?)),
             _ => Err(invalid()),
         }
     }

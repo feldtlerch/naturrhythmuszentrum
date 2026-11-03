@@ -13,6 +13,12 @@ mod cases;
 mod contexts;
 mod endpoint_hypotheses;
 mod scalar_transport;
+mod series;
+mod series_exclusions;
+mod series_golden;
+mod series_limits;
+mod series_mutations;
+mod series_work;
 
 mod boundary;
 mod distributions;

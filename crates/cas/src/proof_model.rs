@@ -36,6 +36,8 @@ pub enum Ownership {
 /// A mathematical statement with exactly the objects needed by its proposition.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Statement {
+    /// Exact finite computation in an admitted increment ring.
+    Series(Box<crate::series::SeriesStatement>),
     /// Exact recognition of an original Real operand as an integer multiple of half Pi.
     HalfPiWitness {
         /// Original operand, before any normalization.
@@ -267,6 +269,8 @@ pub struct Judgment {
 /// Independently checked evidence tied to a closed primitive schema.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Certificate {
+    /// Complete finite object arithmetic rows.
+    Series(Box<crate::series::SeriesCertificate>),
     /// Exact recognition payload and ordered slots in the ordinary premise list.
     HalfPiWitness {
         /// Original operand repeated for exact conclusion comparison.
