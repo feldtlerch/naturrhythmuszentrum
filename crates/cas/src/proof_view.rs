@@ -293,6 +293,11 @@ pub(crate) fn application(
         return Err(invalid());
     };
     match cas.state.node(*id)? {
+        Vertex::AnonymousLemma(_) => {
+            let value = cas.series_application(*id)?;
+            prepay_scoped_copy(value, budget)?;
+            Ok(value.clone())
+        }
         Vertex::ScopedApplication(value) => {
             prepay_scoped_copy(value, budget)?;
             Ok(value.as_ref().clone())
@@ -424,6 +429,7 @@ pub(crate) fn application_bytes(
         return Err(invalid());
     };
     match cas.state.node(*id)? {
+        Vertex::AnonymousLemma(_) => prepay_scoped_copy(cas.series_application(*id)?, budget),
         Vertex::ScopedApplication(value) => prepay_scoped_copy(value, budget),
         Vertex::Application(value) => prepay_scalar_copy(value, budget),
         _ => Err(invalid()),
@@ -473,6 +479,9 @@ pub(crate) fn measure(
     budget.check(BudgetKind::ProofNodes, size(value.premises.len(), AT)?, AT)?;
     cas.state.context(cas.checked(&value.context)?)?;
     crate::distribution_measure::measure(cas, &value.conclusion, &value.certificate, budget)?;
+    if let Certificate::Series(certificate) = &value.certificate {
+        crate::series::codec::measure(certificate, budget)?;
+    }
     if let Certificate::LatticeSelection(certificate) = &value.certificate {
         crate::lattice::selection::wire::measure(cas, certificate, budget)?;
     }
@@ -588,6 +597,12 @@ pub(crate) fn validate_judgment(
                     continue;
                 };
                 header
+            }
+            Vertex::SeriesObject(object) if matches!(value.statement, Statement::Series(_)) => {
+                if object.context != value.context {
+                    return Err(Fault::invalid(InvalidCode::Context, AT));
+                }
+                cas.state.context(cas.checked(&object.context)?)?.header_id
             }
             Vertex::Expression(value) => value.header,
             Vertex::Region(value) => value.header,

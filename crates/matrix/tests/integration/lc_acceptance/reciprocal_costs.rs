@@ -11,7 +11,7 @@ use nrz_matrix::{Binding, ExecutionLimits};
 /// ´test:integration:lc-native-reciprocal-cumulative-work-boundary´
 #[test]
 fn lc_native_reciprocal_cumulative_work_boundary() -> TestResult {
-    const REQUIRED: u64 = 5_554_692;
+    const REQUIRED: u64 = 5_555_962;
     for (work, prior, success) in [
         (REQUIRED, 0, true),
         (REQUIRED - 1, 0, false),
@@ -39,7 +39,7 @@ fn pipeline(budget: &mut Budget) -> TestResult {
     let contract = transport::derivative(&mut fixture, budget)?;
     assert_eq!(
         contract.exact().key().usage().after.work - contract.exact().key().usage().before.work,
-        413_684
+        414_849
     );
     assert_eq!(
         contract.exact().usage().after.work - contract.exact().usage().before.work,
@@ -72,7 +72,7 @@ fn lc_native_reciprocal_admission_boundaries() -> TestResult {
         &mut budget,
     )?;
     let operation = super::operator(&fixture)?;
-    for (kind, required) in [(0, 4_998), (1, 150_702), (2, 150_702)] {
+    for (kind, required) in [(0, 5_103), (1, 151_227), (2, 151_227)] {
         for (available, success) in [(required, true), (required - 1, false)] {
             let mut limit = super::costs::policy(kind, available, 0)?;
             let result = Binding::from_symbols(
@@ -88,11 +88,11 @@ fn lc_native_reciprocal_admission_boundaries() -> TestResult {
                 result.as_ref().err()
             );
             if success {
-                assert_eq!(limit.usage().work, 4_998);
+                assert_eq!(limit.usage().work, 5_103);
             }
         }
     }
-    let mut spent = super::costs::policy(0, 4_998, 1)?;
+    let mut spent = super::costs::policy(0, 5_103, 1)?;
     assert!(
         Binding::from_symbols(operation, experiment.selected, ExecutionLimits::default())
             .with_reciprocal_statistics(experiment.derivative, &mut spent)

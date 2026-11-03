@@ -6,6 +6,7 @@ pub(crate) use enclosure::EnclosureInventory;
 mod pi;
 pub(crate) use pi::{PiIndex, PiInventory};
 mod scalar;
+mod series;
 pub(crate) use scalar::{PendingJudgment, ScalarInventory};
 
 use super::{
@@ -22,6 +23,8 @@ const AT: Location = Location::new("exact constant cache");
 /// The graph owns each checked payload; kind tags separate otherwise equal statement bytes.
 #[derive(Clone, Debug)]
 pub(crate) enum AnonymousLemma {
+    /// Complete finite formal-series application under its exact original context.
+    Series(Box<series::SeriesLemma>),
     /// Original closed finite-real preparation and its normalized value.
     Constant(ConstantLemma),
     /// Complete checked scalar record inventory under the original scope.
@@ -37,6 +40,7 @@ impl AnonymousLemma {
     #[cfg(test)]
     pub(crate) fn key_bytes(&self) -> usize {
         match self {
+            Self::Series(node) => node.key.len(),
             Self::Constant(node) => node.key.len(),
             Self::Enclosure(node) => node.inventory.key.len(),
             Self::Scalar(node) => node.inventory.key.len(),
@@ -52,6 +56,7 @@ impl AnonymousLemma {
     /// Complete graph payload is accounted by the independently checked judgment kind.
     pub(crate) fn payload(&self) -> Result<u64, Fault> {
         match self {
+            Self::Series(node) => Ok(node.bytes),
             Self::Constant(node) => crate::exact_constant::preparation_bytes(node.constant.value()),
             Self::Scalar(node) => Ok(node.inventory.bytes),
             Self::Pi(node) => Ok(node.inventory.bytes),
@@ -62,6 +67,7 @@ impl AnonymousLemma {
     /// Graph snapshots retain the disjoint formal schema tag and complete canonical statement.
     pub(crate) fn encode(&self, out: &mut crate::encoding::Encoder<'_>) -> Result<(), Fault> {
         match self {
+            Self::Series(node) => out.raw(&node.key),
             Self::Constant(node) => out.raw(&node.key[1..]),
             Self::Enclosure(node) => out.raw(&node.inventory.key[1..]),
             Self::Scalar(node) => {

@@ -83,6 +83,7 @@ impl Cas {
     /// Refuses a predicate or zero-sign subject whose referenced syntax is foreign or malformed.
     pub fn statement_hypothesis_kind(&self, value: &Statement) -> Result<HypothesisKind, Fault> {
         Ok(match value {
+            Statement::Series(_) => HypothesisKind::SeriesEvidence,
             Statement::HalfPiWitness { .. } => HypothesisKind::HalfPiWitness,
             Statement::PredicateFact {
                 predicate: condition,

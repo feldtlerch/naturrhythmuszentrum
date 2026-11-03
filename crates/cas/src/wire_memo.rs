@@ -105,7 +105,7 @@ pub(crate) fn footprint(record: &Record) -> Result<u64, Fault> {
 /// Fixed object references name canonical immutable graph nodes; synthetic keys contain all fields.
 pub(crate) fn key_bytes(key: &Key) -> Result<u64, Fault> {
     match key {
-        Key::Object(_) => Ok(16),
+        Key::Object(_) | Key::SeriesStatement(_) | Key::SeriesCertificate(_) => Ok(16),
         Key::Guard(bytes) | Key::Statement(bytes) | Key::Conclusion(bytes) => size(bytes.len(), AT),
     }
 }

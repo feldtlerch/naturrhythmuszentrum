@@ -17,6 +17,8 @@ const AT: Location = Location::new("typed witness import");
 /// Only earlier, successfully admitted records can be referenced.
 #[derive(Debug)]
 pub(crate) enum Decoded {
+    /// Untrusted finite series statement with complete declared conditions.
+    SeriesStatement(Box<crate::series::portable::Claim>),
     /// Mathematical graph object, never a receipt.
     Object(Handle),
     /// Complete guarded predicate.
@@ -201,6 +203,15 @@ fn decode(
             crate::proof_view::validate_judgment(cas, &value, reader.budget)?;
             Ok(Decoded::Statement(value))
         }
+        39..=41 => crate::series::portable::decode(
+            cas,
+            tag,
+            layer,
+            space.as_ref(),
+            reader,
+            records,
+            manifest,
+        ),
         11 => application(cas, layer, space.as_ref(), reader, records, manifest),
         12 => conclusion(cas, layer, space.as_ref(), reader, records),
         _ => Err(Fault::invalid(InvalidCode::UnsupportedVersion, AT)),
@@ -236,9 +247,7 @@ fn application(
     ids.try_reserve_exact(count)
         .map_err(|_| Fault::allocation(AT))?;
     for _ in 0..count {
-        let Decoded::Application(proof) = reference(reader, records)? else {
-            return Err(invalid());
-        };
+        let proof = crate::series::portable::proof(reader, records)?;
         ids.push(cas.checked(proof)?);
         premises.push(crate::proof_view::application(
             cas,

@@ -19,6 +19,10 @@ const AT: Location = Location::new("typed witness DAG");
 /// Local identities are used only for dependency lookup, never for wire ordering.
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) enum Key {
+    /// Complete series statement and its qualified condition closure.
+    SeriesStatement(LogicalId),
+    /// Checked finite certificate with ordered mixed proof dependencies.
+    SeriesCertificate(LogicalId),
     /// A semantic object or proof application.
     Object(LogicalId),
     /// Complete local guarded tuple.
@@ -32,6 +36,10 @@ pub(crate) enum Key {
 /// Reachable graph objects and synthetic theorem records.
 #[derive(Clone, Debug)]
 pub(crate) enum Entity {
+    /// Complete series statement and its qualified condition closure.
+    SeriesStatement(LogicalId),
+    /// Checked finite certificate with ordered mixed proof dependencies.
+    SeriesCertificate(LogicalId),
     /// An admitted syntax/context object, or a proof naming an application.
     Object(LogicalId),
     /// A guarded predicate including its home and precise domain.
@@ -115,6 +123,8 @@ impl PendingRecord {
 pub(crate) fn key(cas: &Cas, value: &Entity, budget: &mut Budget) -> Result<Key, Fault> {
     let mut out = Encoder::new(budget, AT);
     Ok(match value {
+        Entity::SeriesStatement(id) => Key::SeriesStatement(*id),
+        Entity::SeriesCertificate(id) => Key::SeriesCertificate(*id),
         Entity::Object(id) => Key::Object(*id),
         Entity::Guard(value) => {
             crate::statement::guard(value, &mut out, crate::statement::handle)?;
@@ -380,11 +390,18 @@ pub(crate) fn encode(cas: &Cas, proof: LogicalId, budget: &mut Budget) -> Result
     #[cfg(test)]
     let _attribution = crate::testing::work_trace::Scope::phase("witness encoding");
     let application = crate::proof_view::application(cas, proof, budget)?;
-    let root = Entity::conclusion(
-        Some(proof),
-        application.judgment,
-        application.conditions.hypotheses,
-    );
+    let root = if matches!(
+        application.judgment.statement,
+        crate::proof_model::Statement::Series(_)
+    ) {
+        Entity::Object(proof)
+    } else {
+        Entity::conclusion(
+            Some(proof),
+            application.judgment,
+            application.conditions.hypotheses,
+        )
+    };
     let (records, root, rules) = table(cas, root, budget)?;
     envelope(records, root, &rules, crate::wire::MAGIC, budget)
 }

@@ -36,6 +36,10 @@ fn object(
 
 /// Build one reachable record without admitting any new mathematics.
 pub(crate) fn describe(cas: &Cas, value: &Entity, budget: &mut Budget) -> Result<Record, Fault> {
+    let series = series_entity(cas, value)?;
+    if series {
+        return crate::series::portable::describe(cas, value, budget);
+    }
     let application = match value {
         Entity::Object(id) if matches!(cas.state.node(*id)?, Vertex::Proof(_)) => {
             Some(crate::proof_view::application(cas, *id, budget)?)
@@ -130,6 +134,18 @@ pub(crate) fn describe(cas: &Cas, value: &Entity, budget: &mut Budget) -> Result
     Ok(record)
 }
 
+/// Identify finite-series records without changing ordinary application traversal.
+fn series_entity(cas: &Cas, value: &Entity) -> Result<bool, Fault> {
+    Ok(match value {
+        Entity::SeriesStatement(_) | Entity::SeriesCertificate(_) => true,
+        Entity::Object(id) => crate::series::portable::is_series(cas, *id)?,
+        Entity::Statement(value) => {
+            matches!(value.statement, crate::proof_model::Statement::Series(_))
+        }
+        _ => false,
+    })
+}
+
 /// A lattice selection cites the already retained complete cover proposition once.
 fn selection_cover(
     entity: &Entity,
@@ -164,6 +180,7 @@ fn describe_entity(
     out: &mut Encoder<'_>,
 ) -> Result<(), Fault> {
     match entity {
+        Entity::SeriesStatement(_) | Entity::SeriesCertificate(_) => Err(invalid()),
         Entity::Object(id) => describe_object(cas, *id, record, out),
         Entity::Guard(value) => {
             record.tag = 9;

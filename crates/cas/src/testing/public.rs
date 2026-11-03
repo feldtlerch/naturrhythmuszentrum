@@ -7,6 +7,16 @@
 
 #[expect(clippy::redundant_pub_crate, reason = "shared formal object fixtures")]
 pub(crate) mod series;
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "shared complete-operation finite boundaries"
+)]
+pub(crate) mod series_boundaries;
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "shared finite arithmetic fixtures"
+)]
+pub(crate) mod series_proof;
 
 #[expect(
     clippy::redundant_pub_crate,

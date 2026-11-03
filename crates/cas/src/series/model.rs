@@ -3,6 +3,7 @@
 
 use crate::graph::Handle;
 use crate::number::Rational;
+use crate::rule::Primitive;
 
 /// A finite computation in the increment ring, never an equality of source functions.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -140,4 +141,79 @@ pub enum SeriesCertificate {
         /// Proposed exact coefficient value.
         value: Rational,
     },
+}
+
+impl SeriesStatement {
+    /// The sole schema capable of checking this finite operation.
+    #[must_use]
+    pub const fn primitive(&self) -> Primitive {
+        match self {
+            Self::Truncate { .. } => Primitive::SeriesTruncate,
+            Self::Add { .. } => Primitive::SeriesAdd,
+            Self::Scale { .. } => Primitive::SeriesScale,
+            Self::Mul { .. } => Primitive::SeriesMul,
+            Self::Coefficient { .. } => Primitive::SeriesCoefficient,
+        }
+    }
+
+    /// Every original object and result, in semantic role order.
+    pub(crate) fn objects(&self) -> Vec<&Handle> {
+        match self {
+            Self::Truncate { input, output } => vec![input, output],
+            Self::Add {
+                left,
+                right,
+                output,
+                ..
+            }
+            | Self::Mul {
+                left,
+                right,
+                output,
+                ..
+            } => vec![left, right, output],
+            Self::Scale {
+                input,
+                scalar,
+                output,
+            } => vec![input, scalar, output],
+            Self::Coefficient { input, value, .. } => vec![input, value],
+        }
+    }
+
+    /// The original first object fixes the complete increment-ring interpretation.
+    pub(crate) const fn input(&self) -> &Handle {
+        match self {
+            Self::Truncate { input, .. }
+            | Self::Scale { input, .. }
+            | Self::Coefficient { input, .. } => input,
+            Self::Add { left, .. } | Self::Mul { left, .. } => left,
+        }
+    }
+}
+
+impl SeriesCertificate {
+    /// Closed finite certificate discriminator, separate from graph and record kinds.
+    #[must_use]
+    pub const fn mode(&self) -> u8 {
+        match self {
+            Self::Truncate { .. } => 0,
+            Self::Add { .. } => 1,
+            Self::Scale { .. } => 2,
+            Self::Mul { .. } => 3,
+            Self::Coefficient { .. } => 4,
+        }
+    }
+
+    /// Only form zero denotes executable object arithmetic.
+    #[must_use]
+    pub const fn form(&self) -> u8 {
+        match self {
+            Self::Truncate { form, .. }
+            | Self::Add { form, .. }
+            | Self::Scale { form, .. }
+            | Self::Mul { form, .. }
+            | Self::Coefficient { form, .. } => *form,
+        }
+    }
 }

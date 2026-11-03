@@ -84,10 +84,10 @@ impl Assembly<'_> {
             match key {
                 Key::Object(id) => self.meter.push(&mut objects, (*node, *id), budget)?,
                 Key::Guard(_) => self.premise(*node, DependencyPremiseKind::Guard, budget)?,
-                Key::Statement(_) => {
+                Key::Statement(_) | Key::SeriesStatement(_) => {
                     self.premise(*node, DependencyPremiseKind::Statement, budget)?;
                 }
-                Key::Conclusion(_) => {}
+                Key::Conclusion(_) | Key::SeriesCertificate(_) => {}
             }
         }
         let count = size(objects.len(), AT)?;

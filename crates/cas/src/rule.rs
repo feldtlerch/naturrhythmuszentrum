@@ -4,6 +4,16 @@
 /// A compiled checker whose mathematical meaning is fixed by its semantic version.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Primitive {
+    /// Exact object restriction to a positive smaller order.
+    SeriesTruncate,
+    /// Coefficientwise finite object addition.
+    SeriesAdd,
+    /// Exact scalar multiplication with ordinary definedness evidence.
+    SeriesScale,
+    /// Complete truncated convolution.
+    SeriesMul,
+    /// Exact extraction within the available coefficient range.
+    SeriesCoefficient,
     /// Oddness of sine on its original defined Real operand.
     SinOdd,
     /// Evenness of cosine on its original defined Real operand.
@@ -147,6 +157,8 @@ pub enum Primitive {
 /// Typed conclusion family selected by an executable checker.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ConclusionKind {
+    /// Exact finite object congruence or coefficient value.
+    Series,
     /// An exact predicate established throughout the stated region.
     Predicate,
     /// Original Real operand with its concrete exact integer half-Pi witness.
@@ -182,6 +194,8 @@ pub enum ConclusionKind {
 /// Premise shape is explicit independently of certificate representation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PremiseShape {
+    /// Ordered object restrictions or ordinary scalar-definedness evidence.
+    SeriesEvidence,
     /// Ordered solving evidence consumed by the exact certificate subtype and mode.
     SolveEvidence,
     /// Ordered analytic and distribution facts consumed by the closed schema.
@@ -201,6 +215,8 @@ pub enum PremiseShape {
 /// The sole auxiliary schema admitted by one primitive.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CertificateSchema {
+    /// Complete finite series arithmetic rows.
+    Series,
     /// Repeated half-Pi statement and ordered definedness/equality premise slots.
     HalfPiWitness,
     /// One exact typed solving certificate subtype.
@@ -258,6 +274,11 @@ impl Primitive {
         matches!(
             self,
             Self::Solve(_)
+                | Self::SeriesTruncate
+                | Self::SeriesAdd
+                | Self::SeriesScale
+                | Self::SeriesMul
+                | Self::SeriesCoefficient
                 | Self::SinOdd
                 | Self::CosEven
                 | Self::AtanOdd
@@ -303,6 +324,11 @@ impl Primitive {
     #[must_use]
     pub const fn specification(self) -> RuleSpec {
         let (key, weight) = match self {
+            Self::SeriesTruncate => ("series.truncate", 2),
+            Self::SeriesAdd => ("series.add", 4),
+            Self::SeriesScale => ("series.scale", 4),
+            Self::SeriesMul => ("series.mul", 8),
+            Self::SeriesCoefficient => ("series.coefficient", 2),
             Self::SinOdd => ("trig.sin-odd", 2),
             Self::CosEven => ("trig.cos-even", 2),
             Self::AtanOdd => ("trig.atan-odd", 2),
@@ -395,6 +421,11 @@ impl Primitive {
             Self::TrigDefined => ConclusionKind::Predicate,
             Self::HalfPiWitness => ConclusionKind::HalfPiWitness,
             Self::Solve(_) => ConclusionKind::Solve,
+            Self::SeriesTruncate
+            | Self::SeriesAdd
+            | Self::SeriesScale
+            | Self::SeriesMul
+            | Self::SeriesCoefficient => ConclusionKind::Series,
             Self::LimitCaseRestrict | Self::SeriesCaseRestrict => ConclusionKind::Germ,
             Self::IntegralCaseSplit | Self::SumCaseSplit => ConclusionKind::Split,
             Self::DistAffinePullback
@@ -437,6 +468,11 @@ impl Primitive {
     /// Fixed and dependent ordered-premise arities remain visible in the registry.
     const fn premise_shape(self) -> PremiseShape {
         match self {
+            Self::SeriesTruncate
+            | Self::SeriesAdd
+            | Self::SeriesScale
+            | Self::SeriesMul
+            | Self::SeriesCoefficient => PremiseShape::SeriesEvidence,
             Self::Solve(_) => PremiseShape::SolveEvidence,
             Self::DistPrimitiveUnique
             | Self::DistRegular
@@ -489,6 +525,11 @@ impl Primitive {
     /// Certificate meaning is independent of a statement's wire representation.
     const fn certificate_schema(self) -> CertificateSchema {
         match self {
+            Self::SeriesTruncate
+            | Self::SeriesAdd
+            | Self::SeriesScale
+            | Self::SeriesMul
+            | Self::SeriesCoefficient => CertificateSchema::Series,
             Self::HalfPiWitness => CertificateSchema::HalfPiWitness,
             Self::Solve(_) => CertificateSchema::Solve,
             Self::DistAffinePullback | Self::DistSimpleZeroPullback => CertificateSchema::Pullback,
@@ -522,7 +563,7 @@ impl Primitive {
 }
 
 /// Every registered primitive, in ASCII key order; availability is separate metadata.
-pub const PRIMITIVES: [Primitive; 89] = [
+pub const PRIMITIVES: [Primitive; 94] = [
     Primitive::CaseCongruence,
     Primitive::CaseDomain,
     Primitive::CaseEliminate,
@@ -594,7 +635,12 @@ pub const PRIMITIVES: [Primitive; 89] = [
     Primitive::Solve(crate::solving::SolveSchema::BinomialCoverage),
     Primitive::Solve(crate::solving::SolveSchema::RealIsolationAndOrder),
     Primitive::Solve(crate::solving::SolveSchema::RootSelectionRefinement),
+    Primitive::SeriesAdd,
     Primitive::SeriesCaseRestrict,
+    Primitive::SeriesCoefficient,
+    Primitive::SeriesMul,
+    Primitive::SeriesScale,
+    Primitive::SeriesTruncate,
     Primitive::Solve(crate::solving::SolveSchema::ParameterImageCoverage),
     Primitive::Solve(crate::solving::SolveSchema::ImplicitFunctionBranch),
     Primitive::Solve(crate::solving::SolveSchema::Membership),

@@ -44,7 +44,7 @@ fn series_object_exact_identity() -> TestResult {
 /// ´test:integration:series-object-admission-refusals´
 #[test]
 fn series_object_admission_refusals() -> TestResult {
-    for change in 0..6 {
+    for change in 0..13 {
         let (mut f, mut object) = fixture(&["1", "2", "0"])?;
         match change {
             0 => object.order = 0,
@@ -54,7 +54,7 @@ fn series_object_admission_refusals() -> TestResult {
             2 => object.variable = Reference::Existing(f.one.clone()),
             3 => object.centre = Reference::Existing(f.x.clone()),
             4 => object.coefficients[0] = Reference::Existing(f.x.clone()),
-            _ => {
+            5 => {
                 let field = f
                     .cas
                     .admit(
@@ -67,16 +67,52 @@ fn series_object_admission_refusals() -> TestResult {
                     .ok_or("field")?;
                 object.field = Reference::Existing(field);
             }
+            6 => {
+                object.centre = Reference::Existing(
+                    f.term(Operator::Constant(nrz_cas::syntax::Constant::Pi), &[])?,
+                );
+            }
+            7 => {
+                object.coefficients[0] =
+                    Reference::Existing(f.term(Operator::Add, &[f.x.clone(), f.one.clone()])?);
+            }
+            8 => object.centre = Reference::Existing(f.term(Operator::Sine, &[f.x.clone()])?),
+            9 => {
+                object.coefficients[0] = Reference::Existing(
+                    f.term(Operator::Constant(nrz_cas::syntax::Constant::Pi), &[])?,
+                );
+            }
+            10 => {
+                object.scope = vec![vec![nrz_cas::syntax::AtomicSort::Scalar(
+                    nrz_cas::syntax::Field::Real,
+                )]];
+            }
+            11 => {
+                object.centre = Reference::Existing(
+                    f.term(Operator::Constant(nrz_cas::syntax::Constant::Pi), &[])?,
+                );
+                object.coefficients[2] = Reference::Existing(f.x.clone());
+            }
+            _ => {
+                object.coefficients[0] =
+                    Reference::Existing(f.term(Operator::Mul, &[f.zero.clone(), f.x.clone()])?);
+            }
         }
+        let code = match change {
+            0 | 1 => InvalidCode::Sort,
+            3 | 4 | 7 | 8 | 10 | 11 | 12 => InvalidCode::Scope,
+            _ => InvalidCode::SeriesUnsupported,
+        };
         let snapshot = f.cas.canonical_snapshot(&mut default_budget()?)?;
-        assert!(matches!(
+        assert_eq!(
             f.cas
                 .admit(&[Draft::SeriesObject(object)], &mut default_budget()?)
                 .err()
                 .ok_or("accepted mutation")?
                 .kind,
-            FaultKind::Invalid(_)
-        ));
+            FaultKind::Invalid(code),
+            "admission mutation {change}"
+        );
         assert_eq!(f.cas.canonical_snapshot(&mut default_budget()?)?, snapshot);
     }
     Ok(())
@@ -108,7 +144,7 @@ fn series_object_substitution() -> TestResult {
         .ok_or("composite coordinate accepted")?;
     assert_eq!(
         refusal.kind,
-        FaultKind::Invalid(InvalidCode::UnsupportedFragment)
+        FaultKind::Invalid(InvalidCode::SeriesUnsupported)
     );
     assert_eq!(f.cas.canonical_snapshot(&mut default_budget()?)?, snapshot);
     Ok(())

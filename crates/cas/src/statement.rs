@@ -194,6 +194,10 @@ pub(crate) fn certificate(
     mut write: impl FnMut(&Handle, &mut Encoder<'_>) -> Result<(), Fault>,
 ) -> Result<(), Fault> {
     match value {
+        Certificate::Series(value) => {
+            out.byte(20)?;
+            crate::series::codec::certificate(value, out)
+        }
         Certificate::HalfPiWitness { .. } => {
             crate::trig::encode_certificate(value, out, &mut write)
         }
@@ -241,18 +245,7 @@ pub(crate) fn certificate(
         Certificate::None => out.byte(0),
         Certificate::Region(value) => {
             out.byte(1)?;
-            out.count(value.cuts.len())?;
-            for cut in &value.cuts {
-                out.number(cut)?;
-            }
-            out.count(value.membership.len())?;
-            for row in &value.membership {
-                out.count(row.len())?;
-                for truth in row {
-                    out.byte(u8::from(*truth))?;
-                }
-            }
-            Ok(())
+            case_cells(value, out)
         }
         Certificate::Hypothesis(value) => {
             out.byte(2)?;
@@ -426,6 +419,11 @@ fn encode_values(
     mut write: impl FnMut(&Handle, &mut Encoder<'_>) -> Result<(), Fault>,
 ) -> Result<(), Fault> {
     match value {
+        Statement::Series(value) => {
+            out.byte(32)?;
+            crate::series::codec::statement(value, out, &mut write)?;
+        }
+
         Statement::Germ(value) => {
             out.byte(24)?;
             return crate::germ_wire::statement(value, out, write);
@@ -562,6 +560,7 @@ fn encode_boundary(
 /// Enumerate every mathematical object referenced by a typed statement.
 pub(crate) fn objects(value: &Statement) -> Vec<&Handle> {
     match value {
+        Statement::Series(value) => value.objects(),
         Statement::HalfPiWitness {
             u, context, domain, ..
         } => vec![u, context, domain],
@@ -803,7 +802,8 @@ pub(crate) const fn edge_role(value: &Statement, position: u32) -> Edge {
 pub(crate) const fn layer(value: &Statement) -> Layer {
     match value {
         Statement::Distribution(_) => Layer::Distribution,
-        Statement::LatticeSelection(_)
+        Statement::Series(_)
+        | Statement::LatticeSelection(_)
         | Statement::LatticeNearestSelection(_)
         | Statement::LatticeCover(_)
         | Statement::IntegerSelection(_)
