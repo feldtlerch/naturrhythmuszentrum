@@ -23,7 +23,7 @@ pub enum LcQuiescentOutcome {
     UndefinedRatio,
 }
 
-/// Complete observation-free zero-energy relation over independent positive elements.
+/// Complete zero-energy relation with at most one bounded timestamp over independent positive elements.
 #[derive(Clone, Debug)]
 pub struct LcQuiescentCover(Rc<Data>);
 
@@ -54,14 +54,15 @@ pub struct LcQuiescentQuery {
 }
 
 impl LcRelation {
-    /// Admit an observation-free positive L/C rectangle with exactly zero energy.
+    /// Admit a positive L/C rectangle with exactly zero energy and at most one timestamp.
     ///
     /// All original L/C/energy declarations must have finite rational endpoints;
     /// their repeated intersections are retained beside every original input.
+    /// A single observation requires finite rational time bounds and has undefined phase.
     /// Element lower bounds are positive and the intersected energy is exactly zero.
     /// Product square-root extrema must normalize to rationals in the closed checker.
     /// # Errors
-    /// Refuses other supplied quantities, observations, missing or incompatible bounds,
+    /// Refuses numeric phases, other quantities, multiple observations, missing or incompatible bounds,
     /// unsupported roots and exhausted caller resources, without claiming impossibility.
     pub fn quiescent_cover(
         &self,
@@ -69,7 +70,12 @@ impl LcRelation {
     ) -> Result<LcQuiescentCover, LcRelationError> {
         let before = budget.usage();
         let domain = Domain::check(self, budget)?;
-        let values = domain.values(&domain.inductance[0], &domain.capacitance[0], budget)?;
+        let values = domain.values(
+            &domain.inductance[0],
+            &domain.capacitance[0],
+            domain.time.as_ref().map(|time| &time[0]),
+            budget,
+        )?;
         let feasible = self.check_witness(values, budget)?;
         let bytes = domain
             .bytes()
@@ -88,7 +94,7 @@ impl LcRelation {
 impl LcQuiescentCover {
     /// Query a complete scalar image or the specific undefined phase/ratio outcome.
     /// # Errors
-    /// Refuses indexed observation queries and exhausted caller resources.
+    /// Refuses out-of-inventory observation queries and exhausted caller resources.
     pub fn query(
         &self,
         quantity: LcQuantity,
@@ -113,7 +119,7 @@ impl LcQuiescentCover {
         })
     }
 
-    /// Reconstruct a full rest tuple and recheck every original equation and declaration.
+    /// Reconstruct a full rest tuple at the lower timestamp, rechecking all original inputs.
     /// # Errors
     /// Refuses out-of-rectangle parameters, unsupported exact roots or exhausted resources.
     pub fn witness(
@@ -127,7 +133,37 @@ impl LcQuiescentCover {
             .bytes
             .saturating_add(self.relation().retained_payload_bytes());
         budget.with_retained_payload(retained, AT, |budget| {
-            let values = self.0.domain.values(inductance, capacitance, budget)?;
+            let values = self.0.domain.values(
+                inductance,
+                capacitance,
+                self.0.domain.time.as_ref().map(|time| &time[0]),
+                budget,
+            )?;
+            self.relation().check_witness(values, budget)
+        })
+    }
+
+    /// Reconstruct the single original observation at any admitted timestamp.
+    ///
+    /// Phase and cycle are explicitly absent; every original equation and input is rechecked.
+    /// # Errors
+    /// Refuses absent observations, out-of-domain parameters or exhausted resources.
+    pub fn witness_at(
+        &self,
+        inductance: &Rational,
+        capacitance: &Rational,
+        time: &Rational,
+        budget: &mut Budget,
+    ) -> Result<LcWitness, LcRelationError> {
+        let retained = self
+            .0
+            .bytes
+            .saturating_add(self.relation().retained_payload_bytes());
+        budget.with_retained_payload(retained, AT, |budget| {
+            let values = self
+                .0
+                .domain
+                .values(inductance, capacitance, Some(time), budget)?;
             self.relation().check_witness(values, budget)
         })
     }

@@ -6,6 +6,8 @@ mod refusals;
 mod support;
 mod time;
 
+mod quiescent;
+
 use crate::kernel_oracle::Rational as Oracle;
 use nrz_bindings::{LcCertainty, LcDeterminacy, LcQuantity as Q};
 use nrz_matrix::LcForwardProjection;

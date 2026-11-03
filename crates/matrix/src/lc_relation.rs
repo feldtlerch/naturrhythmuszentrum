@@ -12,6 +12,8 @@ mod lower;
 pub use horizon::LcHorizonProjection;
 mod time;
 pub use time::{LcNumericalTail, LcNumericalTime, LcTimeProjection};
+mod quiescent;
+pub use quiescent::LcQuiescentProjection;
 mod pairs;
 pub use pairs::{LcNumericalQuantity, LcPairsProjection};
 
