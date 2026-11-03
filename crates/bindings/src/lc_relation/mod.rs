@@ -28,7 +28,7 @@ pub use clock_phase::{
 mod horizon;
 mod impossible;
 mod inclusion;
-pub use horizon::{LcHorizon, LcHorizonValue};
+pub use horizon::{LcHorizon, LcHorizonCoordinate, LcHorizonValue};
 pub use inclusion::LcInputRefinement;
 mod interval;
 pub use impossible::LcImpossible;

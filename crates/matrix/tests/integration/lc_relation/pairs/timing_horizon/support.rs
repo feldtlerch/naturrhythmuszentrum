@@ -143,6 +143,7 @@ pub(super) fn render<P: Scalar + 'static>(
                 .shares_allocation(horizon.relation())
         );
         assert!(native.pi().same_region(&pi));
+        assert_eq!(native.exact().coordinate(), horizon.coordinate());
         match horizon.value() {
             LcHorizonValue::Finite(_) => oracle.affine(
                 native

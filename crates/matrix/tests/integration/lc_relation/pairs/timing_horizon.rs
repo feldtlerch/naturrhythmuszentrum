@@ -2,6 +2,7 @@
 //! Timing horizons retain original joint owners and an explicit future actual-time coordinate.
 
 mod refinement;
+mod reported;
 mod shared_initial;
 mod shared_narrow;
 mod support;

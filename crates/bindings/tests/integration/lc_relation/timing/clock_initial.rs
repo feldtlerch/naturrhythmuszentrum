@@ -2,6 +2,7 @@
 //! Shared-clock reconstruction retains original physical initial phase and all common gauges.
 
 mod narrow;
+mod reported;
 mod support;
 
 use super::super::support::{TestResult, ledger};

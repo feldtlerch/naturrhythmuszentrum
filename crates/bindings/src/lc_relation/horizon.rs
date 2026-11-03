@@ -13,6 +13,15 @@ use std::rc::Rc;
 
 pub use nrz_cas::lattice::PiHorizonValue as LcHorizonValue;
 
+/// The future argument's exact relationship to the retained physical clock.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LcHorizonCoordinate {
+    /// Actual coherent time measured from the original physical epoch.
+    ActualTime,
+    /// A future reported reading r, with actual time `r+d` under the same retained shared offset.
+    ReportedClock,
+}
+
 /// Original joint feasible set; every source retains its physical and measurement constraints.
 #[derive(Clone, Debug)]
 enum Source {
@@ -52,7 +61,7 @@ impl Source {
     }
 }
 
-/// Eventual loss of phase exclusion after an explicit future reference, in actual coherent seconds from the original epoch.
+/// Eventual loss of phase exclusion after an explicit reference in the declared future clock coordinate.
 #[derive(Clone, Debug)]
 pub struct LcHorizon(Rc<Data>);
 
@@ -61,7 +70,9 @@ pub struct LcHorizon(Rc<Data>);
 struct Data {
     /// Complete original relation and constructive feasible family.
     source: Source,
-    /// Lower and upper extremizers, each in starting-phase/rate order.
+    /// Explicit future-coordinate contract, including the retained reported-clock correlation.
+    coordinate: LcHorizonCoordinate,
+    /// Lower and upper extremizers, each in query-intercept/rate order.
     extrema: [[Rational; 2]; 2],
     /// Checked affine future width and finite/infinite/unresolved full-turn threshold.
     mathematical: PiWidthHorizon,
@@ -91,6 +102,7 @@ impl LcZeroTimes {
         ];
         LcHorizon::new(
             Source::Rectangle(self.clone()),
+            LcHorizonCoordinate::ActualTime,
             extrema,
             Rational::zero(),
             pi,
@@ -112,6 +124,7 @@ impl LcHorizon {
         let pi = source.pi_bounds().clone();
         Self::new(
             Source::Pairs(source),
+            LcHorizonCoordinate::ActualTime,
             extrema,
             reference,
             pi,
@@ -131,6 +144,7 @@ impl LcHorizon {
     ) -> Result<Self, LcRelationError> {
         Self::new(
             Source::Timing(source),
+            LcHorizonCoordinate::ActualTime,
             extrema,
             reference,
             pi,
@@ -150,6 +164,7 @@ impl LcHorizon {
     ) -> Result<Self, LcRelationError> {
         Self::new(
             Source::Clock(source),
+            LcHorizonCoordinate::ActualTime,
             extrema,
             reference,
             pi,
@@ -169,6 +184,47 @@ impl LcHorizon {
     ) -> Result<Self, LcRelationError> {
         Self::new(
             Source::SharedTiming(source),
+            LcHorizonCoordinate::ActualTime,
+            extrema,
+            reference,
+            pi,
+            before,
+            budget,
+        )
+    }
+
+    /// Reported readings keep the original shared offset through `beta=alpha+a*d`.
+    pub(super) fn clock_reported(
+        source: LcClockCover,
+        extrema: [[Rational; 2]; 2],
+        reference: Rational,
+        pi: CheckedPiBounds,
+        before: &BudgetUsage,
+        budget: &mut Budget,
+    ) -> Result<Self, LcRelationError> {
+        Self::new(
+            Source::Clock(source),
+            LcHorizonCoordinate::ReportedClock,
+            extrema,
+            reference,
+            pi,
+            before,
+            budget,
+        )
+    }
+
+    /// Both original time-error layers survive a future reading under the same shared offset.
+    pub(super) fn shared_timing_reported(
+        source: LcSharedTimingCover,
+        extrema: [[Rational; 2]; 2],
+        reference: Rational,
+        pi: CheckedPiBounds,
+        before: &BudgetUsage,
+        budget: &mut Budget,
+    ) -> Result<Self, LcRelationError> {
+        Self::new(
+            Source::SharedTiming(source),
+            LcHorizonCoordinate::ReportedClock,
             extrema,
             reference,
             pi,
@@ -180,6 +236,7 @@ impl LcHorizon {
     /// Exact positive-source extrema derive the entire future lifted interval.
     fn new(
         source: Source,
+        coordinate: LcHorizonCoordinate,
         extrema: [[Rational; 2]; 2],
         reference: Rational,
         pi: CheckedPiBounds,
@@ -204,6 +261,7 @@ impl LcHorizon {
         )?;
         Ok(Self(Rc::new(Data {
             source,
+            coordinate,
             extrema,
             mathematical,
             descriptor: LcQuantity::NaturalTime.descriptor()?,
@@ -216,6 +274,12 @@ impl LcHorizon {
     #[must_use]
     pub fn relation(&self) -> &LcRelation {
         self.0.source.relation()
+    }
+
+    /// Future actual time or a reported reading under the same retained shared clock offset.
+    #[must_use]
+    pub fn coordinate(&self) -> LcHorizonCoordinate {
+        self.0.coordinate
     }
 
     /// Coherent seconds with duration difference meaning.
@@ -236,7 +300,10 @@ impl LcHorizon {
         self.0.mathematical.value()
     }
 
-    /// Retained feasible extremizers in starting-phase/rate order, on the original local lift.
+    /// Retained extremizers in query-intercept/rate order on the original local lift.
+    ///
+    /// The intercept is physical alpha for `ActualTime` and `beta=alpha+a*d` for `ReportedClock`.
+    /// The original source retains the conditional physical phase and shared clock-offset fibre.
     #[must_use]
     pub fn extremal_parameters(&self) -> &[[Rational; 2]; 2] {
         &self.0.extrema
@@ -286,7 +353,7 @@ impl LcHorizon {
         }
     }
 
-    /// Original shared clock; the horizon's future argument is actual time, never a reported reading.
+    /// Original shared clock; `coordinate` declares the future argument's exact meaning.
     #[must_use]
     pub fn clock_cover(&self) -> Option<&LcClockCover> {
         match &self.0.source {
@@ -298,7 +365,7 @@ impl LcHorizon {
         }
     }
 
-    /// Original independent-error/shared-offset owner for an actual-time horizon.
+    /// Original independent-error/shared-offset owner with the explicit future-coordinate contract.
     #[must_use]
     pub fn shared_timing_cover(&self) -> Option<&LcSharedTimingCover> {
         match &self.0.source {

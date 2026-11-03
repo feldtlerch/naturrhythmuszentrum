@@ -4,6 +4,7 @@
 mod admit;
 mod horizon;
 mod project;
+mod reported;
 mod witness;
 
 use super::{AT, Bounds, LcRelation, LcRelationError, Rational, storage};
