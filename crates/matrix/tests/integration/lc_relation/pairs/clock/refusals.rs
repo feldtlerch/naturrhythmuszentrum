@@ -6,13 +6,13 @@ use nrz_bindings::{Budget, LcInterval, LcSharedClock, Limits, LimitsOverride};
 use nrz_matrix::LcClockProjection;
 use nrz_scalar::{ArithmeticContext, LiteralLimits};
 
-/// A larger shared offset cannot silently discard a narrower original timestamp constraint.
+/// A disjoint shared offset cannot discard original timestamps; cumulative Work remains exact.
 /// ´test:integration:lc-relation-shared-clock-refusals-and-work´
 #[test]
 fn lc_relation_shared_clock_refusals_and_work() -> TestResult {
     let offset = LcInterval::new(
-        Some(number("-1/5")?.into()),
         Some(number("1/5")?.into()),
+        Some(number("3/10")?.into()),
         &mut ledger()?,
     )?;
     assert!(

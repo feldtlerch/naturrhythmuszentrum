@@ -90,7 +90,7 @@ fn lc_relation_timing_both_marginal_control() -> TestResult {
     Ok(())
 }
 
-/// Narrower original supports, malformed inventories and cumulative Work exhaustion stay refusals.
+/// Disjoint original supports, malformed inventories and cumulative Work exhaustion stay refusals.
 /// ´test:integration:lc-relation-timing-both-refusals-work´
 #[test]
 fn lc_relation_timing_both_refusals_work() -> TestResult {
@@ -99,7 +99,7 @@ fn lc_relation_timing_both_refusals_work() -> TestResult {
     let both = question(true, true)?;
     let errors = errors(true)?;
     let mut inputs = both.relation().inputs().to_vec();
-    inputs.push(input(Q::Time(FIRST), ["1", "1"])?);
+    inputs.push(input(Q::Time(FIRST), ["2", "2"])?);
     let narrow = LcRelation::new(both.relation().epoch().into(), 2, inputs, &mut ledger()?)?;
     assert!(
         LcSharedTiming::new(

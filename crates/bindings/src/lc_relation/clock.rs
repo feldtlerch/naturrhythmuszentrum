@@ -26,6 +26,8 @@ struct Question {
     nominal: Vec<Rational>,
     /// One bounded rational offset, shared by all timestamps.
     offset: [Rational; 2],
+    /// Exact intersection of the declared offset with every original timestamp restriction.
+    support: [Rational; 2],
     /// Checked positive original rate support used for the exact clock-coordinate elimination.
     rate: [Rational; 2],
     /// Original physical initial-phase support; absence retains all common integer gauges.
@@ -101,8 +103,8 @@ struct Cover {
 impl LcSharedClock {
     /// Admit one explicitly bounded shared offset with optional original initial-phase support.
     ///
-    /// Every supplied timestamp interval must contain its full nominal-plus-offset image.
-    /// Other timestamp restrictions refuse this closed adapter instead of being omitted.
+    /// Every supplied timestamp interval intersects the shared offset through `t_i=nominal_i+d`.
+    /// The original declared offset remains beside its exact surviving intersection.
     /// Positive finite rational rate support and at least two nominal timestamps are required.
     /// # Errors
     /// Refuses unsupported clocks, missing positive rate premises and exhausted resources.
@@ -116,9 +118,11 @@ impl LcSharedClock {
         let premises = admit::question(&relation, &nominal, &offset, budget)?;
         let rate = premises.rate;
         let initial = premises.initial;
+        let support = premises.offset;
         let bytes = nominal
             .iter()
             .chain(&offset)
+            .chain(&support)
             .chain(&rate)
             .chain(initial.iter().flatten())
             .fold(2_048_u64, |sum, value| {
@@ -132,6 +136,7 @@ impl LcSharedClock {
             relation,
             nominal,
             offset,
+            support,
             rate,
             initial,
             descriptor: LcQuantity::NaturalTime.descriptor()?,
@@ -155,6 +160,15 @@ impl LcSharedClock {
     #[must_use]
     pub fn offset(&self) -> &[Rational; 2] {
         &self.0.offset
+    }
+
+    /// Exact surviving shared offset after every original timestamp restriction.
+    ///
+    /// The separately retained `offset` is the original declaration. This support is one common
+    /// interval, never a set of independent per-observation offsets.
+    #[must_use]
+    pub fn offset_support(&self) -> &[Rational; 2] {
+        &self.0.support
     }
 
     /// Every original physical initial-phase restriction, intersected without losing its clock correlation.
@@ -185,6 +199,16 @@ impl LcSharedClock {
         budget: &mut Budget,
     ) -> Result<LcClockCover, LcRelationError> {
         project::cover(self, cycles, pi, budget)
+    }
+
+    /// Reuse prepared constant evidence while retaining the same complete original clock question.
+    pub(in crate::lc_relation) fn pairs_cover_checked(
+        &self,
+        cycles: Vec<Rational>,
+        pi: nrz_cas::pi_bounds::CheckedPiBounds,
+        budget: &mut Budget,
+    ) -> Result<LcClockCover, LcRelationError> {
+        project::checked(self, cycles, pi, budget)
     }
 
     /// Check every original equation and one shared offset against an arbitrary physical tuple.
@@ -326,7 +350,7 @@ impl LcClockCover {
         budget: &mut Budget,
     ) -> Result<[Rational; 2], LcRelationError> {
         let phase = self.0.effective.phase_at_rate(rate, budget)?;
-        let mut offset = self.clock().offset().clone();
+        let mut offset = self.clock().offset_support().clone();
         if let Some([lower, upper]) = self.clock().initial_phase_support() {
             let image = [
                 phase[0].sub(upper, budget)?.div(rate, budget)?,
@@ -353,8 +377,14 @@ impl LcClockCover {
     ) -> Result<[Rational; 2], LcRelationError> {
         let beta = self.0.effective.phase_at_rate(rate, budget)?;
         let mut phase = [
-            beta[0].sub(&rate.mul(&self.clock().offset()[1], budget)?, budget)?,
-            beta[1].sub(&rate.mul(&self.clock().offset()[0], budget)?, budget)?,
+            beta[0].sub(
+                &rate.mul(&self.clock().offset_support()[1], budget)?,
+                budget,
+            )?,
+            beta[1].sub(
+                &rate.mul(&self.clock().offset_support()[0], budget)?,
+                budget,
+            )?,
         ];
         if let Some(initial) = self.clock().initial_phase_support() {
             calibration::intersect(&mut phase, initial, budget)?;
@@ -378,7 +408,7 @@ impl LcClockCover {
             calibration::intersect(&mut selected, initial, budget)?;
         }
         let beta = self.0.effective.phase_at_rate(rate, budget)?;
-        let mut offset = self.clock().offset().clone();
+        let mut offset = self.clock().offset_support().clone();
         let image = [
             beta[0].sub(phase, budget)?.div(rate, budget)?,
             beta[1].sub(phase, budget)?.div(rate, budget)?,

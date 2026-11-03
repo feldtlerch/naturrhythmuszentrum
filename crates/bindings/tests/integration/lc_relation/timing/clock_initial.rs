@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Shared-clock reconstruction retains original physical initial phase and all common gauges.
 
+mod narrow;
 mod support;
 
 use super::super::support::{TestResult, ledger};

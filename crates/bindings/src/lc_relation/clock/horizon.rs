@@ -40,7 +40,7 @@ fn build(
     let mut earliest = Rational::zero();
     for nominal in cover.clock().nominal_times() {
         budget.work(1, AT)?;
-        let upper = nominal.add(&cover.clock().offset()[1], budget)?;
+        let upper = nominal.add(&cover.clock().offset_support()[1], budget)?;
         if upper.compare(&earliest, budget)? == Ordering::Greater {
             earliest = upper;
         }

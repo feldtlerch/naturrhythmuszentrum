@@ -29,6 +29,12 @@ struct Question {
     errors: Vec<Bounds>,
     /// One finite offset shared by every original timestamp.
     offset: Bounds,
+    /// Exact common offset intersection induced by all original total timestamp restrictions.
+    support: Bounds,
+    /// Original total timestamps intersected with the declared two-layer images.
+    times: Vec<Bounds>,
+    /// Whether original total timestamps narrow the declared two-layer image.
+    narrow: bool,
     /// Original positive finite rate support for the exact auxiliary construction.
     rate: Bounds,
     /// Optional original physical initial-phase intersection; absence keeps all integer gauges.
@@ -61,6 +67,8 @@ struct Cover {
     timing: LcSharedTiming,
     /// Exact correlated `beta,a` domain, with independent sample times and offset faces.
     effective: LcTimingCover,
+    /// Independent-error intercept domain for narrower original timestamp restrictions.
+    measured: Option<LcTimingCover>,
     /// Restored physical tuple checking every original constraint and both timing layers.
     witness: LcSharedTimingWitness,
     /// Cumulative construction Work and capacity snapshots.
@@ -72,8 +80,8 @@ struct Cover {
 impl LcSharedTiming {
     /// Admit both timing layers with optional bounded physical initial phase and positive rate support.
     ///
-    /// Each original time constraint must contain the full nominal-plus-error-plus-offset
-    /// image. Narrower coupled restrictions require another adapter and are never dropped.
+    /// Each original time constraint intersects the two-layer image while one common offset
+    /// and every independent error remain retained beside their original declarations.
     /// # Errors
     /// Refuses unsupported supports or phase, omitted original restrictions and exhausted Work.
     pub fn new(
@@ -95,6 +103,8 @@ impl LcSharedTiming {
             .iter()
             .chain(errors.iter().flatten())
             .chain(&offset)
+            .chain(&premises.support)
+            .chain(premises.times.iter().flatten())
             .chain(&premises.rate)
             .chain(premises.initial.iter().flatten())
             .fold(2_048_u64, |sum, value| {
@@ -109,6 +119,9 @@ impl LcSharedTiming {
             nominal,
             errors,
             offset,
+            support: premises.support,
+            times: premises.times,
+            narrow: premises.narrow,
             rate: premises.rate,
             initial: premises.initial,
             bytes,
@@ -137,6 +150,18 @@ impl LcSharedTiming {
     #[must_use]
     pub fn offset(&self) -> &Bounds {
         &self.0.offset
+    }
+
+    /// Exact surviving common offset after every original total timestamp restriction.
+    #[must_use]
+    pub fn offset_support(&self) -> &Bounds {
+        &self.0.support
+    }
+
+    /// Original timestamp intersections with the complete declared two-layer image.
+    #[must_use]
+    pub fn time_boxes(&self) -> &[Bounds] {
+        &self.0.times
     }
 
     /// Original bounded physical initial phase; absence retains every common integer gauge.
@@ -306,6 +331,17 @@ impl LcSharedTimingCover {
         rate: &Rational,
         budget: &mut Budget,
     ) -> Result<Bounds, LcRelationError> {
+        if let Some(measured) = &self.0.measured {
+            let beta = measured.phase_at_rate(rate, budget)?;
+            let alpha = self.0.effective.phase_at_rate(rate, budget)?;
+            let image = [
+                beta[0].sub(&alpha[1], budget)?.div(rate, budget)?,
+                beta[1].sub(&alpha[0], budget)?.div(rate, budget)?,
+            ];
+            let mut offset = self.timing().offset_support().clone();
+            crate::lc_relation::calibration::intersect(&mut offset, &image, budget)?;
+            return Ok(offset);
+        }
         let phase = self.0.effective.phase_at_rate(rate, budget)?;
         let mut offset = self.timing().offset().clone();
         if let Some([lower, upper]) = self.timing().initial_phase_support() {
@@ -332,6 +368,9 @@ impl LcSharedTimingCover {
         rate: &Rational,
         budget: &mut Budget,
     ) -> Result<[Rational; 2], LcRelationError> {
+        if self.0.measured.is_some() {
+            return self.0.effective.phase_at_rate(rate, budget);
+        }
         let beta = self.0.effective.phase_at_rate(rate, budget)?;
         let mut phase = [
             beta[0].sub(&rate.mul(&self.timing().offset()[1], budget)?, budget)?,
@@ -352,6 +391,18 @@ impl LcSharedTimingCover {
         phase: &Rational,
         budget: &mut Budget,
     ) -> Result<[Rational; 2], LcRelationError> {
+        if let Some(measured) = &self.0.measured {
+            let alpha = self.0.effective.phase_at_rate(rate, budget)?;
+            crate::lc_relation::phase::admit::contains(&alpha, phase, budget)?;
+            let beta = measured.phase_at_rate(rate, budget)?;
+            let image = [
+                beta[0].sub(phase, budget)?.div(rate, budget)?,
+                beta[1].sub(phase, budget)?.div(rate, budget)?,
+            ];
+            let mut offset = self.timing().offset_support().clone();
+            crate::lc_relation::calibration::intersect(&mut offset, &image, budget)?;
+            return Ok(offset);
+        }
         budget.work(1, AT)?;
         phase.check(budget, AT)?;
         let mut selected = [phase.clone(), phase.clone()];
@@ -376,6 +427,9 @@ impl LcSharedTimingCover {
         parameters: &LcClockPhaseParameters,
         budget: &mut Budget,
     ) -> Result<LcSharedTimingWitness, LcRelationError> {
+        if self.0.measured.is_some() {
+            return project::restricted::witness(self, parameters, budget);
+        }
         witness::with_phase(self.timing(), &self.0.effective, parameters, budget)
     }
 
@@ -387,6 +441,17 @@ impl LcSharedTimingCover {
         parameters: &LcClockParameters,
         budget: &mut Budget,
     ) -> Result<LcSharedTimingWitness, LcRelationError> {
+        if self.0.measured.is_some() {
+            let parameters = LcClockPhaseParameters {
+                rate: parameters.rate.clone(),
+                initial_phase: Rational::zero(),
+                gauge: Rational::zero(),
+                offset: parameters.offset.clone(),
+                ratio: parameters.ratio.clone(),
+                voltage: parameters.voltage.clone(),
+            };
+            return project::restricted::witness(self, &parameters, budget);
+        }
         witness::parameters(self.timing(), &self.0.effective, parameters, budget)
     }
 

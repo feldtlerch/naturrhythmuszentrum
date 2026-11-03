@@ -55,8 +55,41 @@ impl LcSampleTimes {
     ) -> Result<LcTimingCover, LcRelationError> {
         let before = budget.usage();
         budget.work(1, AT)?;
-        let prepared = prepare::question(self, &cycles, budget)?;
-        let effective = prepared.relation.pairs_cover(prepared.cycles, pi, budget)?;
+        let mut prepared = prepare::question(self, &cycles, budget)?;
+        let effective =
+            prepared
+                .relation
+                .pairs_cover(std::mem::take(&mut prepared.cycles), pi, budget)?;
+        self.finish_timing(cycles, prepared, effective, &before, budget)
+    }
+
+    /// Reuse already checked exact circle evidence in a derived joint timing owner.
+    pub(in crate::lc_relation::timing) fn pairs_cover_checked(
+        &self,
+        cycles: Vec<Rational>,
+        pi: nrz_cas::pi_bounds::CheckedPiBounds,
+        budget: &mut Budget,
+    ) -> Result<LcTimingCover, LcRelationError> {
+        let before = budget.usage();
+        budget.work(1, AT)?;
+        let mut prepared = prepare::question(self, &cycles, budget)?;
+        let effective = prepared.relation.pairs_cover_checked(
+            std::mem::take(&mut prepared.cycles),
+            pi,
+            budget,
+        )?;
+        self.finish_timing(cycles, prepared, effective, &before, budget)
+    }
+
+    /// Both preparation routes share original physical restoration and retained ownership.
+    fn finish_timing(
+        &self,
+        cycles: Vec<Rational>,
+        prepared: prepare::Prepared,
+        effective: LcPairsCover,
+        before: &BudgetUsage,
+        budget: &mut Budget,
+    ) -> Result<LcTimingCover, LcRelationError> {
         let rate = effective.rate()[0].clone();
         let phase = effective.phase_at_rate(&rate, budget)?;
         let parameters = LcPairParameters {
@@ -97,13 +130,58 @@ impl LcSampleTimes {
             cycles,
             shifts: prepared.shifts,
             witness,
-            usage: [before, budget.usage()],
+            usage: [*before, budget.usage()],
             bytes,
         })))
     }
 }
 
 impl LcTimingCover {
+    /// Select additional actual-time intersections using retained lifted phases and prepared constants.
+    pub(in crate::lc_relation::timing) fn witness_in_time_boxes(
+        &self,
+        parameters: &LcPairParameters,
+        times: &[Bounds],
+        budget: &mut Budget,
+    ) -> Result<LcWitness, LcRelationError> {
+        budget.work(1, AT)?;
+        if times.len() != self.relation().observations() {
+            return Err(LcRelationError::Observation);
+        }
+        storage::retained(
+            self.relation()
+                .retained_payload_bytes()
+                .saturating_mul(2)
+                .saturating_add(storage::size(times.len())?.saturating_mul(2_048)),
+            budget,
+        )?;
+        let mut inputs = self.relation().inputs().to_vec();
+        for (index, time) in times.iter().enumerate() {
+            budget.work(1, AT)?;
+            inputs.push(super::admit::input(
+                LcQuantity::Time(index),
+                time.clone(),
+                budget,
+            )?);
+        }
+        let relation = LcRelation::new(
+            self.relation().epoch().into(),
+            self.relation().observations(),
+            inputs,
+            budget,
+        )?;
+        let timing = LcSampleTimes::new(relation, self.timing().nominal_times().to_vec(), budget)?;
+        restore::witness(
+            &timing,
+            &self.0.effective,
+            &self.0.phases,
+            &self.0.cycles,
+            &self.0.shifts,
+            parameters,
+            budget,
+        )
+    }
+
     /// Original complete independent timing question.
     #[must_use]
     pub fn timing(&self) -> &LcSampleTimes {

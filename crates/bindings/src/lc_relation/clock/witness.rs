@@ -20,8 +20,8 @@ pub(super) fn check(
     if values.observations.len() != clock.nominal_times().len() {
         return Err(LcRelationError::Observation);
     }
-    let above = offset.compare(&clock.offset()[0], budget)? != Ordering::Less;
-    let below = offset.compare(&clock.offset()[1], budget)? != Ordering::Greater;
+    let above = offset.compare(&clock.offset_support()[0], budget)? != Ordering::Less;
+    let below = offset.compare(&clock.offset_support()[1], budget)? != Ordering::Greater;
     if !above || !below {
         return Err(LcRelationError::Containment);
     }

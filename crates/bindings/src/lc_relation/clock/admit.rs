@@ -29,6 +29,8 @@ pub(super) fn bounds(
 pub(super) struct Premises {
     /// Positive original rate interval.
     pub(super) rate: [Rational; 2],
+    /// Shared offset intersection implied by all original timestamp supports.
+    pub(super) offset: [Rational; 2],
     /// Repeated original initial-phase intersection; absence retains every integer gauge.
     pub(super) initial: Option<[Rational; 2]>,
 }
@@ -50,6 +52,7 @@ pub(super) fn question(
     }
     let mut rate = None;
     let mut phase = None;
+    let mut support = offset.clone();
     for input in relation.inputs() {
         budget.work(1, AT)?;
         match input.quantity() {
@@ -58,11 +61,19 @@ pub(super) fn question(
             }
             Q::InitialPhase => intersect(&mut phase, bounds(input.interval(), budget)?, budget)?,
             Q::Time(index) => {
-                let image = [
-                    nominal[index].add(&offset[0], budget)?,
-                    nominal[index].add(&offset[1], budget)?,
+                let mut image = [
+                    nominal[index].add(&support[0], budget)?,
+                    nominal[index].add(&support[1], budget)?,
                 ];
-                timing(input.interval(), &image, budget)?;
+                crate::lc_relation::calibration::clip_interval(
+                    &mut image,
+                    input.interval(),
+                    budget,
+                )?;
+                support = [
+                    image[0].sub(&nominal[index], budget)?,
+                    image[1].sub(&nominal[index], budget)?,
+                ];
             }
             _ => (),
         }
@@ -73,6 +84,7 @@ pub(super) fn question(
     }
     Ok(Premises {
         rate,
+        offset: support,
         initial: phase,
     })
 }
@@ -95,26 +107,5 @@ fn intersect(
         return Err(LcRelationError::Containment);
     }
     *slot = Some(next);
-    Ok(())
-}
-
-/// Every original timestamp support must contain the full declared shared-clock image.
-fn timing(
-    interval: &LcInterval,
-    image: &[Rational; 2],
-    budget: &mut Budget,
-) -> Result<(), LcRelationError> {
-    budget.work(1, AT)?;
-    for (endpoint, expected, forbidden) in [
-        (interval.lower(), &image[0], Ordering::Greater),
-        (interval.upper(), &image[1], Ordering::Less),
-    ] {
-        if let Some(endpoint) = endpoint {
-            let endpoint = endpoint.as_rational().ok_or(LcRelationError::Projection)?;
-            if endpoint.compare(expected, budget)? == forbidden {
-                return Err(LcRelationError::Containment);
-            }
-        }
-    }
     Ok(())
 }

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! The offset remains correlated with physical initial phase after effective phase elimination.
 
+mod restricted;
+
 use super::{
     AT, Bounds, Cover, LcClockPhaseCover, LcInterval, LcRelation, LcRelationError, LcSharedClock,
     LcSharedClockPhase, Rational, admit, storage, witness,
@@ -16,6 +18,9 @@ pub(super) fn cover(
     pi: &PiBoundCertificate,
     budget: &mut Budget,
 ) -> Result<LcClockPhaseCover, LcRelationError> {
+    if phase.0.narrow {
+        return restricted::cover(phase, cycles, pi, budget);
+    }
     let before = budget.usage();
     budget.work(1, AT)?;
     let relation = effective(phase, budget)?;
@@ -55,6 +60,7 @@ pub(super) fn cover(
     Ok(LcClockPhaseCover(Rc::new(Cover {
         phase: phase.clone(),
         effective,
+        measured: None,
         witness,
         usage: [before, budget.usage()],
         bytes,

@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Independent phase intervals and one systematic phase offset retain a common physical question.
 
-use super::phase::admit;
+mod admit;
 mod project;
 mod witness;
 
 use super::{AT, LcRelationError, storage};
 use crate::{
     Budget, LcCertainty, LcClockCover, LcClockPhaseParameters, LcClockWitness, LcConsistency,
-    LcDeterminacy, LcFreeDirection, LcInterval, LcPhaseGauge, LcQuantity, LcRelation,
+    LcDeterminacy, LcFreeDirection, LcInterval, LcPairsCover, LcPhaseGauge, LcQuantity, LcRelation,
     LcSharedClock,
 };
 use nrz_cas::{Rational, limits::BudgetUsage, pi_bounds::PiBoundCertificate};
@@ -32,6 +32,8 @@ struct Question {
     offset: Bounds,
     /// Original physical initial-phase intersection; absence retains all common gauges.
     initial: Option<Bounds>,
+    /// Whether any original physical phase restriction narrows its sample-plus-offset image.
+    narrow: bool,
     /// Conservative new measurement-question metadata.
     bytes: u64,
 }
@@ -62,13 +64,15 @@ pub struct LcClockPhaseWitness {
 #[derive(Clone, Debug)]
 pub struct LcClockPhaseCover(Rc<Cover>);
 
-/// `beta=alpha-offset` is a coordinate change with a retained original offset fibre.
+/// Original physical and measured domains retain both shared offsets and conditional reconstruction.
 #[derive(Debug)]
 struct Cover {
     /// Original physical clock and two-layer phase question.
     phase: LcSharedClockPhase,
-    /// Complete effective rate/initial-phase domain, retaining the original shared clock offset.
+    /// Exact clock domain in the effective phase for broad images or physical phase for narrowed originals.
     effective: LcClockCover,
+    /// Complete measured-intercept cover for narrower original phase restrictions.
+    measured: Option<LcPairsCover>,
     /// Full physical and systematic-offset nonemptiness witness.
     witness: LcClockPhaseWitness,
     /// Cumulative full projection Work snapshots.
@@ -80,8 +84,8 @@ struct Cover {
 impl LcSharedClockPhase {
     /// Declare independent phase intervals and a single shared additive phase error.
     ///
-    /// Each original physical phase input must contain its full sample-plus-offset image.
-    /// Original initial-phase constraints are retained jointly through `beta=alpha-offset`.
+    /// Original physical and measured phase strips remain separate joint constraints.
+    /// Narrower originals retain a complete measured-intercept cover beside their physical owner.
     /// # Errors
     /// Refuses unsupported intervals, omitted original restrictions and exhausted resources.
     pub fn new(
@@ -93,7 +97,7 @@ impl LcSharedClockPhase {
         budget.work(1, AT)?;
         storage::retained(storage::size(samples.len())?.saturating_mul(2_048), budget)?;
         let offset = admit::bounds(offset, budget)?;
-        let initial = admit::question(clock.relation(), &samples, &offset, budget)?;
+        let (initial, narrow) = admit::question(clock.relation(), &samples, &offset, budget)?;
         let bytes = offset
             .iter()
             .chain(initial.iter().flatten())
@@ -114,6 +118,7 @@ impl LcSharedClockPhase {
             samples,
             offset,
             initial,
+            narrow,
             bytes,
         })))
     }
@@ -295,6 +300,9 @@ impl LcClockPhaseCover {
         rate: &Rational,
         budget: &mut Budget,
     ) -> Result<Bounds, LcRelationError> {
+        if self.0.measured.is_some() {
+            return self.0.effective.phase_at_rate(rate, budget);
+        }
         let beta = self.0.effective.phase_at_rate(rate, budget)?;
         let mut physical = [
             beta[0].add(&self.phase().offset()[0], budget)?,
@@ -315,6 +323,23 @@ impl LcClockPhaseCover {
         initial_phase: &Rational,
         budget: &mut Budget,
     ) -> Result<Bounds, LcRelationError> {
+        if let Some(measured) = &self.0.measured {
+            let clocks = self
+                .0
+                .effective
+                .offset_at_phase(rate, initial_phase, budget)?;
+            let measured = measured.phase_at_rate(rate, budget)?;
+            let mut offset = [
+                initial_phase
+                    .add(&rate.mul(&clocks[0], budget)?, budget)?
+                    .sub(&measured[1], budget)?,
+                initial_phase
+                    .add(&rate.mul(&clocks[1], budget)?, budget)?
+                    .sub(&measured[0], budget)?,
+            ];
+            admit::intersect(&mut offset, self.phase().offset(), budget)?;
+            return Ok(offset);
+        }
         let physical = self.phase_at_rate(rate, budget)?;
         admit::contains(&physical, initial_phase, budget)?;
         let beta = self.0.effective.phase_at_rate(rate, budget)?;
@@ -336,6 +361,30 @@ impl LcClockPhaseCover {
         phase_offset: &Rational,
         budget: &mut Budget,
     ) -> Result<Bounds, LcRelationError> {
+        if let Some(measured) = &self.0.measured {
+            admit::contains(
+                &self.offset_at_phase(rate, initial_phase, budget)?,
+                phase_offset,
+                budget,
+            )?;
+            let measured = measured.phase_at_rate(rate, budget)?;
+            let mut clocks = self
+                .0
+                .effective
+                .offset_at_phase(rate, initial_phase, budget)?;
+            let image = [
+                measured[0]
+                    .add(phase_offset, budget)?
+                    .sub(initial_phase, budget)?
+                    .div(rate, budget)?,
+                measured[1]
+                    .add(phase_offset, budget)?
+                    .sub(initial_phase, budget)?
+                    .div(rate, budget)?,
+            ];
+            admit::intersect(&mut clocks, &image, budget)?;
+            return Ok(clocks);
+        }
         admit::contains(
             &self.offset_at_phase(rate, initial_phase, budget)?,
             phase_offset,
@@ -355,6 +404,19 @@ impl LcClockPhaseCover {
         parameters: &LcSharedClockPhaseParameters,
         budget: &mut Budget,
     ) -> Result<LcClockPhaseWitness, LcRelationError> {
+        if self.0.measured.is_some() {
+            let point = self
+                .0
+                .effective
+                .witness_with_phase(&parameters.physical, budget)?;
+            return witness::check(
+                self.phase(),
+                point.original().values().clone(),
+                point.offset().clone(),
+                parameters.offset.clone(),
+                budget,
+            );
+        }
         witness::parameters(self.phase(), &self.0.effective, parameters, budget)
     }
 

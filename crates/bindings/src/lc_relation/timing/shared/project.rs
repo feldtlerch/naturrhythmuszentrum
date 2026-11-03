@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Shared offset faces and uncertain sample-time faces are eliminated in one joint domain.
 
+pub(super) mod restricted;
+
 use super::{
     AT, Cover, LcRelation, LcRelationError, LcSharedTiming, LcSharedTimingCover, Rational, storage,
     witness,
@@ -16,6 +18,9 @@ pub(super) fn cover(
     pi: &PiBoundCertificate,
     budget: &mut Budget,
 ) -> Result<LcSharedTimingCover, LcRelationError> {
+    if timing.0.narrow {
+        return restricted::cover(timing, cycles, pi, budget);
+    }
     let before = budget.usage();
     budget.work(1, AT)?;
     if cycles.len() != timing.relation().observations() {
@@ -63,6 +68,7 @@ pub(super) fn cover(
     Ok(LcSharedTimingCover(Rc::new(Cover {
         timing: timing.clone(),
         effective,
+        measured: None,
         witness,
         usage: [before, budget.usage()],
         bytes,

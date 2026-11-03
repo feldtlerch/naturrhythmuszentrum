@@ -17,18 +17,27 @@ impl LcSharedTimingCover {
         let before = budget.usage();
         budget.work(1, AT)?;
         let mut reference = Rational::zero();
-        for (nominal, error) in self
-            .timing()
-            .nominal_times()
-            .iter()
-            .zip(self.timing().errors())
-        {
-            budget.work(1, AT)?;
-            let upper = nominal
-                .add(&error[1], budget)?
-                .add(&self.timing().offset()[1], budget)?;
-            if upper.compare(&reference, budget)? == Ordering::Greater {
-                reference = upper;
+        if self.0.measured.is_some() {
+            for time in self.0.effective.timing().time_boxes() {
+                budget.work(1, AT)?;
+                if time[1].compare(&reference, budget)? == Ordering::Greater {
+                    reference.clone_from(&time[1]);
+                }
+            }
+        } else {
+            for (nominal, error) in self
+                .timing()
+                .nominal_times()
+                .iter()
+                .zip(self.timing().errors())
+            {
+                budget.work(1, AT)?;
+                let upper = nominal
+                    .add(&error[1], budget)?
+                    .add(&self.timing().offset()[1], budget)?;
+                if upper.compare(&reference, budget)? == Ordering::Greater {
+                    reference = upper;
+                }
             }
         }
         let lower = self.phase_at_rate(&self.rate()[0], budget)?;

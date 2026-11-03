@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! One original question retains the correlation of shared clock and shared phase errors.
 
+mod narrow;
 mod support;
 
 use super::super::support::{TestResult, ledger};

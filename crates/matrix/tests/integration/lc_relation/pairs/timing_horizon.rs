@@ -3,6 +3,7 @@
 
 mod refinement;
 mod shared_initial;
+mod shared_narrow;
 mod support;
 
 use super::super::support::{TestResult, input, ledger, number, pi_certificate};

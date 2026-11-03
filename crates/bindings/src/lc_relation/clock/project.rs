@@ -5,19 +5,47 @@ use super::{
     AT, Cover, LcClockCover, LcClockPhaseParameters, LcInterval, LcRelation, LcRelationError,
     LcSharedClock, Rational, calibration, storage, witness,
 };
-use crate::{Budget, LcInput, LcQuantity as Q};
-use nrz_cas::pi_bounds::PiBoundCertificate;
+use crate::{Budget, LcInput, LcPairsCover, LcQuantity as Q};
+use nrz_cas::{
+    limits::BudgetUsage,
+    pi_bounds::{CheckedPiBounds, PiBoundCertificate},
+};
 use std::rc::Rc;
 
 /// Two redundant finite strip faces encode the exact shared-offset inequalities.
 pub(super) fn cover(
     clock: &LcSharedClock,
-    mut cycles: Vec<Rational>,
+    cycles: Vec<Rational>,
     pi: &PiBoundCertificate,
     budget: &mut Budget,
 ) -> Result<LcClockCover, LcRelationError> {
     let before = budget.usage();
     budget.work(1, AT)?;
+    let (relation, cycles) = prepare(clock, cycles, budget)?;
+    let effective = relation.pairs_cover(cycles, pi, budget)?;
+    finish(clock, &relation, effective, &before, budget)
+}
+
+/// Previously checked pi evidence is shared across the measured and physical strip owners.
+pub(super) fn checked(
+    clock: &LcSharedClock,
+    cycles: Vec<Rational>,
+    pi: CheckedPiBounds,
+    budget: &mut Budget,
+) -> Result<LcClockCover, LcRelationError> {
+    let before = budget.usage();
+    budget.work(1, AT)?;
+    let (relation, cycles) = prepare(clock, cycles, budget)?;
+    let effective = relation.pairs_cover_checked(cycles, pi, budget)?;
+    finish(clock, &relation, effective, &before, budget)
+}
+
+/// Original-cycle inventory and derived clock faces precede either prepared-constant route.
+fn prepare(
+    clock: &LcSharedClock,
+    mut cycles: Vec<Rational>,
+    budget: &mut Budget,
+) -> Result<(LcRelation, Vec<Rational>), LcRelationError> {
     if cycles.len() != clock.relation().observations() {
         return Err(LcRelationError::Observation);
     }
@@ -25,10 +53,20 @@ pub(super) fn cover(
     if clock.initial_phase_support().is_some() {
         cycles.extend([Rational::zero(), Rational::zero()]);
     }
-    let effective = relation.pairs_cover(cycles, pi, budget)?;
+    Ok((relation, cycles))
+}
+
+/// Both constant routes share exact physical restoration and complete retained ownership.
+fn finish(
+    clock: &LcSharedClock,
+    relation: &LcRelation,
+    effective: LcPairsCover,
+    before: &BudgetUsage,
+    budget: &mut Budget,
+) -> Result<LcClockCover, LcRelationError> {
     let rate = effective.rate()[0].clone();
     let phase = effective.phase_at_rate(&rate, budget)?;
-    let mut offset = clock.offset().clone();
+    let mut offset = clock.offset_support().clone();
     if let Some([lower, upper]) = clock.initial_phase_support() {
         let image = [
             phase[0].sub(upper, budget)?.div(&rate, budget)?,
@@ -60,7 +98,7 @@ pub(super) fn cover(
         clock: clock.clone(),
         effective,
         witness,
-        usage: [before, budget.usage()],
+        usage: [*before, budget.usage()],
         bytes,
     })))
 }
@@ -117,7 +155,7 @@ fn initial_strips(
 ) -> Result<(), LcRelationError> {
     let count = clock.relation().observations();
     let rate = &clock.0.rate;
-    let offset = clock.offset();
+    let offset = clock.offset_support();
     let low_rate = if offset[0].is_negative() {
         &rate[1]
     } else {
