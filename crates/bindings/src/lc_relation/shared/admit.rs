@@ -29,14 +29,15 @@ pub(super) fn question(
         let next = bounds(sample, budget)?;
         intersect(&mut measured, &next, budget)?;
     }
-    let image = [
+    let mut image = [
         measured[0].mul(&gain[0], budget)?,
         measured[1].mul(&gain[1], budget)?,
     ];
-    let energy = original(&phase, channel, &image, budget)?;
+    let energy = original(&phase, channel, &mut image, budget)?;
     let bytes = gain
         .iter()
         .chain(&measured)
+        .chain(&image)
         .chain(energy.iter().flatten())
         .fold(2_048_u64, |sum, value| {
             sum.saturating_add(storage::rational(value))
@@ -57,6 +58,7 @@ pub(super) fn question(
         samples,
         measured,
         gain,
+        physical: image,
         energy,
         bytes,
     })))
@@ -66,21 +68,14 @@ pub(super) fn question(
 fn original(
     phase: &LcSharedClockPhase,
     channel: Q,
-    image: &Bounds,
+    image: &mut Bounds,
     budget: &mut Budget,
 ) -> Result<Option<Bounds>, LcRelationError> {
     let mut energy = None;
     for input in phase.relation().inputs() {
         budget.work(1, AT)?;
         if input.quantity() == channel {
-            for endpoint in image {
-                if !input
-                    .interval()
-                    .contains(&endpoint.clone().into(), budget)?
-                {
-                    return Err(LcRelationError::Containment);
-                }
-            }
+            crate::lc_relation::calibration::clip_interval(image, input.interval(), budget)?;
         } else {
             match input.quantity() {
                 Q::Energy => {
@@ -97,4 +92,20 @@ fn original(
         }
     }
     Ok(energy)
+}
+
+/// One selected physical amplitude retains its conditional shared gain beside all clock/phase errors.
+pub(super) fn gain_at_amplitude(
+    amplitude: &LcSharedMeasurements,
+    value: &nrz_cas::Rational,
+    budget: &mut Budget,
+) -> Result<Bounds, LcRelationError> {
+    contains(amplitude.physical_amplitude(), value, budget)?;
+    let measured = amplitude.measured();
+    let mut range = [
+        value.div(&measured[1], budget)?,
+        value.div(&measured[0], budget)?,
+    ];
+    intersect(&mut range, amplitude.gain(), budget)?;
+    Ok(range)
 }

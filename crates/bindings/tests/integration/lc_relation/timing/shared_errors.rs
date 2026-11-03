@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Every retained shared error is checked on one original physical witness.
 
+mod narrow;
 mod support;
 
 use super::super::support::{TestResult, ledger};

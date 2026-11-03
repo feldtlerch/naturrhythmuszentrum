@@ -168,3 +168,30 @@ pub(super) fn interval(range: &Bounds, budget: &mut Budget) -> Result<LcInterval
         budget,
     )
 }
+
+/// Preserve broad exact restrictions; a narrowing endpoint must fit the rational projection fragment.
+pub(super) fn clip_interval(
+    image: &mut Bounds,
+    interval: &LcInterval,
+    budget: &mut Budget,
+) -> Result<(), LcRelationError> {
+    budget.work(1, AT)?;
+    let mut next = image.clone();
+    if let Some(lower) = interval.lower()
+        && !super::ordered(lower, &image[0].clone().into(), budget)?
+    {
+        next[0] = lower
+            .as_rational()
+            .ok_or(LcRelationError::Projection)?
+            .clone();
+    }
+    if let Some(upper) = interval.upper()
+        && !super::ordered(&image[1].clone().into(), upper, budget)?
+    {
+        next[1] = upper
+            .as_rational()
+            .ok_or(LcRelationError::Projection)?
+            .clone();
+    }
+    intersect(image, &next, budget)
+}

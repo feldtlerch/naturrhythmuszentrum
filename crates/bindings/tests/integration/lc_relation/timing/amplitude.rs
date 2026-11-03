@@ -2,6 +2,7 @@
 //! Exact amplitude controls distinguish per-measurement support from one common gain.
 
 mod energy;
+mod narrow;
 
 use super::super::support::{TestResult, ledger};
 use super::support::{cycles, input, number, pi};
@@ -183,7 +184,7 @@ fn lc_relation_amplitude_refusals_work() -> TestResult {
     use nrz_bindings::{Budget, Limits, LimitsOverride};
     let amplitude = question(Q::VoltageAmplitude, true, true, Some(["1/4", "1/4"]))?;
     for extra in [
-        input(Q::VoltageAmplitude, ["1", "1"])?,
+        input(Q::VoltageAmplitude, ["2", "3"])?,
         input(Q::Capacitance, ["1", "1"])?,
     ] {
         let mut inputs = amplitude.relation().inputs().to_vec();

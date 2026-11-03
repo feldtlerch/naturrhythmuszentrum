@@ -162,7 +162,7 @@ pub(super) fn check_physical(
     Ok(())
 }
 
-/// Unmodeled physical scales and narrower original amplitude restrictions refuse explicitly.
+/// Unmodeled physical scales and disjoint original amplitude restrictions refuse explicitly.
 pub(super) fn original_refusals() -> TestResult {
     for quantity in [
         Q::Inductance,
@@ -171,11 +171,16 @@ pub(super) fn original_refusals() -> TestResult {
         Q::CurrentAmplitude,
         Q::VoltageAmplitude,
     ] {
+        let range = if quantity == Q::VoltageAmplitude {
+            ["2", "3"]
+        } else {
+            ["1", "1"]
+        };
         let phase = source(
             Q::VoltageAmplitude,
             true,
             true,
-            vec![input(quantity, ["1", "1"])?],
+            vec![input(quantity, range)?],
         )?;
         assert!(
             LcSharedMeasurements::new(

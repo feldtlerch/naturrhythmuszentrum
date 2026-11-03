@@ -2,7 +2,8 @@
 //! Complete independent-time phase coverage composes with independent positive scale coordinates.
 
 use super::{
-    AT, Cover, LcAmplitudeCover, LcAmplitudeSamples, LcRelationError, Rational, storage, witness,
+    AT, Cover, LcAmplitudeCover, LcAmplitudeSamples, LcRelationError, Rational, admit, storage,
+    witness,
 };
 use crate::{Budget, LcQuantity as Q, LcRelation, LcSampleTimes};
 use nrz_cas::pi_bounds::PiBoundCertificate;
@@ -48,11 +49,14 @@ pub(super) fn cover(
     let energy = amplitude
         .energy()
         .map_or_else(Rational::one, |range| range[0].clone());
+    let physical = &amplitude.physical_amplitude()[0];
+    let gain = admit::gain_at_amplitude(amplitude, physical, budget)?;
+    let measured = physical.div(&gain[0], budget)?;
     let witness = witness::from_point(
         amplitude,
         effective.feasibility_witness(),
-        &amplitude.measured()[0],
-        &amplitude.gain()[0],
+        &measured,
+        &gain[0],
         &energy,
         budget,
     )?;

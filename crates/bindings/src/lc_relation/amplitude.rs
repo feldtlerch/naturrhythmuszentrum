@@ -34,6 +34,8 @@ struct Question {
     measured: Bounds,
     /// One positive multiplicative error shared by all repeated measurements.
     gain: Bounds,
+    /// Exact positive gain/sample image intersected with every original amplitude restriction.
+    physical: Bounds,
     /// Supplied finite positive energy support; absence leaves a continuous element scale.
     energy: Option<Bounds>,
     /// Conservative new exact ownership excluding original shared owners.
@@ -94,7 +96,8 @@ impl LcAmplitudeSamples {
     ///
     /// The closed adapter supports either voltage or current amplitude and optional finite
     /// positive energy intervals. Other simultaneous physical scale constraints refuse explicitly.
-    /// Each original amplitude constraint must contain the complete measurement image.
+    /// Original amplitude restrictions intersect the gain/sample image jointly; the original
+    /// measured supports and gain remain retained with their conditional fibre.
     /// # Errors
     /// Refuses unsupported constraints, empty sample intersections and exhausted resources.
     pub fn new(
@@ -141,6 +144,12 @@ impl LcAmplitudeSamples {
     #[must_use]
     pub fn gain(&self) -> &Bounds {
         &self.0.gain
+    }
+
+    /// Physical amplitude support after all original restrictions, with the gain/sample domain retained.
+    #[must_use]
+    pub fn physical_amplitude(&self) -> &Bounds {
+        &self.0.physical
     }
 
     /// Supplied finite positive energy support; absence leaves energy free and positive.
@@ -310,14 +319,7 @@ impl LcAmplitudeCover {
         value: &Rational,
         budget: &mut Budget,
     ) -> Result<Bounds, LcRelationError> {
-        admit::positive(value, budget)?;
-        let measured = self.amplitude().measured();
-        let mut range = [
-            value.div(&measured[1], budget)?,
-            value.div(&measured[0], budget)?,
-        ];
-        admit::intersect(&mut range, self.amplitude().gain(), budget)?;
-        Ok(range)
+        admit::gain_at_amplitude(self.amplitude(), value, budget)
     }
 
     /// Reconstruct every original physical coordinate from the retained joint parameters.

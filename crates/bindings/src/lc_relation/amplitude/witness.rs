@@ -67,6 +67,7 @@ pub(super) fn from_point(
         .as_rational()
         .ok_or(LcRelationError::Projection)?;
     let actual = measured.mul(gain, budget)?;
+    admit::contains(amplitude.physical_amplitude(), &actual, budget)?;
     let channel = amplitude.channel();
     values.inductance =
         scale::coordinate(channel, Q::Inductance, rate, &actual, energy, budget)?.into();

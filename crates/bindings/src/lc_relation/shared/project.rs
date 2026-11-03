@@ -2,8 +2,8 @@
 //! One original clock/phase question retains all three shared errors through positive scale restoration.
 
 use super::{
-    AT, Cover, LcRelationError, LcSharedMeasurementCover, LcSharedMeasurements, Rational, storage,
-    witness,
+    AT, Cover, LcRelationError, LcSharedMeasurementCover, LcSharedMeasurements, Rational, admit,
+    storage, witness,
 };
 use crate::{Budget, LcInterval, LcQuantity as Q, LcRelation, LcSharedClock, LcSharedClockPhase};
 use nrz_cas::pi_bounds::PiBoundCertificate;
@@ -30,11 +30,14 @@ pub(super) fn cover(
     let energy = amplitude
         .energy()
         .map_or_else(Rational::one, |range| range[0].clone());
+    let physical = &amplitude.physical_amplitude()[0];
+    let gain = admit::gain_at_amplitude(amplitude, physical, budget)?;
+    let measured = physical.div(&gain[0], budget)?;
     let witness = witness::from_point(
         amplitude,
         effective.feasibility_witness(),
-        &amplitude.measured()[0],
-        &amplitude.gain()[0],
+        &measured,
+        &gain[0],
         &energy,
         budget,
     )?;

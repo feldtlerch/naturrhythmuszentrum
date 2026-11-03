@@ -26,17 +26,6 @@ pub(super) fn bounded(
     }
 }
 
-/// Positivity makes the product endpoints exact and leaves gain/sample fibres associated.
-fn magnitude(
-    amplitude: &LcSharedMeasurements,
-    budget: &mut Budget,
-) -> Result<Bounds, LcRelationError> {
-    Ok([
-        amplitude.measured()[0].mul(&amplitude.gain()[0], budget)?,
-        amplitude.measured()[1].mul(&amplitude.gain()[1], budget)?,
-    ])
-}
-
 /// Physical projections are positive monomials, so their rational extrema occur at corners.
 pub(super) fn bounds(
     cover: &LcSharedMeasurementCover,
@@ -53,9 +42,9 @@ pub(super) fn bounds(
     if !bounded(cover.measurements(), quantity)? {
         return LcInterval::new(Some(Rational::zero().into()), None, budget);
     }
-    let magnitude = magnitude(cover.measurements(), budget)?;
+    let magnitude = cover.measurements().physical_amplitude();
     if quantity == cover.measurements().channel() {
-        return interval(magnitude, budget);
+        return interval(magnitude.clone(), budget);
     }
     let energy = cover
         .measurements()
@@ -63,7 +52,7 @@ pub(super) fn bounds(
         .ok_or(LcRelationError::Projection)?;
     let mut range: Option<Bounds> = None;
     for rate in cover.rate() {
-        for amplitude in &magnitude {
+        for amplitude in magnitude {
             for energy in energy {
                 budget.work(1, AT)?;
                 let value = coordinate(

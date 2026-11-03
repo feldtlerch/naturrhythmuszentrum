@@ -35,6 +35,8 @@ struct Question {
     measured: Bounds,
     /// One positive multiplicative error shared by all repeated measurements.
     gain: Bounds,
+    /// Physical amplitude support after intersecting every original selected-channel restriction.
+    physical: Bounds,
     /// Supplied finite positive energy support; absence leaves a continuous element scale.
     energy: Option<Bounds>,
     /// Conservative new exact ownership excluding original shared owners.
@@ -99,7 +101,8 @@ impl LcSharedMeasurements {
     ///
     /// The closed adapter supports either voltage or current amplitude and optional finite
     /// positive energy intervals. Other simultaneous physical scale constraints refuse explicitly.
-    /// Each original amplitude constraint must contain the complete measurement image.
+    /// Original amplitude restrictions intersect the gain/sample image jointly; both original
+    /// measurement coordinates remain retained with their conditional gain fibre.
     /// # Errors
     /// Refuses unsupported constraints, empty sample intersections and exhausted resources.
     pub fn new(
@@ -146,6 +149,12 @@ impl LcSharedMeasurements {
     #[must_use]
     pub fn gain(&self) -> &Bounds {
         &self.0.gain
+    }
+
+    /// Physical amplitude support after original restrictions, retaining the original gain/sample domain.
+    #[must_use]
+    pub fn physical_amplitude(&self) -> &Bounds {
+        &self.0.physical
     }
 
     /// Supplied finite positive energy support; absence leaves energy free and positive.
@@ -344,14 +353,7 @@ impl LcSharedMeasurementCover {
         value: &Rational,
         budget: &mut Budget,
     ) -> Result<Bounds, LcRelationError> {
-        admit::positive(value, budget)?;
-        let measured = self.measurements().measured();
-        let mut range = [
-            value.div(&measured[1], budget)?,
-            value.div(&measured[0], budget)?,
-        ];
-        admit::intersect(&mut range, self.measurements().gain(), budget)?;
-        Ok(range)
+        admit::gain_at_amplitude(self.measurements(), value, budget)
     }
 
     /// Reconstruct every original physical coordinate from the retained joint parameters.
