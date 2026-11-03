@@ -2,6 +2,7 @@
 //! Timing horizons retain original joint owners and an explicit future actual-time coordinate.
 
 mod refinement;
+mod shared_initial;
 mod support;
 
 use super::super::support::{TestResult, input, ledger, number, pi_certificate};

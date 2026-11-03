@@ -24,7 +24,7 @@ enum Source {
     Timing(LcTimingCover),
     /// Original physical initial phase correlated with one shared clock offset.
     Clock(LcClockCover),
-    /// Both original timing layers, with physical initial phase zero.
+    /// Both original timing layers and their physical initial-phase/offset correlation.
     SharedTiming(LcSharedTimingCover),
 }
 
@@ -158,7 +158,7 @@ impl LcHorizon {
         )
     }
 
-    /// Both original timing layers survive the known-zero actual-time horizon derivation.
+    /// Both original timing layers and physical initial phase survive actual-time horizon derivation.
     pub(super) fn shared_timing(
         source: LcSharedTimingCover,
         extrema: [[Rational; 2]; 2],

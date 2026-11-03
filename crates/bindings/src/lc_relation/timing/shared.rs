@@ -8,8 +8,8 @@ mod witness;
 
 use super::{AT, Bounds, LcRelation, LcRelationError, Rational, storage};
 use crate::{
-    Budget, LcCertainty, LcClockParameters, LcConsistency, LcDeterminacy, LcFreeDirection,
-    LcInterval, LcQuantity, LcTimingCover, LcWitness,
+    Budget, LcCertainty, LcClockParameters, LcClockPhaseParameters, LcConsistency, LcDeterminacy,
+    LcFreeDirection, LcInterval, LcQuantity, LcTimingCover, LcWitness,
 };
 use nrz_cas::{limits::BudgetUsage, pi_bounds::PiBoundCertificate};
 use std::rc::Rc;
@@ -31,6 +31,8 @@ struct Question {
     offset: Bounds,
     /// Original positive finite rate support for the exact auxiliary construction.
     rate: Bounds,
+    /// Optional original physical initial-phase intersection; absence keeps all integer gauges.
+    initial: Option<Bounds>,
     /// Conservative new exact ownership, excluding the original relation.
     bytes: u64,
 }
@@ -52,7 +54,7 @@ pub struct LcSharedTimingWitness {
 #[derive(Clone, Debug)]
 pub struct LcSharedTimingCover(Rc<Cover>);
 
-/// The auxiliary initial phase is `beta=a*offset`; physical initial phase remains zero.
+/// The auxiliary initial phase is `beta=alpha+a*offset`, retaining physical alpha separately.
 #[derive(Debug)]
 struct Cover {
     /// Original joint question, including every per-sample support.
@@ -68,7 +70,7 @@ struct Cover {
 }
 
 impl LcSharedTiming {
-    /// Admit both timing layers on a known-zero-phase relation with positive rate support.
+    /// Admit both timing layers with optional bounded physical initial phase and positive rate support.
     ///
     /// Each original time constraint must contain the full nominal-plus-error-plus-offset
     /// image. Narrower coupled restrictions require another adapter and are never dropped.
@@ -88,12 +90,13 @@ impl LcSharedTiming {
             .iter()
             .map(|error| super::admit::bounds(error, budget))
             .collect::<Result<Vec<_>, _>>()?;
-        let rate = admit::question(&relation, &nominal, &errors, &offset, budget)?;
+        let premises = admit::question(&relation, &nominal, &errors, &offset, budget)?;
         let bytes = nominal
             .iter()
             .chain(errors.iter().flatten())
             .chain(&offset)
-            .chain(&rate)
+            .chain(&premises.rate)
+            .chain(premises.initial.iter().flatten())
             .fold(2_048_u64, |sum, value| {
                 sum.saturating_add(storage::rational(value))
             });
@@ -106,7 +109,8 @@ impl LcSharedTiming {
             nominal,
             errors,
             offset,
-            rate,
+            rate: premises.rate,
+            initial: premises.initial,
             bytes,
         })))
     }
@@ -133,6 +137,12 @@ impl LcSharedTiming {
     #[must_use]
     pub fn offset(&self) -> &Bounds {
         &self.0.offset
+    }
+
+    /// Original bounded physical initial phase; absence retains every common integer gauge.
+    #[must_use]
+    pub fn initial_phase_support(&self) -> Option<&Bounds> {
+        self.0.initial.as_ref()
     }
 
     /// Exact original joint question identity.
@@ -233,6 +243,10 @@ impl LcSharedTimingCover {
     /// # Errors
     /// Refuses quantities outside the retained physical scale projection.
     pub fn determinacy(&self, quantity: LcQuantity) -> Result<LcDeterminacy, LcRelationError> {
+        if quantity == LcQuantity::InitialPhase {
+            self.fixed_initial()?;
+            return Ok(LcDeterminacy::DeterminedFinite);
+        }
         self.0.effective.determinacy(quantity)
     }
 
@@ -243,6 +257,10 @@ impl LcSharedTimingCover {
         &self,
         quantity: LcQuantity,
     ) -> Result<&'static [LcFreeDirection], LcRelationError> {
+        if quantity == LcQuantity::InitialPhase {
+            self.fixed_initial()?;
+            return Ok(&[]);
+        }
         self.0.effective.free_directions(quantity)
     }
 
@@ -254,11 +272,24 @@ impl LcSharedTimingCover {
         quantity: LcQuantity,
         budget: &mut Budget,
     ) -> Result<LcInterval, LcRelationError> {
+        budget.work(1, AT)?;
         if quantity == LcQuantity::InitialPhase {
-            LcInterval::exact(crate::ExactConstant::zero(), budget)
+            LcInterval::exact(self.fixed_initial()?.clone().into(), budget)
         } else {
             self.0.effective.bounds(quantity, budget)
         }
+    }
+
+    /// Scalar initial phase is published only for an exact original physical declaration.
+    fn fixed_initial(&self) -> Result<&Rational, LcRelationError> {
+        let initial = self
+            .timing()
+            .initial_phase_support()
+            .ok_or(LcRelationError::Projection)?;
+        if initial[0] != initial[1] {
+            return Err(LcRelationError::Projection);
+        }
+        Ok(&initial[0])
     }
 
     /// Original physical consistency is backed by the joint-equation witness.
@@ -276,7 +307,76 @@ impl LcSharedTimingCover {
         budget: &mut Budget,
     ) -> Result<Bounds, LcRelationError> {
         let phase = self.0.effective.phase_at_rate(rate, budget)?;
-        Ok([phase[0].div(rate, budget)?, phase[1].div(rate, budget)?])
+        let mut offset = self.timing().offset().clone();
+        if let Some([lower, upper]) = self.timing().initial_phase_support() {
+            let image = [
+                phase[0].sub(upper, budget)?.div(rate, budget)?,
+                phase[1].sub(lower, budget)?.div(rate, budget)?,
+            ];
+            crate::lc_relation::calibration::intersect(&mut offset, &image, budget)?;
+        }
+        Ok(offset)
+    }
+
+    /// Complete common integer gauge of the original physical initial phase.
+    #[must_use]
+    pub fn phase_gauge(&self) -> crate::LcPhaseGauge {
+        self.0.effective.phase_gauge()
+    }
+
+    /// Local physical initial-phase fibre at a rate, before the retained common integer gauge.
+    /// # Errors
+    /// Refuses out-of-domain rates and exhausted exact arithmetic.
+    pub fn phase_at_rate(
+        &self,
+        rate: &Rational,
+        budget: &mut Budget,
+    ) -> Result<[Rational; 2], LcRelationError> {
+        let beta = self.0.effective.phase_at_rate(rate, budget)?;
+        let mut phase = [
+            beta[0].sub(&rate.mul(&self.timing().offset()[1], budget)?, budget)?,
+            beta[1].sub(&rate.mul(&self.timing().offset()[0], budget)?, budget)?,
+        ];
+        if let Some(initial) = self.timing().initial_phase_support() {
+            crate::lc_relation::calibration::intersect(&mut phase, initial, budget)?;
+        }
+        Ok(phase)
+    }
+
+    /// Clock-offset fibre at a selected rate and local physical initial phase.
+    /// # Errors
+    /// Refuses crossed phase/rate/offset marginals and exhausted resources.
+    pub fn offset_at_phase(
+        &self,
+        rate: &Rational,
+        phase: &Rational,
+        budget: &mut Budget,
+    ) -> Result<[Rational; 2], LcRelationError> {
+        budget.work(1, AT)?;
+        phase.check(budget, AT)?;
+        let mut selected = [phase.clone(), phase.clone()];
+        if let Some(initial) = self.timing().initial_phase_support() {
+            crate::lc_relation::calibration::intersect(&mut selected, initial, budget)?;
+        }
+        let beta = self.0.effective.phase_at_rate(rate, budget)?;
+        let mut offset = self.timing().offset().clone();
+        let image = [
+            beta[0].sub(phase, budget)?.div(rate, budget)?,
+            beta[1].sub(phase, budget)?.div(rate, budget)?,
+        ];
+        crate::lc_relation::calibration::intersect(&mut offset, &image, budget)?;
+        Ok(offset)
+    }
+
+    /// Reconstruct physical initial phase and clock offset together, with every original gauge.
+    /// # Errors
+    /// Refuses crossed joint coordinates, original violations and exhausted resources.
+    pub fn witness_with_phase(
+        &self,
+        parameters: &LcClockPhaseParameters,
+        budget: &mut Budget,
+    ) -> Result<LcSharedTimingWitness, LcRelationError> {
+        witness::with_phase(self.timing(), &self.0.effective, parameters, budget)
     }
 
     /// Restore physical zero initial phase, every timestamp and both uncertainty layers.

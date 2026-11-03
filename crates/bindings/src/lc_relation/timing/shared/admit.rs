@@ -5,6 +5,15 @@ use super::{AT, Bounds, LcRelation, LcRelationError, Rational, storage};
 use crate::{Budget, LcInterval, LcQuantity as Q};
 use std::cmp::Ordering;
 
+/// Original rate and optional physical phase intersections, kept beside the clock domain.
+#[derive(Debug)]
+pub(super) struct Premises {
+    /// Positive finite rate support.
+    pub(super) rate: Bounds,
+    /// Original finite physical phase support; absent for the complete common gauge.
+    pub(super) initial: Option<Bounds>,
+}
+
 /// No timestamp or physical phase restriction may disappear from the auxiliary coordinates.
 pub(super) fn question(
     relation: &LcRelation,
@@ -12,7 +21,7 @@ pub(super) fn question(
     errors: &[Bounds],
     offset: &Bounds,
     budget: &mut Budget,
-) -> Result<Bounds, LcRelationError> {
+) -> Result<Premises, LcRelationError> {
     budget.work(1, AT)?;
     let same_count = nominal.len() == relation.observations();
     let all_errors = errors.len() == nominal.len();
@@ -54,14 +63,13 @@ pub(super) fn question(
         }
     }
     let rate = rate.ok_or(LcRelationError::Projection)?;
-    let phase = phase.ok_or(LcRelationError::Projection)?;
     if rate[0].is_zero() || rate[0].is_negative() {
         return Err(LcRelationError::Positivity);
     }
-    if !phase[0].is_zero() || !phase[1].is_zero() {
-        return Err(LcRelationError::Projection);
-    }
-    Ok(rate)
+    Ok(Premises {
+        rate,
+        initial: phase,
+    })
 }
 
 /// Repeated original bounds intersect; later declarations never overwrite a restriction.

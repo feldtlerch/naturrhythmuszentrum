@@ -10,6 +10,7 @@ mod exact;
 mod phase;
 mod shared;
 mod shared_errors;
+mod shared_initial;
 mod support;
 
 use super::support::{TestResult, ledger};

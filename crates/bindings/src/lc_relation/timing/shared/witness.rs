@@ -5,7 +5,7 @@ use super::{
     AT, LcClockParameters, LcRelationError, LcSharedTiming, LcSharedTimingWitness, LcTimingCover,
     Rational, storage,
 };
-use crate::{Budget, ExactConstant, LcPairParameters, LcValues};
+use crate::{Budget, ExactConstant, LcClockPhaseParameters, LcPairParameters, LcValues};
 use std::cmp::Ordering;
 
 /// Original membership alone is insufficient for the additional joint timing model.
@@ -63,15 +63,35 @@ pub(super) fn parameters(
     parameters: &LcClockParameters,
     budget: &mut Budget,
 ) -> Result<LcSharedTimingWitness, LcRelationError> {
+    let parameters = LcClockPhaseParameters {
+        rate: parameters.rate.clone(),
+        initial_phase: Rational::zero(),
+        gauge: Rational::zero(),
+        offset: parameters.offset.clone(),
+        ratio: parameters.ratio.clone(),
+        voltage: parameters.voltage.clone(),
+    };
+    with_phase(timing, effective, &parameters, budget)
+}
+
+/// Both original physical alpha and one shared offset are selected from their joint fibre.
+pub(super) fn with_phase(
+    timing: &LcSharedTiming,
+    effective: &LcTimingCover,
+    parameters: &LcClockPhaseParameters,
+    budget: &mut Budget,
+) -> Result<LcSharedTimingWitness, LcRelationError> {
     budget.work(1, AT)?;
-    let beta = parameters.rate.mul(&parameters.offset, budget)?;
+    let beta = parameters
+        .initial_phase
+        .add(&parameters.rate.mul(&parameters.offset, budget)?, budget)?;
     let point = effective.witness(
         &LcPairParameters {
             rate: parameters.rate.clone(),
             initial_phase: beta,
             ratio: parameters.ratio.clone(),
             voltage: parameters.voltage.clone(),
-            gauge: Rational::zero(),
+            gauge: parameters.gauge.clone(),
         },
         budget,
     )?;
@@ -87,7 +107,14 @@ pub(super) fn from_point(
 ) -> Result<LcSharedTimingWitness, LcRelationError> {
     budget.work(1, AT)?;
     let mut values = point.values().clone();
-    values.initial_phase = Some(ExactConstant::zero());
+    let shift = values.rate.mul(&offset.clone().into(), budget)?;
+    values.initial_phase = Some(
+        values
+            .initial_phase
+            .as_ref()
+            .ok_or(LcRelationError::Projection)?
+            .sub(&shift, budget)?,
+    );
     values
         .observations
         .truncate(timing.relation().observations());

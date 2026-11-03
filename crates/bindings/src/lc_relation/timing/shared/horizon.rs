@@ -8,9 +8,9 @@ use std::cmp::Ordering;
 impl LcSharedTimingCover {
     /// Derive a future actual-time horizon with the original shared offset and independent errors.
     ///
-    /// Physical initial phase is exactly zero in this adapter. After every admitted actual
-    /// observation time, the width is `(a_max-a_min)*t`. A reported future reading would
-    /// need a different query retaining its correlation with the same clock offset.
+    /// Physical initial-phase fibres retain `alpha=beta-a*offset`. After every admitted actual
+    /// observation time, both future extremizers occur at rate endpoints. A reported future
+    /// reading needs a separate query retaining its correlation with the same clock offset.
     /// # Errors
     /// Refuses exhausted resources while retaining the original two-layer timing owner.
     pub fn forward_horizon(&self, budget: &mut Budget) -> Result<LcHorizon, LcRelationError> {
@@ -31,9 +31,11 @@ impl LcSharedTimingCover {
                 reference = upper;
             }
         }
+        let lower = self.phase_at_rate(&self.rate()[0], budget)?;
+        let upper = self.phase_at_rate(&self.rate()[1], budget)?;
         let extrema = [
-            [Rational::zero(), self.rate()[0].clone()],
-            [Rational::zero(), self.rate()[1].clone()],
+            [lower[0].clone(), self.rate()[0].clone()],
+            [upper[1].clone(), self.rate()[1].clone()],
         ];
         LcHorizon::shared_timing(
             self.clone(),
