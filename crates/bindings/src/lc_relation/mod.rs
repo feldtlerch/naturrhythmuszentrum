@@ -14,7 +14,9 @@ mod clock_phase;
 mod element;
 pub use element::{LcElementCover, LcElementParameters, LcElementSamples, LcElementWitness};
 mod energy;
+mod energy_only;
 pub use energy::{LcEnergyCover, LcEnergySamples, LcEnergyWitness};
+pub use energy_only::{LcEnergyOnlyCover, LcEnergyOnlyParameters};
 mod forward;
 pub use capacitance::{LcCapacitanceCover, LcCapacitanceParameters};
 pub use clock::{
