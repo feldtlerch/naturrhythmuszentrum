@@ -17,7 +17,10 @@ pub use element::{LcElementCover, LcElementParameters, LcElementSamples, LcEleme
 mod energy;
 mod energy_only;
 pub use energy::{LcEnergyCover, LcEnergySamples, LcEnergyWitness};
-pub use energy_only::{LcEnergyOnlyCover, LcEnergyOnlyParameters};
+pub use energy_only::{
+    LcEnergyOnlyCalibrationCover, LcEnergyOnlyCover, LcEnergyOnlyParameters, LcEnergyOnlySamples,
+    LcEnergyOnlyWitness,
+};
 mod forward;
 pub use capacitance::{LcCapacitanceCover, LcCapacitanceParameters};
 pub use clock::{

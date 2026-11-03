@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Energy-only original questions retain free physical scales and exact timing fibres.
 
+mod calibrated;
+
 use super::super::support::{TestResult, ledger};
 use super::support::{cycles, input, number, pi};
 use nrz_bindings::{

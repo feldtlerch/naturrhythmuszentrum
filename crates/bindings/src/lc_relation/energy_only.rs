@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Positive original energy intervals retain one free voltage coordinate without a measurement.
 
+mod calibrated;
 mod prepare;
+pub use calibrated::{LcEnergyOnlyCalibrationCover, LcEnergyOnlySamples, LcEnergyOnlyWitness};
 
 use super::{
     AT, LcCertainty, LcConsistency, LcDeterminacy, LcFreeDirection, LcInterval, LcPairParameters,
@@ -216,6 +218,17 @@ impl LcEnergyOnlyCover {
         parameters: &LcEnergyOnlyParameters,
         budget: &mut Budget,
     ) -> Result<LcWitness, LcRelationError> {
+        let values = self.candidate(parameters, budget)?;
+        self.relation().check_witness(values, budget)
+    }
+
+    /// Restore an unsealed candidate for a retaining owner to check against its complete originals.
+    /// This avoids publishing and checking an intermediate physical tuple on an auxiliary relation.
+    pub(super) fn candidate(
+        &self,
+        parameters: &LcEnergyOnlyParameters,
+        budget: &mut Budget,
+    ) -> Result<crate::LcValues, LcRelationError> {
         budget.work(1, AT)?;
         calibration::contains(self.energy(), &parameters.energy, budget)?;
         calibration::positive(&parameters.voltage, budget)?;
@@ -227,13 +240,7 @@ impl LcEnergyOnlyCover {
             voltage: Rational::one(),
         };
         let point = self.0.effective.witness(&phase, budget)?;
-        restore(
-            self.timing(),
-            &point,
-            &parameters.energy,
-            &parameters.voltage,
-            budget,
-        )
+        restore_values(&point, &parameters.energy, &parameters.voltage, budget)
     }
 
     /// Full original tuple, never the auxiliary timing witness.
@@ -263,6 +270,17 @@ fn restore(
     voltage: &Rational,
     budget: &mut Budget,
 ) -> Result<LcWitness, LcRelationError> {
+    let values = restore_values(point, energy, voltage, budget)?;
+    timing.relation().check_witness(values, budget)
+}
+
+/// The scale map produces a candidate only; its caller must recheck the final original relation.
+fn restore_values(
+    point: &LcWitness,
+    energy: &Rational,
+    voltage: &Rational,
+    budget: &mut Budget,
+) -> Result<crate::LcValues, LcRelationError> {
     budget.work(1, AT)?;
     calibration::positive(energy, budget)?;
     calibration::positive(voltage, budget)?;
@@ -301,5 +319,5 @@ fn restore(
     .into();
     values.voltage = voltage.clone().into();
     values.energy = energy.clone().into();
-    timing.relation().check_witness(values, budget)
+    Ok(values)
 }
