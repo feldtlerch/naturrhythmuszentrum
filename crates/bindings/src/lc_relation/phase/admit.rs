@@ -6,7 +6,7 @@ use crate::{Budget, ExactConstant, LcQuantity as Q};
 use std::cmp::Ordering;
 
 /// Finite rational calibration coordinates retain exact arithmetic and caller resources.
-pub(super) fn bounds(
+pub(in crate::lc_relation) fn bounds(
     interval: &LcInterval,
     budget: &mut Budget,
 ) -> Result<Bounds, LcRelationError> {
@@ -25,7 +25,7 @@ pub(super) fn bounds(
 }
 
 /// Original total phase restrictions must contain the complete declared measurement image.
-pub(super) fn question(
+pub(in crate::lc_relation) fn question(
     relation: &LcRelation,
     samples: &[LcInterval],
     offset: &Bounds,
@@ -88,7 +88,7 @@ fn image(
 }
 
 /// Joint calibration fibres retain exact intersections, including repeated declarations.
-pub(super) fn intersect(
+pub(in crate::lc_relation) fn intersect(
     left: &mut Bounds,
     right: &Bounds,
     budget: &mut Budget,
@@ -106,7 +106,7 @@ pub(super) fn intersect(
 }
 
 /// Membership is a checked constraint, not an inference from coincident marginal centers.
-pub(super) fn contains(
+pub(in crate::lc_relation) fn contains(
     range: &Bounds,
     value: &Rational,
     budget: &mut Budget,

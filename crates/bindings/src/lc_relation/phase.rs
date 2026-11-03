@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Independent phase intervals and one systematic phase offset retain a common physical question.
 
-mod admit;
+pub(super) mod admit;
 mod project;
 mod witness;
 

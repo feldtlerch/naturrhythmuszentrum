@@ -10,6 +10,7 @@ pub use attempt::{LcBranchObligation, LcPairAttempt, LcUnresolvedBranches};
 mod calibration;
 mod capacitance;
 mod clock;
+mod clock_phase;
 mod element;
 pub use element::{LcElementCover, LcElementParameters, LcElementSamples, LcElementWitness};
 mod energy;
@@ -18,6 +19,9 @@ mod forward;
 pub use capacitance::{LcCapacitanceCover, LcCapacitanceParameters};
 pub use clock::{
     LcClockCover, LcClockParameters, LcClockPhaseParameters, LcClockWitness, LcSharedClock,
+};
+pub use clock_phase::{
+    LcClockPhaseCover, LcClockPhaseWitness, LcSharedClockPhase, LcSharedClockPhaseParameters,
 };
 mod horizon;
 mod impossible;

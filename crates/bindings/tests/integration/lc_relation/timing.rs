@@ -3,6 +3,7 @@
 
 mod amplitude;
 mod clock_initial;
+mod clock_phase;
 mod element;
 mod exact;
 mod phase;
