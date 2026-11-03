@@ -10,6 +10,8 @@ pub use attempt::{LcBranchObligation, LcPairAttempt, LcUnresolvedBranches};
 mod calibration;
 mod capacitance;
 mod clock;
+mod element;
+pub use element::{LcElementCover, LcElementParameters, LcElementSamples, LcElementWitness};
 mod energy;
 pub use energy::{LcEnergyCover, LcEnergySamples, LcEnergyWitness};
 mod forward;
