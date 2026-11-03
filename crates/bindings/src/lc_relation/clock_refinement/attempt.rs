@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Exhausted solving retains the old certified clock cover, horizon and complete refined input question.
 
+mod impossible;
+
 use super::{AT, Cover, LcClockRefinementInputs, LcRelationError, check, storage};
-use crate::{Budget, LcClockCover, LcHorizon, LcSharedTimingCover, LcTimingCover};
+use crate::{Budget, LcClockCover, LcHorizon, LcImpossible, LcSharedTimingCover, LcTimingCover};
 use nrz_cas::{Rational, limits::BudgetUsage};
 
 /// A complete nonempty refinement with explicit rate/product inclusion and no-earlier horizon evidence.
@@ -23,6 +25,8 @@ pub struct LcClockRefinementSuccess {
 pub enum LcClockRefinementState {
     /// Complete nonempty refinement with checked physical and horizon monotonicity.
     Refined(Box<LcClockRefinementSuccess>),
+    /// A separate all-cycle contradiction proves the complete refined original physical relation empty.
+    Impossible(Box<LcImpossible>),
     /// Solving or subsequent checking refused; previous evidence and all new inputs survive.
     Undecided(LcRelationError),
 }
@@ -173,7 +177,7 @@ impl LcClockRefinement {
     pub fn proposed_cycles(&self) -> &[Rational] {
         &self.proposed_cycles
     }
-    /// Explicit refined or unresolved standing.
+    /// Explicit refined, separately certified impossible or unresolved standing.
     #[must_use]
     pub const fn state(&self) -> &LcClockRefinementState {
         &self.state
@@ -183,7 +187,7 @@ impl LcClockRefinement {
     pub const fn refined_horizon(&self) -> Option<&LcHorizon> {
         match &self.state {
             LcClockRefinementState::Refined(success) => Some(&success.horizon),
-            LcClockRefinementState::Undecided(_) => None,
+            LcClockRefinementState::Impossible(_) | LcClockRefinementState::Undecided(_) => None,
         }
     }
     /// Exact before/after solver snapshots, including an exhausted solver's consumed work.
