@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-//! Positive inductance maps preserve rate/phase fibres and the original calibration.
+//! Positive element maps preserve rate/phase fibres and the original calibration.
 
 use super::{
     AT, Cover, LcElementCover, LcElementParameters, LcElementSamples, LcElementWitness, LcInterval,
@@ -63,7 +63,7 @@ pub(super) fn cover(
     })))
 }
 
-/// Positive rate and inductance give `R=a*L`; the original physical tuple is checked afresh.
+/// Positive rate gives `R=a*L` or `R=1/(a*C)`; the original tuple is checked afresh.
 pub(super) fn witness(
     element: &LcElementSamples,
     effective: &LcTimingCover,
@@ -77,7 +77,12 @@ pub(super) fn witness(
         &parameters.calibration,
         budget,
     )?;
-    let ratio = parameters.rate.mul(&parameters.element, budget)?;
+    let product = parameters.rate.mul(&parameters.element, budget)?;
+    let ratio = if element.element() == Q::Inductance {
+        product
+    } else {
+        Rational::one().div(&product, budget)?
+    };
     let point = effective.witness(
         &LcPairParameters {
             rate: parameters.rate.clone(),
@@ -95,7 +100,7 @@ pub(super) fn witness(
     )
 }
 
-/// Monotone positive maps attain exact extrema on the retained rate/inductance rectangle.
+/// Monotone positive maps attain exact extrema on the retained rate/element rectangle.
 pub(super) fn bounds(
     cover: &LcElementCover,
     quantity: Q,
@@ -103,9 +108,11 @@ pub(super) fn bounds(
 ) -> Result<LcInterval, LcRelationError> {
     budget.work(1, AT)?;
     let element = cover.element().values();
+    if quantity == cover.element().element() {
+        return calibration::interval(element, budget);
+    }
     let range = match quantity {
-        Q::Inductance => element.clone(),
-        Q::Capacitance => [
+        Q::Inductance | Q::Capacitance => [
             Rational::one().div(
                 &cover.rate()[1].pow(2, budget)?.mul(&element[1], budget)?,
                 budget,
@@ -115,10 +122,20 @@ pub(super) fn bounds(
                 budget,
             )?,
         ],
-        Q::AmplitudeRatio => [
-            cover.rate()[0].mul(&element[0], budget)?,
-            cover.rate()[1].mul(&element[1], budget)?,
-        ],
+        Q::AmplitudeRatio => {
+            let product = [
+                cover.rate()[0].mul(&element[0], budget)?,
+                cover.rate()[1].mul(&element[1], budget)?,
+            ];
+            if cover.element().element() == Q::Inductance {
+                product
+            } else {
+                [
+                    Rational::one().div(&product[1], budget)?,
+                    Rational::one().div(&product[0], budget)?,
+                ]
+            }
+        }
         Q::VoltageAmplitude | Q::CurrentAmplitude | Q::Energy => {
             return LcInterval::new(Some(Rational::zero().into()), None, budget);
         }

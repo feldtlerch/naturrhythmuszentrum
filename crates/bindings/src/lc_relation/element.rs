@@ -24,7 +24,7 @@ pub struct LcElementSamples(Rc<Question>);
 struct Question {
     /// Original equations, observation inventory and independent timestamp supports.
     timing: LcSampleTimes,
-    /// Measured physical element; this increment admits inductance.
+    /// Measured physical element; inductance and capacitance have separate calibration owners.
     element: Q,
     /// Every repeated reading interval and its single shared positive calibration.
     calibration: Calibration,
@@ -84,9 +84,9 @@ struct Cover {
 }
 
 impl LcElementSamples {
-    /// Admit repeated positive inductance readings with one positive shared calibration.
+    /// Admit repeated positive readings of one element with one positive shared calibration.
     ///
-    /// Physical inductance equals `calibration*reading` for every sample. Original inductance
+    /// The physical element equals `calibration*reading` for every sample. Original element
     /// restrictions intersect jointly; other simultaneous physical scales refuse this adapter.
     /// Independent timestamp uncertainty and unknown physical initial phase remain supported.
     /// # Errors
@@ -99,7 +99,7 @@ impl LcElementSamples {
         budget: &mut Budget,
     ) -> Result<Self, LcRelationError> {
         budget.work(1, AT)?;
-        if element != Q::Inductance {
+        if !matches!(element, Q::Inductance | Q::Capacitance) {
             return Err(LcRelationError::Projection);
         }
         let calibration = Calibration::new(samples, gain, budget)?;
@@ -205,9 +205,12 @@ impl LcElementSamples {
     ) -> Result<LcElementWitness, LcRelationError> {
         let before = budget.usage();
         budget.work(1, AT)?;
-        self.0
-            .calibration
-            .check(&values.inductance, &calibration, budget)?;
+        let value = if self.element() == Q::Inductance {
+            &values.inductance
+        } else {
+            &values.capacitance
+        };
+        self.0.calibration.check(value, &calibration, budget)?;
         let original = self.relation().check_witness(values, budget)?;
         let bytes = self
             .retained_payload_bytes()

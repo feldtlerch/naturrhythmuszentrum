@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Inductance calibration controls retain all physical equations and original timing uncertainty.
 
+mod capacitance;
 mod support;
 
 use super::super::support::{TestResult, ledger};
