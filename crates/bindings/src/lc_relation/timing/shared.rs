@@ -79,6 +79,16 @@ struct Cover {
 }
 
 impl LcSharedTiming {
+    /// Reuse the original prepared circle evidence while solving a retained refined question.
+    pub(in crate::lc_relation) fn pairs_cover_checked(
+        &self,
+        cycles: Vec<Rational>,
+        pi: nrz_cas::pi_bounds::CheckedPiBounds,
+        budget: &mut Budget,
+    ) -> Result<LcSharedTimingCover, LcRelationError> {
+        project::checked(self, cycles, pi, budget)
+    }
+
     /// Admit both timing layers with optional bounded physical initial phase and positive rate support.
     ///
     /// Each original time constraint intersects the two-layer image while one common offset
@@ -235,6 +245,12 @@ impl LcSharedTimingWitness {
 }
 
 impl LcSharedTimingCover {
+    /// Whether two handles retain the exact same certified cover allocation.
+    #[must_use]
+    pub fn shares_allocation(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+
     /// Original joint timing owner.
     #[must_use]
     pub fn timing(&self) -> &LcSharedTiming {

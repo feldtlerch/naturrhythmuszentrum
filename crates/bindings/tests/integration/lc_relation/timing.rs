@@ -4,6 +4,7 @@
 mod amplitude;
 mod clock_initial;
 mod clock_phase;
+mod clock_refinement;
 mod element;
 mod energy_only;
 mod exact;

@@ -11,6 +11,7 @@ mod calibration;
 mod capacitance;
 mod clock;
 mod clock_phase;
+mod clock_refinement;
 mod element;
 pub use element::{LcElementCover, LcElementParameters, LcElementSamples, LcElementWitness};
 mod energy;
@@ -24,6 +25,9 @@ pub use clock::{
 };
 pub use clock_phase::{
     LcClockPhaseCover, LcClockPhaseWitness, LcSharedClockPhase, LcSharedClockPhaseParameters,
+};
+pub use clock_refinement::{
+    LcClockRefinement, LcClockRefinementInputs, LcClockRefinementState, LcClockRefinementSuccess,
 };
 mod horizon;
 mod impossible;

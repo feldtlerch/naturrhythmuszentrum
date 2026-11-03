@@ -8,13 +8,16 @@ use super::{
     witness,
 };
 use crate::{Budget, LcInput, LcQuantity as Q, LcSampleTimes};
-use nrz_cas::pi_bounds::PiBoundCertificate;
+use nrz_cas::{
+    limits::BudgetUsage,
+    pi_bounds::{CheckedPiBounds, PiBoundCertificate},
+};
 use std::rc::Rc;
 
 /// Exact timing elimination retains `beta=alpha+a*offset` and every independent sample error.
 pub(super) fn cover(
     timing: &LcSharedTiming,
-    mut cycles: Vec<Rational>,
+    cycles: Vec<Rational>,
     pi: &PiBoundCertificate,
     budget: &mut Budget,
 ) -> Result<LcSharedTimingCover, LcRelationError> {
@@ -23,6 +26,34 @@ pub(super) fn cover(
     }
     let before = budget.usage();
     budget.work(1, AT)?;
+    let (independent, cycles) = prepare(timing, cycles, budget)?;
+    let effective = independent.pairs_cover(cycles, pi, budget)?;
+    finish(timing, effective, &before, budget)
+}
+
+/// Refined questions reuse prepared pi evidence without changing the original complete-cycle proof.
+pub(super) fn checked(
+    timing: &LcSharedTiming,
+    cycles: Vec<Rational>,
+    pi: CheckedPiBounds,
+    budget: &mut Budget,
+) -> Result<LcSharedTimingCover, LcRelationError> {
+    if timing.0.narrow {
+        return restricted::checked(timing, cycles, pi, budget);
+    }
+    let before = budget.usage();
+    budget.work(1, AT)?;
+    let (independent, cycles) = prepare(timing, cycles, budget)?;
+    let effective = independent.pairs_cover_checked(cycles, pi, budget)?;
+    finish(timing, effective, &before, budget)
+}
+
+/// Preserve the original auxiliary faces and nominal-coordinate associations.
+fn prepare(
+    timing: &LcSharedTiming,
+    mut cycles: Vec<Rational>,
+    budget: &mut Budget,
+) -> Result<(LcSampleTimes, Vec<Rational>), LcRelationError> {
     if cycles.len() != timing.relation().observations() {
         return Err(LcRelationError::Observation);
     }
@@ -35,7 +66,16 @@ pub(super) fn cover(
         cycles.extend([Rational::zero(), Rational::zero()]);
     }
     let independent = LcSampleTimes::new(relation, nominal, budget)?;
-    let effective = independent.pairs_cover(cycles, pi, budget)?;
+    Ok((independent, cycles))
+}
+
+/// Restore the original shared-error witness from the complete effective family.
+fn finish(
+    timing: &LcSharedTiming,
+    effective: crate::LcTimingCover,
+    before: &BudgetUsage,
+    budget: &mut Budget,
+) -> Result<LcSharedTimingCover, LcRelationError> {
     let point = effective.feasibility_witness();
     let rate = point
         .values()
@@ -70,7 +110,7 @@ pub(super) fn cover(
         effective,
         measured: None,
         witness,
-        usage: [before, budget.usage()],
+        usage: [*before, budget.usage()],
         bytes,
     })))
 }

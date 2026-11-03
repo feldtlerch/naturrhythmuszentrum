@@ -9,7 +9,10 @@ use super::super::{
 };
 use crate::lc_relation::calibration;
 use crate::{Budget, LcClockPhaseParameters, LcPairParameters, LcTimingCover};
-use nrz_cas::pi_bounds::PiBoundCertificate;
+use nrz_cas::{
+    limits::BudgetUsage,
+    pi_bounds::{CheckedPiBounds, PiBoundCertificate},
+};
 use std::rc::Rc;
 
 /// Nonempty effective intercept strips and exact physical intersections give one shared-offset fibre.
@@ -20,6 +23,27 @@ pub(super) fn cover(
     budget: &mut Budget,
 ) -> Result<LcSharedTimingCover, LcRelationError> {
     let before = budget.usage();
+    preflight(timing, budget)?;
+    let measured = source::measured(timing, budget)?.pairs_cover(cycles.clone(), pi, budget)?;
+    finish(timing, cycles, measured, &before, budget)
+}
+
+/// Reuse previous circle evidence in both complete strip owners of the refined question.
+pub(super) fn checked(
+    timing: &LcSharedTiming,
+    cycles: Vec<Rational>,
+    pi: CheckedPiBounds,
+    budget: &mut Budget,
+) -> Result<LcSharedTimingCover, LcRelationError> {
+    let before = budget.usage();
+    preflight(timing, budget)?;
+    let measured =
+        source::measured(timing, budget)?.pairs_cover_checked(cycles.clone(), pi, budget)?;
+    finish(timing, cycles, measured, &before, budget)
+}
+
+/// Reserve storage for both complete original strip descriptions before solving.
+fn preflight(timing: &LcSharedTiming, budget: &mut Budget) -> Result<(), LcRelationError> {
     budget.work(1, AT)?;
     storage::retained(
         timing
@@ -30,7 +54,17 @@ pub(super) fn cover(
             .saturating_add(32_768),
         budget,
     )?;
-    let measured = source::measured(timing, budget)?.pairs_cover(cycles.clone(), pi, budget)?;
+    Ok(())
+}
+
+/// Conditional restoration retains one shared offset and all narrowed original time inputs.
+fn finish(
+    timing: &LcSharedTiming,
+    cycles: Vec<Rational>,
+    measured: LcTimingCover,
+    before: &BudgetUsage,
+    budget: &mut Budget,
+) -> Result<LcSharedTimingCover, LcRelationError> {
     let effective = source::physical(timing, measured.rate(), budget)?.pairs_cover_checked(
         cycles,
         measured.pi_bounds().clone(),
@@ -68,7 +102,7 @@ pub(super) fn cover(
         effective,
         measured: Some(measured),
         witness,
-        usage: [before, budget.usage()],
+        usage: [*before, budget.usage()],
         bytes,
     })))
 }

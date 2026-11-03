@@ -258,6 +258,12 @@ impl LcClockWitness {
 }
 
 impl LcClockCover {
+    /// Whether two handles retain the exact same certified cover allocation.
+    #[must_use]
+    pub fn shares_allocation(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+
     /// Complete original joint question, with its unchanged physical epoch.
     #[must_use]
     pub fn clock(&self) -> &LcSharedClock {
