@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Repeated positive energy intervals remain one physical energy coordinate beside amplitude gain.
 
+mod calibrated;
+
 use super::{
     TestResult, assert_bounds, cycles, input, interval, ledger, number, parameters, pi, question,
 };

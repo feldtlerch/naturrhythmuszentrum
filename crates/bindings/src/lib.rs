@@ -100,14 +100,14 @@ pub use lc_relation::{
     LcAliasCover, LcAliasLattice, LcAliasWitness, LcAmplitudeCover, LcAmplitudeParameters,
     LcAmplitudeSamples, LcAmplitudeWitness, LcBranch, LcBranchObligation, LcCapacitanceCover,
     LcCapacitanceParameters, LcCertainty, LcClockCover, LcClockParameters, LcClockWitness,
-    LcConsistency, LcDeterminacy, LcForwardArc, LcForwardCover, LcFreeDirection, LcHorizon,
-    LcHorizonValue, LcImpossible, LcInput, LcInputRefinement, LcInterval, LcObservationValue,
-    LcPairAttempt, LcPairParameters, LcPairRefinement, LcPairsCover, LcPhaseCover, LcPhaseEndpoint,
-    LcPhaseGauge, LcPhaseParameters, LcPhaseWitness, LcQuantity, LcRefinementState,
-    LcRefinementSuccess, LcRelation, LcRelationError, LcSampleTimes, LcSharedClock, LcSharedPhase,
-    LcSharedTiming, LcSharedTimingCover, LcSharedTimingWitness, LcTailOutcome, LcTailStatus,
-    LcTimeBox, LcTimeTail, LcTimingCover, LcTimingOuterCover, LcUnresolvedBranches, LcValues,
-    LcWitness, LcZeroTimes,
+    LcConsistency, LcDeterminacy, LcEnergyCover, LcEnergySamples, LcEnergyWitness, LcForwardArc,
+    LcForwardCover, LcFreeDirection, LcHorizon, LcHorizonValue, LcImpossible, LcInput,
+    LcInputRefinement, LcInterval, LcObservationValue, LcPairAttempt, LcPairParameters,
+    LcPairRefinement, LcPairsCover, LcPhaseCover, LcPhaseEndpoint, LcPhaseGauge, LcPhaseParameters,
+    LcPhaseWitness, LcQuantity, LcRefinementState, LcRefinementSuccess, LcRelation,
+    LcRelationError, LcSampleTimes, LcSharedClock, LcSharedPhase, LcSharedTiming,
+    LcSharedTimingCover, LcSharedTimingWitness, LcTailOutcome, LcTailStatus, LcTimeBox, LcTimeTail,
+    LcTimingCover, LcTimingOuterCover, LcUnresolvedBranches, LcValues, LcWitness, LcZeroTimes,
 };
 pub use measure::{Conversion, Measure, Scale};
 pub use pairing::{

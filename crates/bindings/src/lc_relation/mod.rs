@@ -7,8 +7,11 @@ pub use amplitude::{
 };
 mod attempt;
 pub use attempt::{LcBranchObligation, LcPairAttempt, LcUnresolvedBranches};
+mod calibration;
 mod capacitance;
 mod clock;
+mod energy;
+pub use energy::{LcEnergyCover, LcEnergySamples, LcEnergyWitness};
 mod forward;
 pub use capacitance::{LcCapacitanceCover, LcCapacitanceParameters};
 pub use clock::{LcClockCover, LcClockParameters, LcClockWitness, LcSharedClock};
