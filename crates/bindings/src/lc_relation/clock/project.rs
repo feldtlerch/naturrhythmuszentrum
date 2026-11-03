@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-//! Positive clock elimination is a convex strip problem in `beta=a*offset`.
+//! Shared clock and original initial phase form a convex strip problem in `beta=alpha+a*offset`.
 
 use super::{
-    AT, Cover, LcClockCover, LcClockParameters, LcInterval, LcRelation, LcRelationError,
-    LcSharedClock, Rational, storage, witness,
+    AT, Cover, LcClockCover, LcClockPhaseParameters, LcInterval, LcRelation, LcRelationError,
+    LcSharedClock, Rational, calibration, storage, witness,
 };
 use crate::{Budget, LcInput, LcQuantity as Q};
 use nrz_cas::pi_bounds::PiBoundCertificate;
@@ -22,17 +22,29 @@ pub(super) fn cover(
         return Err(LcRelationError::Observation);
     }
     let relation = effective(clock, budget)?;
-    cycles.extend([Rational::zero(), Rational::zero()]);
+    if clock.initial_phase_support().is_some() {
+        cycles.extend([Rational::zero(), Rational::zero()]);
+    }
     let effective = relation.pairs_cover(cycles, pi, budget)?;
     let rate = effective.rate()[0].clone();
     let phase = effective.phase_at_rate(&rate, budget)?;
-    let parameters = LcClockParameters {
-        offset: phase[0].div(&rate, budget)?,
+    let mut offset = clock.offset().clone();
+    if let Some([lower, upper]) = clock.initial_phase_support() {
+        let image = [
+            phase[0].sub(upper, budget)?.div(&rate, budget)?,
+            phase[0].sub(lower, budget)?.div(&rate, budget)?,
+        ];
+        calibration::intersect(&mut offset, &image, budget)?;
+    }
+    let parameters = LcClockPhaseParameters {
+        initial_phase: phase[0].sub(&rate.mul(&offset[0], budget)?, budget)?,
+        offset: offset[0].clone(),
+        gauge: Rational::zero(),
         rate,
         ratio: Rational::one(),
         voltage: Rational::one(),
     };
-    let witness = witness::parameters(clock, &effective, &parameters, budget)?;
+    let witness = witness::with_phase(clock, &effective, &parameters, budget)?;
     let bytes = effective
         .retained_payload_bytes()
         .saturating_add(relation.retained_payload_bytes())
@@ -53,10 +65,17 @@ pub(super) fn cover(
     })))
 }
 
-/// The original known-zero phase becomes the bounded effective starting phase `beta=a*offset`.
+/// The original physical initial phase remains correlated through `beta=alpha+a*offset`.
 fn effective(clock: &LcSharedClock, budget: &mut Budget) -> Result<LcRelation, LcRelationError> {
     let count = clock.relation().observations();
-    let total = count.checked_add(2).ok_or(LcRelationError::Capacity)?;
+    let auxiliary = if clock.initial_phase_support().is_some() {
+        2
+    } else {
+        0
+    };
+    let total = count
+        .checked_add(auxiliary)
+        .ok_or(LcRelationError::Capacity)?;
     storage::retained(
         clock
             .relation()
@@ -75,6 +94,28 @@ fn effective(clock: &LcSharedClock, budget: &mut Budget) -> Result<LcRelation, L
     for (index, time) in clock.nominal_times().iter().enumerate() {
         inputs.push(input(Q::Time(index), [time.clone(), time.clone()], budget)?);
     }
+    if let Some(initial) = clock.initial_phase_support() {
+        initial_strips(clock, initial, &mut inputs, budget)?;
+    }
+    LcRelation::new(
+        format!(
+            "{}: effective shared-clock coordinates",
+            clock.relation().epoch()
+        ),
+        total,
+        inputs,
+        budget,
+    )
+}
+
+/// Bounded original initial phase and clock support give two exact affine strip inequalities.
+fn initial_strips(
+    clock: &LcSharedClock,
+    initial: &[Rational; 2],
+    inputs: &mut Vec<LcInput>,
+    budget: &mut Budget,
+) -> Result<(), LcRelationError> {
+    let count = clock.relation().observations();
     let rate = &clock.0.rate;
     let offset = clock.offset();
     let low_rate = if offset[0].is_negative() {
@@ -90,32 +131,32 @@ fn effective(clock: &LcSharedClock, budget: &mut Budget) -> Result<LcRelation, L
     inputs.push(input(
         Q::InitialPhase,
         [
-            low_rate.mul(&offset[0], budget)?,
-            high_rate.mul(&offset[1], budget)?,
+            initial[0].add(&low_rate.mul(&offset[0], budget)?, budget)?,
+            initial[1].add(&high_rate.mul(&offset[1], budget)?, budget)?,
         ],
         budget,
     )?);
     let span = rate[1].mul(&offset[1].sub(&offset[0], budget)?, budget)?;
-    let negative_span = Rational::zero().sub(&span, budget)?;
-    // `beta-a*d_min >= 0` and `beta-a*d_max <= 0` are exactly the shared-offset domain.
+
+    // `beta-a*d_min >= A_min` and `beta-a*d_max <= A_max` are exactly the shared-offset domain.
     // Their opposite finite faces are redundant because `a<=a_max` and `d_min<=d_max`.
     for (index, duration, phase) in [
-        (count, &offset[0], [Rational::zero(), span]),
-        (count + 1, &offset[1], [negative_span, Rational::zero()]),
+        (
+            count,
+            &offset[0],
+            [initial[0].clone(), initial[1].add(&span, budget)?],
+        ),
+        (
+            count + 1,
+            &offset[1],
+            [initial[0].sub(&span, budget)?, initial[1].clone()],
+        ),
     ] {
         let time = Rational::zero().sub(duration, budget)?;
         inputs.push(input(Q::Time(index), [time.clone(), time], budget)?);
         inputs.push(input(Q::Phase(index), phase, budget)?);
     }
-    LcRelation::new(
-        format!(
-            "{}: effective shared-clock coordinates",
-            clock.relation().epoch()
-        ),
-        total,
-        inputs,
-        budget,
-    )
+    Ok(())
 }
 
 /// Physical coordinate declarations retain exact coherent meanings in the effective relation.

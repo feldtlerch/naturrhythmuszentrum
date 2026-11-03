@@ -2,8 +2,8 @@
 //! Every original timestamp uses the identical checked offset in physical witnesses.
 
 use super::{
-    AT, LcClockParameters, LcClockWitness, LcPairsCover, LcRelationError, LcSharedClock, Rational,
-    storage,
+    AT, LcClockParameters, LcClockPhaseParameters, LcClockWitness, LcPairsCover, LcRelationError,
+    LcSharedClock, Rational, storage,
 };
 use crate::{Budget, ExactConstant, LcPairParameters, LcValues};
 use std::cmp::Ordering;
@@ -55,19 +55,45 @@ pub(super) fn parameters(
     parameters: &LcClockParameters,
     budget: &mut Budget,
 ) -> Result<LcClockWitness, LcRelationError> {
-    let beta = parameters.rate.mul(&parameters.offset, budget)?;
+    let parameters = LcClockPhaseParameters {
+        rate: parameters.rate.clone(),
+        initial_phase: Rational::zero(),
+        gauge: Rational::zero(),
+        offset: parameters.offset.clone(),
+        ratio: parameters.ratio.clone(),
+        voltage: parameters.voltage.clone(),
+    };
+    with_phase(clock, effective, &parameters, budget)
+}
+
+/// Restore the original physical alpha and every timestamp from one joint alpha/offset selection.
+pub(super) fn with_phase(
+    clock: &LcSharedClock,
+    effective: &LcPairsCover,
+    parameters: &LcClockPhaseParameters,
+    budget: &mut Budget,
+) -> Result<LcClockWitness, LcRelationError> {
+    budget.work(1, AT)?;
+    let shift = parameters.rate.mul(&parameters.offset, budget)?;
+    let beta = parameters.initial_phase.add(&shift, budget)?;
     let witness = effective.witness(
         &LcPairParameters {
             rate: parameters.rate.clone(),
             initial_phase: beta,
             ratio: parameters.ratio.clone(),
             voltage: parameters.voltage.clone(),
-            gauge: Rational::zero(),
+            gauge: parameters.gauge.clone(),
         },
         budget,
     )?;
     let mut values = witness.values().clone();
-    values.initial_phase = Some(ExactConstant::zero());
+    values.initial_phase = Some(
+        values
+            .initial_phase
+            .as_ref()
+            .ok_or(LcRelationError::Projection)?
+            .sub(&shift.into(), budget)?,
+    );
     values
         .observations
         .truncate(clock.relation().observations());

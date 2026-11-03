@@ -16,7 +16,9 @@ mod energy;
 pub use energy::{LcEnergyCover, LcEnergySamples, LcEnergyWitness};
 mod forward;
 pub use capacitance::{LcCapacitanceCover, LcCapacitanceParameters};
-pub use clock::{LcClockCover, LcClockParameters, LcClockWitness, LcSharedClock};
+pub use clock::{
+    LcClockCover, LcClockParameters, LcClockPhaseParameters, LcClockWitness, LcSharedClock,
+};
 mod horizon;
 mod impossible;
 mod inclusion;

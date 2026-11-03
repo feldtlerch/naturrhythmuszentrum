@@ -24,13 +24,22 @@ pub(super) fn bounds(
     Ok([lower.clone(), upper.clone()])
 }
 
+/// Original positive rate and optional bounded physical initial-phase premises.
+#[derive(Debug)]
+pub(super) struct Premises {
+    /// Positive original rate interval.
+    pub(super) rate: [Rational; 2],
+    /// Repeated original initial-phase intersection; absence retains every integer gauge.
+    pub(super) initial: Option<[Rational; 2]>,
+}
+
 /// Every original constraint stays either in the effective solver or in this implication proof.
 pub(super) fn question(
     relation: &LcRelation,
     nominal: &[Rational],
     offset: &[Rational; 2],
     budget: &mut Budget,
-) -> Result<[Rational; 2], LcRelationError> {
+) -> Result<Premises, LcRelationError> {
     budget.work(1, AT)?;
     if nominal.len() != relation.observations() || nominal.len() < 2 {
         return Err(LcRelationError::Observation);
@@ -59,14 +68,13 @@ pub(super) fn question(
         }
     }
     let rate = rate.ok_or(LcRelationError::Projection)?;
-    let phase = phase.ok_or(LcRelationError::Projection)?;
     if rate[0].is_negative() || rate[0].is_zero() {
         return Err(LcRelationError::Positivity);
     }
-    if !phase[0].is_zero() || !phase[1].is_zero() {
-        return Err(LcRelationError::Projection);
-    }
-    Ok(rate)
+    Ok(Premises {
+        rate,
+        initial: phase,
+    })
 }
 
 /// Repeated original declarations intersect without replacing an earlier constraint.

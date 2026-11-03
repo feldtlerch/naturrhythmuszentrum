@@ -5,7 +5,9 @@ mod admit;
 mod project;
 mod witness;
 
-use super::{AT, LcInterval, LcPairsCover, LcRelation, LcRelationError, LcWitness, storage};
+use super::{
+    AT, LcInterval, LcPairsCover, LcRelation, LcRelationError, LcWitness, calibration, storage,
+};
 use crate::{Budget, Descriptor, LcQuantity};
 use nrz_cas::{Rational, limits::BudgetUsage, pi_bounds::PiBoundCertificate};
 use std::rc::Rc;
@@ -25,6 +27,8 @@ struct Question {
     offset: [Rational; 2],
     /// Checked positive original rate support used for the exact clock-coordinate elimination.
     rate: [Rational; 2],
+    /// Original physical initial-phase support; absence retains all common integer gauges.
+    initial: Option<[Rational; 2]>,
     /// Coherent duration difference meaning of the offset.
     descriptor: Descriptor,
     /// Conservative new joint-question metadata ownership.
@@ -44,7 +48,7 @@ pub struct LcClockWitness {
     usage: [BudgetUsage; 2],
 }
 
-/// Parameters of the shared-clock feasible family; actual initial phase is exactly zero.
+/// Known-zero shorthand parameters for the shared-clock feasible family.
 #[derive(Clone, Debug)]
 pub struct LcClockParameters {
     /// Positive recovered rate.
@@ -57,6 +61,23 @@ pub struct LcClockParameters {
     pub voltage: Rational,
 }
 
+/// Original physical phase and clock offset remain separate correlated coordinates.
+#[derive(Clone, Debug)]
+pub struct LcClockPhaseParameters {
+    /// Positive physical rate in the recovered domain.
+    pub rate: Rational,
+    /// Local physical initial phase before the common integer gauge.
+    pub initial_phase: Rational,
+    /// Common integer lift of physical initial phase and every observation cycle.
+    pub gauge: Rational,
+    /// Single original clock offset shared by every timestamp.
+    pub offset: Rational,
+    /// Positive physical impedance scale when the original inputs leave it free.
+    pub ratio: Rational,
+    /// Positive voltage amplitude when the original inputs leave it free.
+    pub voltage: Rational,
+}
+
 /// Complete bounded phase-pair recovery with the shared clock constraint retained.
 #[derive(Clone, Debug)]
 pub struct LcClockCover(Rc<Cover>);
@@ -66,7 +87,7 @@ pub struct LcClockCover(Rc<Cover>);
 struct Cover {
     /// Original joint clock question.
     clock: LcSharedClock,
-    /// Complete strip family in the effective coordinate `beta=a*offset`.
+    /// Complete strip family in the effective coordinate `beta=alpha+a*offset`.
     effective: LcPairsCover,
     /// Exact nonemptiness for every original equation and the shared offset.
     witness: LcClockWitness,
@@ -77,13 +98,13 @@ struct Cover {
 }
 
 impl LcSharedClock {
-    /// Admit one explicitly bounded shared offset with exact known zero starting phase.
+    /// Admit one explicitly bounded shared offset with optional original initial-phase support.
     ///
     /// Every supplied timestamp interval must contain its full nominal-plus-offset image.
     /// Other timestamp restrictions refuse this closed adapter instead of being omitted.
     /// Positive finite rational rate support and at least two nominal timestamps are required.
     /// # Errors
-    /// Refuses unsupported clocks, missing zero phase/rate premises and exhausted resources.
+    /// Refuses unsupported clocks, missing positive rate premises and exhausted resources.
     pub fn new(
         relation: LcRelation,
         nominal: Vec<Rational>,
@@ -91,11 +112,14 @@ impl LcSharedClock {
         budget: &mut Budget,
     ) -> Result<Self, LcRelationError> {
         let offset = admit::bounds(offset, budget)?;
-        let rate = admit::question(&relation, &nominal, &offset, budget)?;
+        let premises = admit::question(&relation, &nominal, &offset, budget)?;
+        let rate = premises.rate;
+        let initial = premises.initial;
         let bytes = nominal
             .iter()
             .chain(&offset)
             .chain(&rate)
+            .chain(initial.iter().flatten())
             .fold(2_048_u64, |sum, value| {
                 sum.saturating_add(storage::rational(value))
             });
@@ -108,6 +132,7 @@ impl LcSharedClock {
             nominal,
             offset,
             rate,
+            initial,
             descriptor: LcQuantity::NaturalTime.descriptor()?,
             bytes,
         })))
@@ -129,6 +154,12 @@ impl LcSharedClock {
     #[must_use]
     pub fn offset(&self) -> &[Rational; 2] {
         &self.0.offset
+    }
+
+    /// Every original physical initial-phase restriction, intersected without losing its clock correlation.
+    #[must_use]
+    pub fn initial_phase_support(&self) -> Option<&[Rational; 2]> {
+        self.0.initial.as_ref()
     }
 
     /// Coherent seconds with duration difference kind.
@@ -245,6 +276,7 @@ impl LcClockCover {
         quantity: LcQuantity,
     ) -> Result<super::LcDeterminacy, LcRelationError> {
         if quantity == LcQuantity::InitialPhase {
+            self.fixed_initial()?;
             return Ok(super::LcDeterminacy::DeterminedFinite);
         }
         self.0.effective.determinacy(quantity)
@@ -258,12 +290,13 @@ impl LcClockCover {
         quantity: LcQuantity,
     ) -> Result<&'static [super::LcFreeDirection], LcRelationError> {
         if quantity == LcQuantity::InitialPhase {
+            self.fixed_initial()?;
             return Ok(&[]);
         }
         self.0.effective.free_directions(quantity)
     }
 
-    /// Exact complete physical marginals; actual initial phase remains zero.
+    /// Exact complete physical marginals; the scalar initial-phase query requires a fixed physical phase.
     /// # Errors
     /// Refuses unsupported phase/time marginals or exhausted exact arithmetic.
     pub fn bounds(
@@ -273,9 +306,10 @@ impl LcClockCover {
     ) -> Result<LcInterval, LcRelationError> {
         budget.work(1, AT)?;
         if quantity == LcQuantity::InitialPhase {
+            let initial = self.fixed_initial()?;
             return LcInterval::new(
-                Some(Rational::zero().into()),
-                Some(Rational::zero().into()),
+                Some(initial.clone().into()),
+                Some(initial.clone().into()),
                 budget,
             );
         }
@@ -291,10 +325,91 @@ impl LcClockCover {
         budget: &mut Budget,
     ) -> Result<[Rational; 2], LcRelationError> {
         let phase = self.0.effective.phase_at_rate(rate, budget)?;
-        Ok([phase[0].div(rate, budget)?, phase[1].div(rate, budget)?])
+        let mut offset = self.clock().offset().clone();
+        if let Some([lower, upper]) = self.clock().initial_phase_support() {
+            let image = [
+                phase[0].sub(upper, budget)?.div(rate, budget)?,
+                phase[1].sub(lower, budget)?.div(rate, budget)?,
+            ];
+            calibration::intersect(&mut offset, &image, budget)?;
+        }
+        Ok(offset)
     }
 
-    /// Realize an admissible shared offset and rate with every original physical scale constraint.
+    /// Complete common integer gauge of the original physical initial phase.
+    #[must_use]
+    pub fn phase_gauge(&self) -> super::LcPhaseGauge {
+        self.0.effective.phase_gauge()
+    }
+
+    /// Local physical initial-phase fibre at a rate, before the retained common integer gauge.
+    /// # Errors
+    /// Refuses out-of-domain rates and exhausted exact arithmetic.
+    pub fn phase_at_rate(
+        &self,
+        rate: &Rational,
+        budget: &mut Budget,
+    ) -> Result<[Rational; 2], LcRelationError> {
+        let beta = self.0.effective.phase_at_rate(rate, budget)?;
+        let mut phase = [
+            beta[0].sub(&rate.mul(&self.clock().offset()[1], budget)?, budget)?,
+            beta[1].sub(&rate.mul(&self.clock().offset()[0], budget)?, budget)?,
+        ];
+        if let Some(initial) = self.clock().initial_phase_support() {
+            calibration::intersect(&mut phase, initial, budget)?;
+        }
+        Ok(phase)
+    }
+
+    /// Clock-offset fibre at a selected rate and local physical initial phase.
+    /// # Errors
+    /// Refuses crossed phase/rate/offset marginals and exhausted resources.
+    pub fn offset_at_phase(
+        &self,
+        rate: &Rational,
+        phase: &Rational,
+        budget: &mut Budget,
+    ) -> Result<[Rational; 2], LcRelationError> {
+        budget.work(1, AT)?;
+        phase.check(budget, AT)?;
+        let mut selected = [phase.clone(), phase.clone()];
+        if let Some(initial) = self.clock().initial_phase_support() {
+            calibration::intersect(&mut selected, initial, budget)?;
+        }
+        let beta = self.0.effective.phase_at_rate(rate, budget)?;
+        let mut offset = self.clock().offset().clone();
+        let image = [
+            beta[0].sub(phase, budget)?.div(rate, budget)?,
+            beta[1].sub(phase, budget)?.div(rate, budget)?,
+        ];
+        calibration::intersect(&mut offset, &image, budget)?;
+        Ok(offset)
+    }
+
+    /// Reconstruct physical initial phase and clock offset together, with every original gauge.
+    /// # Errors
+    /// Refuses crossed joint coordinates, original violations and exhausted resources.
+    pub fn witness_with_phase(
+        &self,
+        parameters: &LcClockPhaseParameters,
+        budget: &mut Budget,
+    ) -> Result<LcClockWitness, LcRelationError> {
+        witness::with_phase(self.clock(), &self.0.effective, parameters, budget)
+    }
+
+    /// A scalar phase marginal is supplied only for an exact original physical phase.
+    fn fixed_initial(&self) -> Result<&Rational, LcRelationError> {
+        let initial = self
+            .clock()
+            .initial_phase_support()
+            .ok_or(LcRelationError::Projection)?;
+        if initial[0] != initial[1] {
+            return Err(LcRelationError::Projection);
+        }
+        Ok(&initial[0])
+    }
+
+    /// Realize a known-zero physical initial phase with every original physical scale constraint.
     /// # Errors
     /// Refuses parameters outside the joint fibres or exhausted original-equation checking.
     pub fn witness(
