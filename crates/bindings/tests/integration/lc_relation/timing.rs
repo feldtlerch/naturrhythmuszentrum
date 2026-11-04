@@ -9,6 +9,7 @@ mod clock_refinement;
 mod element;
 mod energy_only;
 mod exact;
+mod joint_elements;
 mod phase;
 mod shared;
 mod shared_errors;
