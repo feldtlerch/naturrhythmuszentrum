@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Both native formats retain the rest question, with independent exact endpoint comparisons.
 
+mod inventory;
+
 use super::support::{TestResult, input, ledger, number};
 use nrz_bindings::readings::algebra::{Location, Rational};
 use nrz_bindings::{
@@ -147,10 +149,17 @@ fn lc_relation_quiescent_native_work() -> TestResult {
 
 /// Exhausted publication leaves the original query and full witness reusable.
 fn work<P: Scalar>() -> TestResult {
+    work_cover::<P>(&cover(true)?)
+}
+
+/// Every inventory position has an independent native-publication resource boundary.
+fn work_cover<P: Scalar>(cover: &LcQuiescentCover) -> TestResult {
     const PREFIX: u64 = 17;
-    let cover = cover(true)?;
     let context = ArithmeticContext::new()?;
-    for quantity in [Q::Time(SAMPLE), Q::Phase(SAMPLE), Q::AmplitudeRatio] {
+    let quantities = (0..cover.relation().observations())
+        .flat_map(|index| [Q::Time(index), Q::Phase(index)])
+        .chain([Q::AmplitudeRatio]);
+    for quantity in quantities {
         let exact = cover.query(quantity, &mut ledger()?)?;
         let mut measured = ledger()?;
         let native = LcQuiescentProjection::<P>::new(

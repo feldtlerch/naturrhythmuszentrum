@@ -13,8 +13,8 @@ pub(super) struct Domain {
     pub(super) inductance: Bounds,
     /// Intersected capacitance support.
     pub(super) capacitance: Bounds,
-    /// Optional single original timestamp, independent of the positive elements.
-    pub(super) time: Option<Bounds>,
+    /// Every original timestamp, independently intersected in inventory order.
+    times: Vec<Bounds>,
     /// Complete positive product image.
     product: Bounds,
     /// Complete natural-time image, with supported exact rational extrema.
@@ -31,33 +31,36 @@ impl Domain {
     ) -> Result<Self, LcRelationError> {
         budget.work(1, AT)?;
         storage::retained(
-            relation.retained_payload_bytes().saturating_add(4_096),
+            relation
+                .retained_payload_bytes()
+                .saturating_add(4_096)
+                .saturating_add(storage::size(relation.observations())?.saturating_mul(8_192)),
             budget,
         )?;
-        if relation.observations() > 1 {
-            return Err(LcRelationError::Projection);
-        }
-        let mut slots: [Option<Bounds>; 4] = [None, None, None, None];
+        budget.work(storage::size(relation.observations())?, AT)?;
+        let mut times = vec![None; relation.observations()];
+        let mut slots: [Option<Bounds>; 3] = [None, None, None];
         for input in relation.inputs() {
             budget.work(1, AT)?;
             let slot = match input.quantity() {
-                LcQuantity::Inductance => 0,
-                LcQuantity::Capacitance => 1,
-                LcQuantity::Energy => 2,
-                LcQuantity::Time(_) => 3,
+                LcQuantity::Inductance => &mut slots[0],
+                LcQuantity::Capacitance => &mut slots[1],
+                LcQuantity::Energy => &mut slots[2],
+                LcQuantity::Time(index) => &mut times[index],
                 _ => return Err(LcRelationError::Projection),
             };
             let next = bounds(input.interval(), budget)?;
-            if let Some(previous) = &mut slots[slot] {
+            if let Some(previous) = slot {
                 calibration::intersect(previous, &next, budget)?;
             } else {
-                slots[slot] = Some(next);
+                *slot = Some(next);
             }
         }
-        let [inductance, capacitance, energy, time] = slots;
-        if time.is_some() != (relation.observations() == 1) {
-            return Err(LcRelationError::Projection);
-        }
+        let [inductance, capacitance, energy] = slots;
+        let times = times
+            .into_iter()
+            .map(|slot| slot.ok_or(LcRelationError::Projection))
+            .collect::<Result<_, _>>()?;
         let inductance = inductance.ok_or(LcRelationError::Projection)?;
         let capacitance = capacitance.ok_or(LcRelationError::Projection)?;
         let energy = energy.ok_or(LcRelationError::Projection)?;
@@ -81,7 +84,7 @@ impl Domain {
         Ok(Self {
             inductance,
             capacitance,
-            time,
+            times,
             product,
             natural_time,
             rate,
@@ -99,17 +102,12 @@ impl Domain {
             LcQuantity::InitialPhase => return Ok(LcQuiescentOutcome::UndefinedPhase),
             LcQuantity::AmplitudeRatio => return Ok(LcQuiescentOutcome::UndefinedRatio),
             LcQuantity::Phase(index) => {
-                if index != 0 || self.time.is_none() {
+                if index >= self.times.len() {
                     return Err(LcRelationError::Observation);
                 }
                 return Ok(LcQuiescentOutcome::UndefinedPhase);
             }
-            LcQuantity::Time(index) => {
-                if index != 0 {
-                    return Err(LcRelationError::Observation);
-                }
-                self.time.as_ref().ok_or(LcRelationError::Observation)?
-            }
+            LcQuantity::Time(index) => self.times.get(index).ok_or(LcRelationError::Observation)?,
             LcQuantity::Inductance => &self.inductance,
             LcQuantity::Capacitance => &self.capacitance,
             LcQuantity::Product => &self.product,
@@ -132,27 +130,34 @@ impl Domain {
         &self,
         inductance: &Rational,
         capacitance: &Rational,
-        time: Option<&Rational>,
+        times: Option<&[Rational]>,
         budget: &mut Budget,
     ) -> Result<LcValues, LcRelationError> {
         calibration::contains(&self.inductance, inductance, budget)?;
         calibration::contains(&self.capacitance, capacitance, budget)?;
         let natural_time = root(&inductance.mul(capacitance, budget)?, budget)?;
         let rate = ExactConstant::one().div(&natural_time, budget)?;
-        let observations = match (&self.time, time) {
-            (Some(bounds), Some(time)) => {
-                if !calibration::interval(bounds, budget)?.contains(&time.clone().into(), budget)? {
-                    return Err(LcRelationError::Containment);
-                }
-                vec![LcObservationValue {
-                    time: time.clone().into(),
-                    phase: None,
-                    cycle: None,
-                }]
+        if times.is_some_and(|values| values.len() != self.times.len()) {
+            return Err(LcRelationError::Observation);
+        }
+        storage::retained(
+            self.bytes()
+                .saturating_add(storage::size(self.times.len())?.saturating_mul(1_024)),
+            budget,
+        )?;
+        let mut observations = Vec::with_capacity(self.times.len());
+        for (index, bounds) in self.times.iter().enumerate() {
+            budget.work(1, AT)?;
+            let time = times.map_or(&bounds[0], |values| &values[index]);
+            if !calibration::interval(bounds, budget)?.contains(&time.clone().into(), budget)? {
+                return Err(LcRelationError::Containment);
             }
-            (None, None) => Vec::new(),
-            _ => return Err(LcRelationError::Observation),
-        };
+            observations.push(LcObservationValue {
+                time: time.clone().into(),
+                phase: None,
+                cycle: None,
+            });
+        }
         Ok(LcValues {
             inductance: inductance.clone().into(),
             capacitance: capacitance.clone().into(),
@@ -173,7 +178,7 @@ impl Domain {
             .chain(&self.product)
             .chain(&self.natural_time)
             .chain(&self.rate)
-            .chain(self.time.iter().flatten())
+            .chain(self.times.iter().flatten())
             .fold(1_024_u64, |sum, value| {
                 sum.saturating_add(storage::rational(value))
             })

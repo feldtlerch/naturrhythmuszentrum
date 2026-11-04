@@ -79,7 +79,7 @@ fn lc_relation_quiescent_observation() -> TestResult {
     Ok(())
 }
 
-/// Numeric phase, missing/unbounded time, extra observations and crossed originals refuse.
+/// Numeric phase, missing/unbounded inventory entries and crossed originals refuse.
 /// ´test:integration:lc-relation-quiescent-observation-refusals´
 #[test]
 fn lc_relation_quiescent_observation_refusals() -> TestResult {

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Independent rest-state interval oracles retain repeated inputs and original equation checks.
 
+mod inventory;
 mod observation;
 
 use super::support::{TestResult, exact_input, input, ledger, number};
