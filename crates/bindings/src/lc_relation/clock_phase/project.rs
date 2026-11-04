@@ -133,3 +133,17 @@ fn at_beta(
     }
     Ok(offset)
 }
+
+/// A refinement reuses checked pi evidence only in the supported physical-phase projection.
+pub(super) fn cover_checked(
+    phase: &LcSharedClockPhase,
+    cycles: Vec<Rational>,
+    pi: nrz_cas::pi_bounds::CheckedPiBounds,
+    budget: &mut Budget,
+) -> Result<LcClockPhaseCover, LcRelationError> {
+    budget.work(1, AT)?;
+    if !phase.0.narrow {
+        return Err(LcRelationError::Projection);
+    }
+    restricted::cover_checked(phase, cycles, pi, budget)
+}

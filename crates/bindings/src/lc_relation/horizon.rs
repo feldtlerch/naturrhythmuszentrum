@@ -2,7 +2,10 @@
 //! Published forward certainty horizons retain their exact joint phase/rate derivation.
 
 use super::{AT, LcCertainty, LcPairsCover, LcRelation, LcRelationError, LcZeroTimes, storage};
-use crate::{Budget, Descriptor, LcClockCover, LcQuantity, LcSharedTimingCover, LcTimingCover};
+use crate::{
+    Budget, Descriptor, LcCalibratedFuture, LcClockCover, LcQuantity, LcSharedTimingCover,
+    LcTimingCover,
+};
 use nrz_cas::{
     Rational,
     lattice::PiWidthHorizon,
@@ -27,6 +30,8 @@ pub enum LcHorizonCoordinate {
 enum Source {
     /// Independent positive rate rectangle with exact starting phase zero.
     Rectangle(LcZeroTimes),
+    /// Original phase and amplitude calibration fibres with checked future extremizers.
+    Calibrated(LcCalibratedFuture),
     /// Retained correlated phase-at-rate fibres and complete original cycle branch.
     Pairs(LcPairsCover),
     /// Original independent timestamp intervals and complete physical phase/rate fibres.
@@ -42,6 +47,7 @@ impl Source {
     fn relation(&self) -> &LcRelation {
         match self {
             Self::Rectangle(cover) => cover.relation(),
+            Self::Calibrated(cover) => cover.relation(),
             Self::Pairs(cover) => cover.relation(),
             Self::Timing(cover) => cover.relation(),
             Self::Clock(cover) => cover.relation(),
@@ -53,6 +59,7 @@ impl Source {
     fn bytes(&self) -> u64 {
         match self {
             Self::Rectangle(cover) => cover.retained_payload_bytes(),
+            Self::Calibrated(cover) => cover.retained_payload_bytes(),
             Self::Pairs(cover) => cover.retained_payload_bytes(),
             Self::Timing(cover) => cover.retained_payload_bytes(),
             Self::Clock(cover) => cover.retained_payload_bytes(),
@@ -113,6 +120,49 @@ impl LcZeroTimes {
 }
 
 impl LcHorizon {
+    /// Retain original calibration fibres while reusing the checked equivalent future proof.
+    pub(super) fn calibrated(
+        source: LcCalibratedFuture,
+        before: &BudgetUsage,
+        budget: &mut Budget,
+    ) -> Result<Self, LcRelationError> {
+        budget.work(1, AT)?;
+        let auxiliary = source.auxiliary();
+        if auxiliary.coordinate() != LcHorizonCoordinate::ReportedClock {
+            return Err(LcRelationError::Projection);
+        }
+        let bytes = auxiliary.retained_payload_bytes();
+        storage::retained(
+            bytes
+                .saturating_add(source.retained_payload_bytes())
+                .saturating_add(source.relation().retained_payload_bytes()),
+            budget,
+        )?;
+        let data = Data {
+            coordinate: auxiliary.coordinate(),
+            extrema: auxiliary.extremal_parameters().clone(),
+            mathematical: auxiliary.mathematical().clone(),
+            descriptor: auxiliary.descriptor().clone(),
+            usage: [*before, budget.usage()],
+            bytes,
+            source: Source::Calibrated(source),
+        };
+        Ok(Self(Rc::new(data)))
+    }
+
+    /// Original joint calibrated owner and full original future extremizers, when applicable.
+    #[must_use]
+    pub fn calibrated_future(&self) -> Option<&LcCalibratedFuture> {
+        match &self.0.source {
+            Source::Calibrated(source) => Some(source),
+            Source::Rectangle(_)
+            | Source::Pairs(_)
+            | Source::Timing(_)
+            | Source::Clock(_)
+            | Source::SharedTiming(_) => None,
+        }
+    }
+
     /// Preserve a proved correlated pair extremization, including the prepared pi certificate.
     pub(super) fn pairs(
         source: LcPairsCover,
@@ -323,7 +373,8 @@ impl LcHorizon {
     pub fn pairs_cover(&self) -> Option<&LcPairsCover> {
         match &self.0.source {
             Source::Pairs(cover) => Some(cover),
-            Source::Rectangle(_)
+            Source::Calibrated(_)
+            | Source::Rectangle(_)
             | Source::Timing(_)
             | Source::Clock(_)
             | Source::SharedTiming(_) => None,
@@ -335,9 +386,11 @@ impl LcHorizon {
     pub fn zero_times(&self) -> Option<&LcZeroTimes> {
         match &self.0.source {
             Source::Rectangle(cover) => Some(cover),
-            Source::Pairs(_) | Source::Timing(_) | Source::Clock(_) | Source::SharedTiming(_) => {
-                None
-            }
+            Source::Calibrated(_)
+            | Source::Pairs(_)
+            | Source::Timing(_)
+            | Source::Clock(_)
+            | Source::SharedTiming(_) => None,
         }
     }
 
@@ -346,7 +399,8 @@ impl LcHorizon {
     pub fn timing_cover(&self) -> Option<&LcTimingCover> {
         match &self.0.source {
             Source::Timing(cover) => Some(cover),
-            Source::Rectangle(_)
+            Source::Calibrated(_)
+            | Source::Rectangle(_)
             | Source::Pairs(_)
             | Source::Clock(_)
             | Source::SharedTiming(_) => None,
@@ -358,7 +412,8 @@ impl LcHorizon {
     pub fn clock_cover(&self) -> Option<&LcClockCover> {
         match &self.0.source {
             Source::Clock(cover) => Some(cover),
-            Source::Rectangle(_)
+            Source::Calibrated(_)
+            | Source::Rectangle(_)
             | Source::Pairs(_)
             | Source::Timing(_)
             | Source::SharedTiming(_) => None,
@@ -370,7 +425,11 @@ impl LcHorizon {
     pub fn shared_timing_cover(&self) -> Option<&LcSharedTimingCover> {
         match &self.0.source {
             Source::SharedTiming(cover) => Some(cover),
-            Source::Rectangle(_) | Source::Pairs(_) | Source::Timing(_) | Source::Clock(_) => None,
+            Source::Calibrated(_)
+            | Source::Rectangle(_)
+            | Source::Pairs(_)
+            | Source::Timing(_)
+            | Source::Clock(_) => None,
         }
     }
 

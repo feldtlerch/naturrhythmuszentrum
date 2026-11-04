@@ -5,8 +5,12 @@ use super::{
     AT, Cover, LcRelationError, LcSharedMeasurementCover, LcSharedMeasurements, Rational, admit,
     storage, witness,
 };
+use crate::LcClockPhaseCover;
 use crate::{Budget, LcInterval, LcQuantity as Q, LcRelation, LcSharedClock, LcSharedClockPhase};
-use nrz_cas::pi_bounds::PiBoundCertificate;
+use nrz_cas::{
+    limits::BudgetUsage,
+    pi_bounds::{CheckedPiBounds, PiBoundCertificate},
+};
 use std::rc::Rc;
 
 /// All omitted physical inputs are exactly represented in the retained amplitude owner.
@@ -27,6 +31,37 @@ pub(super) fn cover(
     )?;
     let phase = effective_question(amplitude, budget)?;
     let effective = phase.pairs_cover(cycles, pi, budget)?;
+    finish(amplitude, effective, &before, budget)
+}
+
+/// Reuse checked circle evidence for a complete original calibrated refinement.
+pub(super) fn cover_checked(
+    amplitude: &LcSharedMeasurements,
+    cycles: Vec<Rational>,
+    pi: CheckedPiBounds,
+    budget: &mut Budget,
+) -> Result<LcSharedMeasurementCover, LcRelationError> {
+    let before = budget.usage();
+    budget.work(1, AT)?;
+    storage::retained(
+        amplitude
+            .relation()
+            .retained_payload_bytes()
+            .saturating_mul(2),
+        budget,
+    )?;
+    let phase = effective_question(amplitude, budget)?;
+    let effective = phase.pairs_cover_checked(cycles, pi, budget)?;
+    finish(amplitude, effective, &before, budget)
+}
+
+/// Every calibration and original physical equation is checked on the restored feasibility tuple.
+fn finish(
+    amplitude: &LcSharedMeasurements,
+    effective: LcClockPhaseCover,
+    before: &BudgetUsage,
+    budget: &mut Budget,
+) -> Result<LcSharedMeasurementCover, LcRelationError> {
     let energy = amplitude
         .energy()
         .map_or_else(Rational::one, |range| range[0].clone());
@@ -63,7 +98,7 @@ pub(super) fn cover(
         amplitude: amplitude.clone(),
         effective,
         witness,
-        usage: [before, budget.usage()],
+        usage: [*before, budget.usage()],
         bytes,
     })))
 }

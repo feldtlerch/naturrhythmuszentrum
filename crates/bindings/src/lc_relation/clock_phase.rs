@@ -2,6 +2,7 @@
 //! Independent phase intervals and one systematic phase offset retain a common physical question.
 
 mod admit;
+mod future;
 mod project;
 mod witness;
 
@@ -82,6 +83,16 @@ struct Cover {
 }
 
 impl LcSharedClockPhase {
+    /// Reuse prepared circle evidence for a narrow physical-phase refinement.
+    pub(in crate::lc_relation) fn pairs_cover_checked(
+        &self,
+        cycles: Vec<Rational>,
+        pi: nrz_cas::pi_bounds::CheckedPiBounds,
+        budget: &mut Budget,
+    ) -> Result<LcClockPhaseCover, LcRelationError> {
+        project::cover_checked(self, cycles, pi, budget)
+    }
+
     /// Declare independent phase intervals and a single shared additive phase error.
     ///
     /// Original physical and measured phase strips remain separate joint constraints.
@@ -212,6 +223,12 @@ impl LcClockPhaseWitness {
 }
 
 impl LcClockPhaseCover {
+    /// Identity of the complete original calibrated cover, including its retained fibres.
+    #[must_use]
+    pub fn shares_allocation(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+
     /// Complete original two-layer phase owner.
     #[must_use]
     pub fn phase(&self) -> &LcSharedClockPhase {

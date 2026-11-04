@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Exhausted solving retains the old certified clock cover, horizon and complete refined input question.
 
+mod calibrated;
 mod impossible;
 
 use super::{AT, Cover, LcClockRefinementInputs, LcRelationError, check, storage};

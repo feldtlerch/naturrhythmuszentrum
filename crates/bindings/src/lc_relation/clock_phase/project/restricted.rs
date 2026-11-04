@@ -7,8 +7,9 @@ use super::super::{
     AT, Bounds, Cover, LcClockPhaseCover, LcRelationError, LcSharedClockPhase, Rational, admit,
     storage, witness,
 };
-use crate::Budget;
+use crate::{Budget, LcPairsCover};
 use nrz_cas::pi_bounds::PiBoundCertificate;
+use nrz_cas::{limits::BudgetUsage, pi_bounds::CheckedPiBounds};
 use std::rc::Rc;
 
 /// Measured-strip nonemptiness and a shared physical intercept jointly prove the exact domain.
@@ -30,6 +31,40 @@ pub(super) fn cover(
         budget,
     )?;
     let measured = source::measured(phase, budget)?.pairs_cover(cycles.clone(), pi, budget)?;
+    finish(phase, measured, cycles, &before, budget)
+}
+
+/// Prepared circle evidence is reused, with the same complete independent measured certificate.
+pub(super) fn cover_checked(
+    phase: &LcSharedClockPhase,
+    cycles: Vec<Rational>,
+    pi: CheckedPiBounds,
+    budget: &mut Budget,
+) -> Result<LcClockPhaseCover, LcRelationError> {
+    let before = budget.usage();
+    budget.work(1, AT)?;
+    storage::retained(
+        phase
+            .relation()
+            .retained_payload_bytes()
+            .saturating_mul(3)
+            .saturating_add(phase.retained_payload_bytes())
+            .saturating_add(32_768),
+        budget,
+    )?;
+    let measured =
+        source::measured(phase, budget)?.pairs_cover_checked(cycles.clone(), pi, budget)?;
+    finish(phase, measured, cycles, &before, budget)
+}
+
+/// Original reconstruction follows identical exact elimination for raw and prepared pi evidence.
+fn finish(
+    phase: &LcSharedClockPhase,
+    measured: LcPairsCover,
+    cycles: Vec<Rational>,
+    before: &BudgetUsage,
+    budget: &mut Budget,
+) -> Result<LcClockPhaseCover, LcRelationError> {
     let effective = source::physical(phase, measured.rate(), budget)?.pairs_cover_checked(
         cycles,
         measured.pi_bounds().clone(),
@@ -72,7 +107,7 @@ pub(super) fn cover(
         measured: Some(measured),
         effective,
         witness,
-        usage: [before, budget.usage()],
+        usage: [*before, budget.usage()],
         bytes,
     })))
 }

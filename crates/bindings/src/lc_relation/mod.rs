@@ -7,7 +7,9 @@ pub use amplitude::{
 };
 mod attempt;
 pub use attempt::{LcBranchObligation, LcPairAttempt, LcUnresolvedBranches};
+mod calibrated_future;
 mod calibration;
+pub use calibrated_future::LcCalibratedFuture;
 mod capacitance;
 mod clock;
 mod clock_phase;

@@ -2,6 +2,7 @@
 //! One original question retains shared clock offset, phase offset and amplitude gain together.
 
 mod admit;
+mod future;
 mod project;
 mod scale;
 mod witness;
@@ -97,6 +98,16 @@ struct Cover {
 }
 
 impl LcSharedMeasurements {
+    /// Reuse prepared circle evidence for a narrow physical-phase refinement.
+    pub(in crate::lc_relation) fn pairs_cover_checked(
+        &self,
+        cycles: Vec<Rational>,
+        pi: nrz_cas::pi_bounds::CheckedPiBounds,
+        budget: &mut Budget,
+    ) -> Result<LcSharedMeasurementCover, LcRelationError> {
+        project::cover_checked(self, cycles, pi, budget)
+    }
+
     /// Add separate positive amplitude intervals and one common positive gain.
     ///
     /// The closed adapter supports either voltage or current amplitude and optional finite
@@ -229,6 +240,12 @@ impl LcSharedMeasurementWitness {
 }
 
 impl LcSharedMeasurementCover {
+    /// Identity of the complete original calibrated cover, including its retained fibres.
+    #[must_use]
+    pub fn shares_allocation(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+
     /// Complete measurement question retained by every projection.
     #[must_use]
     pub fn measurements(&self) -> &LcSharedMeasurements {

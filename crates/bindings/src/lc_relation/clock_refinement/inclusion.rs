@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Whole-question inclusion checks original physical inputs and every declared measurement support.
 
+mod calibrated;
+
 use super::{AT, LcRelationError, Question, storage};
 use crate::{Budget, LcInputRefinement, LcSampleTimes, LcSharedClock, LcSharedTiming};
 use nrz_cas::{Rational, limits::BudgetUsage};
