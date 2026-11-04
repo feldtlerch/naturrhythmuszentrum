@@ -1,19 +1,20 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Separate strip owners prove measured nonemptiness before exact physical reconstruction.
 
-use crate::lc_relation::{AT, calibration};
+use crate::lc_relation::{AT, calibration, ordered};
 use crate::{
     Budget, ExactConstant, LcInput, LcInterval, LcQuantity as Q, LcRelation, LcRelationError,
     LcSharedClock, LcSharedClockPhase,
 };
 use nrz_cas::Rational;
 
-/// Removing only physical phase, clock and alpha constraints gives a complete measured-strip cover.
+/// Original physical strips imply redundant measured constraints before independent complete-cycle checking.
 pub(super) fn measured(
     phase: &LcSharedClockPhase,
     budget: &mut Budget,
 ) -> Result<LcRelation, LcRelationError> {
     let mut inputs = Vec::new();
+    let offset = phase.offset().clone().map(ExactConstant::from);
     for value in phase.relation().inputs() {
         budget.work(1, AT)?;
         if !matches!(value.quantity(), Q::Phase(_) | Q::InitialPhase | Q::Time(_)) {
@@ -32,7 +33,8 @@ pub(super) fn measured(
             LcInterval::exact(time.clone().into(), budget)?,
             budget,
         )?);
-        inputs.push(input(Q::Phase(index), sample.clone(), budget)?);
+        let clipped = measured_sample(phase, index, sample, &offset, budget)?;
+        inputs.push(input(Q::Phase(index), clipped, budget)?);
     }
     LcRelation::new(
         phase.relation().epoch().into(),
@@ -92,4 +94,41 @@ fn input(
     budget: &mut Budget,
 ) -> Result<LcInput, LcRelationError> {
     LcInput::new(quantity, &quantity.descriptor()?, interval, budget)
+}
+
+/// Every original tuple implies `measured_i = physical_i-s` with the same declared `s`.
+/// These redundant strips help prove complete cycle coverage; the original shared fibre remains retained.
+fn measured_sample(
+    phase: &LcSharedClockPhase,
+    index: usize,
+    sample: &LcInterval,
+    offset: &[ExactConstant; 2],
+    budget: &mut Budget,
+) -> Result<LcInterval, LcRelationError> {
+    let mut lower = sample.lower().cloned().ok_or(LcRelationError::Projection)?;
+    let mut upper = sample.upper().cloned().ok_or(LcRelationError::Projection)?;
+    for original in phase.relation().inputs() {
+        budget.work(1, AT)?;
+        if original.quantity() != Q::Phase(index) {
+            continue;
+        }
+        let interval = original.interval();
+        if let Some(bound) = interval.lower() {
+            let candidate = bound.sub(&offset[1], budget)?;
+            if ordered(&lower, &candidate, budget)? {
+                lower = candidate;
+            } else if !ordered(&candidate, &lower, budget)? {
+                return Err(LcRelationError::UnprovedOrder);
+            }
+        }
+        if let Some(bound) = interval.upper() {
+            let candidate = bound.sub(&offset[0], budget)?;
+            if ordered(&candidate, &upper, budget)? {
+                upper = candidate;
+            } else if !ordered(&upper, &candidate, budget)? {
+                return Err(LcRelationError::UnprovedOrder);
+            }
+        }
+    }
+    LcInterval::new(Some(lower), Some(upper), budget)
 }

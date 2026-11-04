@@ -223,6 +223,15 @@ impl LcClockPhaseWitness {
 }
 
 impl LcClockPhaseCover {
+    /// Independent complete measured-cycle certificate for the narrower physical-phase path.
+    ///
+    /// Original-implied redundant strips may tighten this auxiliary question. The complete
+    /// original joint measurement source and its shared calibration fibres remain in `phase`.
+    #[must_use]
+    pub fn measured_cycle_cover(&self) -> Option<&LcPairsCover> {
+        self.0.measured.as_ref()
+    }
+
     /// Identity of the complete original calibrated cover, including its retained fibres.
     #[must_use]
     pub fn shares_allocation(&self, other: &Self) -> bool {
