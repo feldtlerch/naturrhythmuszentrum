@@ -2,12 +2,14 @@
 //! A bounded simultaneous L/C domain retains the original timing and its conditional physical fibre.
 
 mod prepare;
+mod roots;
 use super::{AT, LcRelationError, calibration, storage};
 use crate::{
     Budget, LcCertainty, LcPairParameters, LcPhaseGauge, LcRelation, LcSampleTimes, LcTimingCover,
     LcWitness,
 };
 use nrz_cas::{Rational, limits::BudgetUsage, pi_bounds::PiBoundCertificate};
+pub use roots::{LcJointRootCover, LcJointRootParameters, LcRootRateEndpoint};
 use std::rc::Rc;
 
 /// Complete bounded original element domain over exact independent timing recovery.

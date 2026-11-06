@@ -44,7 +44,10 @@ pub use inclusion::LcInputRefinement;
 mod interval;
 mod joint_elements;
 pub use impossible::LcImpossible;
-pub use joint_elements::{LcJointElementsCover, LcJointElementsParameters};
+pub use joint_elements::{
+    LcJointElementsCover, LcJointElementsParameters, LcJointRootCover, LcJointRootParameters,
+    LcRootRateEndpoint,
+};
 mod pairs;
 mod phase;
 pub use phase::{LcPhaseCover, LcPhaseParameters, LcPhaseWitness, LcSharedPhase};

@@ -11,6 +11,7 @@ mod energy_only;
 mod exact;
 mod joint_elements;
 mod phase;
+mod root_elements;
 mod shared;
 mod shared_errors;
 mod shared_initial;
