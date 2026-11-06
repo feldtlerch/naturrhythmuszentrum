@@ -3,9 +3,13 @@
 
 mod calibrated;
 mod impossible;
+mod measurement;
 
 use super::{AT, Cover, LcClockRefinementInputs, LcRelationError, check, storage};
-use crate::{Budget, LcClockCover, LcHorizon, LcImpossible, LcSharedTimingCover, LcTimingCover};
+use crate::{
+    Budget, LcClockCover, LcHorizon, LcImpossible, LcMeasurementImpossible, LcSharedTimingCover,
+    LcTimingCover,
+};
 use nrz_cas::{Rational, limits::BudgetUsage};
 
 /// A complete nonempty refinement with explicit rate/product inclusion and no-earlier horizon evidence.
@@ -28,6 +32,8 @@ pub enum LcClockRefinementState {
     Refined(Box<LcClockRefinementSuccess>),
     /// A separate all-cycle contradiction proves the complete refined original physical relation empty.
     Impossible(Box<LcImpossible>),
+    /// A separate contradiction excludes every tuple of the complete refined joint measurement question.
+    MeasurementImpossible(Box<LcMeasurementImpossible>),
     /// Solving or subsequent checking refused; previous evidence and all new inputs survive.
     Undecided(LcRelationError),
 }
@@ -188,7 +194,9 @@ impl LcClockRefinement {
     pub const fn refined_horizon(&self) -> Option<&LcHorizon> {
         match &self.state {
             LcClockRefinementState::Refined(success) => Some(&success.horizon),
-            LcClockRefinementState::Impossible(_) | LcClockRefinementState::Undecided(_) => None,
+            LcClockRefinementState::Impossible(_)
+            | LcClockRefinementState::MeasurementImpossible(_)
+            | LcClockRefinementState::Undecided(_) => None,
         }
     }
     /// Exact before/after solver snapshots, including an exhausted solver's consumed work.

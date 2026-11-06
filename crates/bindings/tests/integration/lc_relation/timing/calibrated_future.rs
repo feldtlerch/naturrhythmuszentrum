@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Reported future thresholds retain original calibration fibres and checked physical extremizers.
 
+mod impossible;
 mod refinement;
 mod support;
 use super::super::support::{TestResult, ledger};

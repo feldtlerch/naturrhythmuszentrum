@@ -36,6 +36,8 @@ pub use clock_refinement::{
 };
 mod horizon;
 mod impossible;
+mod measurement_impossible;
+pub use measurement_impossible::LcMeasurementImpossible;
 mod inclusion;
 pub use horizon::{LcHorizon, LcHorizonCoordinate, LcHorizonValue};
 pub use inclusion::LcInputRefinement;
