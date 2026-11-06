@@ -120,6 +120,37 @@ impl LcRelation {
 }
 
 impl LcWitness {
+    /// Reuse the unchanged sealed equations while checking every input of the target declaration.
+    pub(super) fn recheck_inputs_for(
+        &self,
+        relation: &LcRelation,
+        budget: &mut Budget,
+    ) -> Result<Self, LcRelationError> {
+        let before = budget.usage();
+        budget.work(1, AT)?;
+        let epoch_bytes = self.relation.epoch().len().max(relation.epoch().len());
+        budget.work(storage::size(epoch_bytes)?, AT)?;
+        if self.relation.epoch() != relation.epoch() {
+            return Err(LcRelationError::Epoch);
+        }
+        if self.values.observations.len() != relation.observations() {
+            return Err(LcRelationError::Observation);
+        }
+        let retained = self
+            .relation
+            .retained_payload_bytes()
+            .saturating_add(relation.retained_payload_bytes())
+            .saturating_add(self.bytes.saturating_mul(2));
+        storage::retained(retained, budget)?;
+        budget.with_retained_payload(retained, AT, |budget| {
+            let mut witness = self.clone();
+            witness.relation = relation.clone();
+            witness.check_inputs(budget)?;
+            witness.usage = [before, budget.usage()];
+            Ok(witness)
+        })
+    }
+
     /// Check every supplied constraint, including redundant and derived quantities.
     fn check_inputs(&self, budget: &mut Budget) -> Result<(), LcRelationError> {
         for input in self.relation.inputs() {

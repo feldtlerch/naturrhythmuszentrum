@@ -7,6 +7,11 @@ pub use amplitude::{
 };
 mod attempt;
 pub use attempt::{LcBranchObligation, LcPairAttempt, LcUnresolvedBranches};
+mod calibrated_elements;
+pub use calibrated_elements::{
+    LcCalibratedElements, LcCalibratedElementsCover, LcCalibratedElementsParameters,
+    LcCalibratedElementsWitness,
+};
 mod calibrated_future;
 mod calibration;
 pub use calibrated_future::LcCalibratedFuture;

@@ -2,6 +2,7 @@
 //! Independent timing relaxation keeps original membership distinct from shared offsets.
 
 mod amplitude;
+mod calibrated_elements;
 mod calibrated_future;
 mod clock_initial;
 mod clock_phase;
