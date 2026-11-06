@@ -7,7 +7,7 @@ use crate::{Budget, LcCalibratedFuture, LcHorizon};
 impl LcSharedMeasurementCover {
     /// Derive a reported-clock horizon with original phase and amplitude calibration fibres.
     ///
-    /// The retained phase owner must use the narrower original physical-phase adapter.
+    /// The retained phase owner restores either admitted original phase-calibration path.
     /// Original physical scales and all readings are rechecked at both future extremizers.
     /// # Errors
     /// Refuses unsupported phase domains and exhausted cumulative resources.

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-//! Narrow original physical phase strips have an equivalent clock projection with retained phase fibres.
+//! Reported intercept elimination preserves the shared phase-offset fibre in both original paths.
 
 use super::{AT, LcClockPhaseCover, LcRelationError, Rational, admit, storage};
 use crate::{
@@ -10,10 +10,10 @@ use crate::{
 impl LcClockPhaseCover {
     /// Derive a reported-clock horizon while retaining original clock/phase calibration fibres.
     ///
-    /// This closed adapter requires narrower original physical phase strips, whose retained
-    /// effective clock domain is a complete physical projection of the original joint question.
+    /// Broad shifted-phase domains restore the physical reported intercept with its conditional
+    /// phase-offset fibre; narrower original strips already retain the equivalent physical image.
     /// # Errors
-    /// Refuses the broad shifted-phase path, unsupported domains and exhausted resources.
+    /// Refuses unsupported original domains and exhausted resources.
     pub fn forward_reported_horizon(
         &self,
         budget: &mut Budget,
@@ -23,7 +23,7 @@ impl LcClockPhaseCover {
 
     /// Derive the same original reported-clock query at an explicit common future reference.
     /// # Errors
-    /// Refuses broad shifted-phase domains, references before the supported future domain and exhausted Work.
+    /// Refuses references before the supported future domain and exhausted Work.
     pub fn forward_reported_horizon_from(
         &self,
         reference: &Rational,
@@ -41,9 +41,6 @@ fn build(
 ) -> Result<LcHorizon, LcRelationError> {
     let before = budget.usage();
     budget.work(1, AT)?;
-    if cover.0.measured.is_none() {
-        return Err(LcRelationError::Projection);
-    }
     storage::retained(
         cover
             .retained_payload_bytes()
@@ -59,8 +56,9 @@ fn build(
     } else {
         cover.0.effective.forward_reported_horizon(budget)?
     };
+    let extrema = physical_image(cover, auxiliary.extremal_parameters(), budget)?;
     let mut witnesses = Vec::with_capacity(2);
-    for (side, expected) in auxiliary.extremal_parameters().iter().enumerate() {
+    for (side, expected) in extrema.iter().enumerate() {
         let original = cover.feasibility_witness();
         let retained = crate::lc_relation::calibrated_future::matches_extremizer(
             original.original().original(),
@@ -74,7 +72,7 @@ fn build(
             witnesses.push(extremizer(cover, side, expected, budget)?);
         }
     }
-    let source = LcCalibratedFuture::phase(cover.clone(), witnesses, auxiliary, budget)?;
+    let source = LcCalibratedFuture::phase(cover.clone(), witnesses, extrema, auxiliary, budget)?;
     LcHorizon::calibrated(source, &before, budget)
 }
 
@@ -96,12 +94,11 @@ fn extremizer(
     admit::intersect(&mut alpha, &allowed, budget)?;
     let alpha = alpha[side].clone();
     let clock_offset = intercept.sub(&alpha, budget)?.div(rate, budget)?;
-    let measured = cover
-        .0
-        .measured
-        .as_ref()
-        .ok_or(LcRelationError::Projection)?
-        .phase_at_rate(rate, budget)?;
+    let measured = if let Some(measured) = &cover.0.measured {
+        measured.phase_at_rate(rate, budget)?
+    } else {
+        cover.0.effective.reported_intercept_at_rate(rate, budget)?
+    };
     let mut phase_offset = [
         intercept.sub(&measured[1], budget)?,
         intercept.sub(&measured[0], budget)?,
@@ -119,4 +116,35 @@ fn extremizer(
         offset: phase_offset[0].clone(),
     };
     cover.witness(&parameters, budget)
+}
+
+/// At each rate the physical image is `(G+S) intersect (A+aD)`, with every offset fibre retained.
+fn physical_image(
+    cover: &LcClockPhaseCover,
+    auxiliary: &[[Rational; 2]; 2],
+    budget: &mut Budget,
+) -> Result<[[Rational; 2]; 2], LcRelationError> {
+    budget.work(1, AT)?;
+    let mut extrema = auxiliary.clone();
+    if cover.0.measured.is_some() {
+        return Ok(extrema);
+    }
+    let phase = cover.phase();
+    for (side, [intercept, rate]) in extrema.iter_mut().enumerate() {
+        budget.work(1, AT)?;
+        *intercept = intercept.add(&phase.offset()[side], budget)?;
+        if let Some(initial) = &phase.0.initial {
+            let boundary = initial[side].add(
+                &rate.mul(&phase.clock().offset_support()[side], budget)?,
+                budget,
+            )?;
+            let order = boundary.compare(intercept, budget)?;
+            let lower = side == 0 && order == std::cmp::Ordering::Greater;
+            let upper = side == 1 && order == std::cmp::Ordering::Less;
+            if lower || upper {
+                *intercept = boundary;
+            }
+        }
+    }
+    Ok(extrema)
 }

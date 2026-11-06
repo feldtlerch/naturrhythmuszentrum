@@ -6,6 +6,15 @@ use crate::{Budget, LcHorizon};
 use std::cmp::Ordering;
 
 impl LcClockCover {
+    /// Exact effective reported intercept, retaining its conditional original clock fibre.
+    pub(in crate::lc_relation) fn reported_intercept_at_rate(
+        &self,
+        rate: &Rational,
+        budget: &mut Budget,
+    ) -> Result<[Rational; 2], LcRelationError> {
+        self.0.effective.phase_at_rate(rate, budget)
+    }
+
     /// Derive a horizon for future reported r with actual time `r+d` under the same shared offset.
     ///
     /// The physical future phase is `alpha+a*(r+d)=beta+a*r`. No independent future clock

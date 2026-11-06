@@ -8,7 +8,10 @@ use super::{
     LcSharedClockPhase, Rational, admit, storage, witness,
 };
 use crate::{Budget, LcInput, LcQuantity as Q};
-use nrz_cas::pi_bounds::PiBoundCertificate;
+use nrz_cas::{
+    limits::BudgetUsage,
+    pi_bounds::{CheckedPiBounds, PiBoundCertificate},
+};
 use std::rc::Rc;
 
 /// Eliminating `beta=alpha-offset` is exact because every beta retains its original offset fibre.
@@ -22,6 +25,18 @@ pub(super) fn cover(
         return restricted::cover(phase, cycles, pi, budget);
     }
     let before = budget.usage();
+    let pi = pi.check(budget)?;
+    broad(phase, cycles, pi, &before, budget)
+}
+
+/// Raw and prepared circle routes share the same complete shifted-phase elimination and restoration.
+fn broad(
+    phase: &LcSharedClockPhase,
+    cycles: Vec<Rational>,
+    pi: CheckedPiBounds,
+    before: &BudgetUsage,
+    budget: &mut Budget,
+) -> Result<LcClockPhaseCover, LcRelationError> {
     budget.work(1, AT)?;
     let relation = effective(phase, budget)?;
     let offsets = phase.clock().offset();
@@ -36,7 +51,7 @@ pub(super) fn cover(
         &offset,
         budget,
     )?;
-    let effective = clock.pairs_cover(cycles, pi, budget)?;
+    let effective = clock.pairs_cover_checked(cycles, pi, budget)?;
     let point = effective.feasibility_witness();
     let beta = point
         .original()
@@ -62,7 +77,7 @@ pub(super) fn cover(
         effective,
         measured: None,
         witness,
-        usage: [before, budget.usage()],
+        usage: [*before, budget.usage()],
         bytes,
     })))
 }
@@ -134,16 +149,16 @@ fn at_beta(
     Ok(offset)
 }
 
-/// A refinement reuses checked pi evidence only in the supported physical-phase projection.
+/// A refinement reuses checked pi evidence in both original phase-calibration paths.
 pub(super) fn cover_checked(
     phase: &LcSharedClockPhase,
     cycles: Vec<Rational>,
     pi: nrz_cas::pi_bounds::CheckedPiBounds,
     budget: &mut Budget,
 ) -> Result<LcClockPhaseCover, LcRelationError> {
-    budget.work(1, AT)?;
-    if !phase.0.narrow {
-        return Err(LcRelationError::Projection);
+    if phase.0.narrow {
+        return restricted::cover_checked(phase, cycles, pi, budget);
     }
-    restricted::cover_checked(phase, cycles, pi, budget)
+    let before = budget.usage();
+    broad(phase, cycles, pi, &before, budget)
 }

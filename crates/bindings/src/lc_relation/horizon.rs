@@ -131,7 +131,13 @@ impl LcHorizon {
         if auxiliary.coordinate() != LcHorizonCoordinate::ReportedClock {
             return Err(LcRelationError::Projection);
         }
-        let bytes = auxiliary.retained_payload_bytes();
+        let bytes = source.extrema().iter().flatten().fold(
+            source
+                .mathematical()
+                .retained_payload_bytes()
+                .saturating_add(2_048),
+            |sum, value| sum.saturating_add(storage::rational(value)),
+        );
         storage::retained(
             bytes
                 .saturating_add(source.retained_payload_bytes())
@@ -140,8 +146,8 @@ impl LcHorizon {
         )?;
         let data = Data {
             coordinate: auxiliary.coordinate(),
-            extrema: auxiliary.extremal_parameters().clone(),
-            mathematical: auxiliary.mathematical().clone(),
+            extrema: source.extrema().clone(),
+            mathematical: source.mathematical().clone(),
             descriptor: auxiliary.descriptor().clone(),
             usage: [*before, budget.usage()],
             bytes,

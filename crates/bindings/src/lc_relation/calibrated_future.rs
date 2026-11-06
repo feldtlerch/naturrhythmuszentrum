@@ -6,7 +6,7 @@ use crate::{
     Budget, LcClockPhaseCover, LcClockPhaseWitness, LcHorizon, LcRelation,
     LcSharedMeasurementCover, LcSharedMeasurementWitness, LcWitness,
 };
-use nrz_cas::Rational;
+use nrz_cas::{Rational, lattice::PiWidthHorizon};
 use std::{cmp::Ordering, rc::Rc};
 
 /// Original calibrated source and checked physical extremizers for a reported-clock horizon.
@@ -18,8 +18,12 @@ pub struct LcCalibratedFuture(Rc<Data>);
 struct Data {
     /// Complete original phase or phase/amplitude source, including checked extremizers.
     original: Original,
-    /// Exact future image of an equivalent physical projection; never the public source authority.
+    /// Complete auxiliary clock projection before any shared phase-offset restoration.
     auxiliary: LcHorizon,
+    /// Checked physical reported-intercept/rate extremizers after restoring the shared phase fibre.
+    extrema: [[Rational; 2]; 2],
+    /// Exact physical future width and its finite/infinite/undecided threshold.
+    mathematical: PiWidthHorizon,
     /// Conservative total retained ownership.
     bytes: u64,
 }
@@ -27,7 +31,7 @@ struct Data {
 /// Both variants retain their own original measurement question rather than a marginal substitute.
 #[derive(Debug)]
 enum Original {
-    /// Shared clock and phase offsets with narrower original physical phases.
+    /// Shared clock and phase offsets with the complete original physical phase domain.
     Phase {
         /// Complete original phase-calibrated family.
         cover: LcClockPhaseCover,
@@ -48,6 +52,7 @@ impl LcCalibratedFuture {
     pub(super) fn phase(
         cover: LcClockPhaseCover,
         witnesses: Vec<LcClockPhaseWitness>,
+        extrema: [[Rational; 2]; 2],
         auxiliary: LcHorizon,
         budget: &mut Budget,
     ) -> Result<Self, LcRelationError> {
@@ -56,7 +61,7 @@ impl LcCalibratedFuture {
             return Err(LcRelationError::Observation);
         }
         let mut bytes = cover.retained_payload_bytes();
-        for (point, expected) in witnesses.iter().zip(auxiliary.extremal_parameters()) {
+        for (point, expected) in witnesses.iter().zip(&extrema) {
             budget.work(1, AT)?;
             if !point.phase().shares_allocation(cover.phase()) {
                 return Err(LcRelationError::Containment);
@@ -75,6 +80,7 @@ impl LcCalibratedFuture {
         Self::finish(
             Original::Phase { cover, witnesses },
             auxiliary,
+            extrema,
             bytes,
             budget,
         )
@@ -115,9 +121,11 @@ impl LcCalibratedFuture {
                 .saturating_add(storage::rational(point.original().offset()))
                 .saturating_add(storage::rational(point.original().original().offset()));
         }
+        let extrema = auxiliary.extremal_parameters().clone();
         Self::finish(
             Original::Amplitude { cover, witnesses },
             auxiliary,
+            extrema,
             bytes,
             budget,
         )
@@ -127,10 +135,40 @@ impl LcCalibratedFuture {
     fn finish(
         original: Original,
         auxiliary: LcHorizon,
+        extrema: [[Rational; 2]; 2],
         bytes: u64,
         budget: &mut Budget,
     ) -> Result<Self, LcRelationError> {
         budget.work(1, AT)?;
+        let mut identical = true;
+        for (physical, effective) in extrema
+            .iter()
+            .flatten()
+            .zip(auxiliary.extremal_parameters().iter().flatten())
+        {
+            identical &= physical.compare(effective, budget)? == Ordering::Equal;
+        }
+        let mathematical = if identical {
+            auxiliary.mathematical().clone()
+        } else {
+            let width = [
+                extrema[1][0].sub(&extrema[0][0], budget)?,
+                extrema[1][1].sub(&extrema[0][1], budget)?,
+            ];
+            PiWidthHorizon::check(
+                width,
+                auxiliary.mathematical().reference().clone(),
+                auxiliary.mathematical().pi_bounds().clone(),
+                budget,
+            )?
+        };
+        let bytes = extrema
+            .iter()
+            .flatten()
+            .fold(bytes, |sum, value| {
+                sum.saturating_add(storage::rational(value))
+            })
+            .saturating_add(mathematical.retained_payload_bytes());
         let bytes = bytes
             .saturating_add(auxiliary.retained_payload_bytes())
             .saturating_add(auxiliary.source_payload_bytes())
@@ -139,6 +177,8 @@ impl LcCalibratedFuture {
         Ok(Self(Rc::new(Data {
             original,
             auxiliary,
+            extrema,
+            mathematical,
             bytes,
         })))
     }
@@ -192,6 +232,16 @@ impl LcCalibratedFuture {
     #[must_use]
     pub fn retained_payload_bytes(&self) -> u64 {
         self.0.bytes
+    }
+
+    /// Exact physical image after restoring any original shared phase offset.
+    pub(super) fn extrema(&self) -> &[[Rational; 2]; 2] {
+        &self.0.extrema
+    }
+
+    /// Checked threshold for the physical image, reusing unchanged prepared evidence.
+    pub(super) fn mathematical(&self) -> &PiWidthHorizon {
+        &self.0.mathematical
     }
 
     /// Only the retaining physical horizon constructor can reuse the equivalent auxiliary proof.

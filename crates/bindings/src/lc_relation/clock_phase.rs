@@ -83,7 +83,7 @@ struct Cover {
 }
 
 impl LcSharedClockPhase {
-    /// Reuse prepared circle evidence for a narrow physical-phase refinement.
+    /// Reuse prepared circle evidence for either physical-phase refinement path.
     pub(in crate::lc_relation) fn pairs_cover_checked(
         &self,
         cycles: Vec<Rational>,

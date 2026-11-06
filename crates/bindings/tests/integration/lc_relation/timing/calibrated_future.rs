@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Reported future thresholds retain original calibration fibres and checked physical extremizers.
 
+mod broad;
 mod impossible;
 mod refinement;
 mod support;
@@ -104,7 +105,7 @@ fn lc_relation_calibrated_horizon_work() -> TestResult {
     Ok(())
 }
 
-/// The broad shifted-phase adapter never publishes its auxiliary intercept as physical future evidence.
+/// Reported future queries refuse a reference before the retained original observation domain.
 /// ´test:integration:lc-relation-calibrated-future-domain-refusal´
 #[test]
 fn lc_relation_calibrated_future_domain_refusal() -> TestResult {
@@ -135,8 +136,8 @@ fn lc_relation_calibrated_future_domain_refusal() -> TestResult {
     )?;
     let cover = source.pairs_cover(cycles(), &pi()?, &mut ledger()?)?;
     assert!(matches!(
-        cover.forward_reported_horizon(&mut ledger()?),
-        Err(nrz_bindings::LcRelationError::Projection)
+        cover.forward_reported_horizon_from(&number("0")?, &mut ledger()?),
+        Err(nrz_bindings::LcRelationError::Containment)
     ));
     Ok(())
 }
