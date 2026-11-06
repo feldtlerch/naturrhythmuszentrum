@@ -21,6 +21,9 @@ pub(super) fn measured(
             inputs.push(value.clone());
         }
     }
+    if let Some(initial) = measured_initial(phase, budget)? {
+        inputs.push(input(Q::InitialPhase, initial, budget)?);
+    }
     for (index, (time, sample)) in phase
         .clock()
         .nominal_times()
@@ -131,4 +134,39 @@ fn measured_sample(
         }
     }
     LcInterval::new(Some(lower), Some(upper), budget)
+}
+
+/// Every original tuple has measured intercept `alpha+a*d-s`, independently of all observation aliases.
+fn measured_initial(
+    phase: &LcSharedClockPhase,
+    budget: &mut Budget,
+) -> Result<Option<LcInterval>, LcRelationError> {
+    budget.work(1, AT)?;
+    let clock = phase.clock();
+    let Some(initial) = clock.initial_phase_support() else {
+        return Ok(None);
+    };
+    let rate = clock.rate_support();
+    let time = clock.offset_support();
+    let lower_rate = if time[0].is_negative() {
+        &rate[1]
+    } else {
+        &rate[0]
+    };
+    let upper_rate = if time[1].is_negative() {
+        &rate[0]
+    } else {
+        &rate[1]
+    };
+    let lower = initial[0]
+        .add(&lower_rate.mul(&time[0], budget)?, budget)?
+        .sub(&phase.offset()[1], budget)?;
+    let upper = initial[1]
+        .add(&upper_rate.mul(&time[1], budget)?, budget)?
+        .sub(&phase.offset()[0], budget)?;
+    Ok(Some(LcInterval::new(
+        Some(lower.into()),
+        Some(upper.into()),
+        budget,
+    )?))
 }

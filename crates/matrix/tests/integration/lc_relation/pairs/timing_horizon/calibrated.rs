@@ -2,6 +2,7 @@
 //! Both native formats enclose the independent affine-pi calibrated future oracle.
 
 mod broad;
+mod initial_cycle;
 mod support;
 use super::support::{cycles, render};
 use super::{Pi, TestResult, input, ledger, number, pi_certificate};

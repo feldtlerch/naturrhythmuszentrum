@@ -172,6 +172,11 @@ impl LcSharedClock {
         &self.0.support
     }
 
+    /// Original positive rate intersection used only to derive redundant calibration constraints.
+    pub(in crate::lc_relation) fn rate_support(&self) -> &[Rational; 2] {
+        &self.0.rate
+    }
+
     /// Every original physical initial-phase restriction, intersected without losing its clock correlation.
     #[must_use]
     pub fn initial_phase_support(&self) -> Option<&[Rational; 2]> {
