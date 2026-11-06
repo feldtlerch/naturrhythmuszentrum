@@ -783,18 +783,15 @@ fn materialize_term(
                 budget,
             )?;
         }
-        let combined = product.map_or_else(
-            || Ok(factor),
-            |previous| {
-                cas.generated(
-                    context,
-                    Operator::Mul,
-                    sort.clone(),
-                    &[previous, factor],
-                    budget,
-                )
-            },
-        )?;
+        let combined = product.map_or(Ok(factor), |previous| {
+            cas.generated(
+                context,
+                Operator::Mul,
+                sort.clone(),
+                &[previous, factor],
+                budget,
+            )
+        })?;
         product = Some(combined);
     }
     product.ok_or_else(fragment)

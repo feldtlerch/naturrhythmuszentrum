@@ -35,19 +35,18 @@ fn sign(text: &str) -> (bool, &str) {
 /// Validate decimal grammar and both written and effective exponent bounds.
 pub(crate) fn decimal(text: &str, limits: LiteralLimits) -> Result<Decimal<'_>, ArithmeticFailure> {
     let (negative, body) = sign(text);
-    let (mantissa, written) = body.find(['e', 'E']).map_or_else(
-        || Ok::<_, ArithmeticFailure>((body, 0)),
-        |position| {
-            let (prefix, suffix) = body.split_at(position);
-            Ok((
-                prefix,
-                exponent(
-                    suffix.get(1..).ok_or(ArithmeticFailure::InvalidLiteral)?,
-                    limits,
-                )?,
-            ))
-        },
-    )?;
+    let (mantissa, written) =
+        body.find(['e', 'E'])
+            .map_or(Ok::<_, ArithmeticFailure>((body, 0)), |position| {
+                let (prefix, suffix) = body.split_at(position);
+                Ok((
+                    prefix,
+                    exponent(
+                        suffix.get(1..).ok_or(ArithmeticFailure::InvalidLiteral)?,
+                        limits,
+                    )?,
+                ))
+            })?;
     let (whole, fraction) = mantissa.split_once('.').unwrap_or((mantissa, ""));
     if whole.is_empty() && fraction.is_empty() {
         return Err(ArithmeticFailure::InvalidLiteral);

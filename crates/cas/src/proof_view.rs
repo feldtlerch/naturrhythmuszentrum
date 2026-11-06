@@ -400,7 +400,7 @@ fn prepay_scoped_copy(value: &CheckedApplication, budget: &mut Budget) -> Result
     let scalar = value
         .scalar
         .as_ref()
-        .map_or_else(|| Ok(0), |value| prepay_scalar_copy(value, budget))?;
+        .map_or(Ok(0), |value| prepay_scalar_copy(value, budget))?;
     let retained = match &value.certificate {
         Certificate::SquareFree(value) => value.payload(budget)?,
         _ => 0,

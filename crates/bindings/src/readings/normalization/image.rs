@@ -363,7 +363,7 @@ fn pair(
 ) -> Result<(ExactConstant, ExactConstant), ReadingError> {
     let denominator = output.map_or_else(|| input.magnitude(), EntryMeaning::magnitude);
     let one = ExactConstant::one();
-    let numerator = output.map_or_else(|| &one, |_| input.magnitude());
+    let numerator = output.map_or(&one, |_| input.magnitude());
     let scale = numerator.div(denominator, budget)?;
     let offset = budget.with_retained_payload(
         storage::constants(std::slice::from_ref(&scale))?,
