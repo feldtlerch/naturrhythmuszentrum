@@ -10,6 +10,7 @@ mod representation;
 mod search;
 mod series_arithmetic;
 mod series_boundaries;
+mod series_calculus;
 mod series_joins;
 mod series_object;
 mod series_object_work;

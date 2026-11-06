@@ -2,7 +2,10 @@
 //! Complete finite payloads, with bounded exact rows and distinct result tags.
 
 use super::check::{AT, invalid, unsupported};
-use super::{SeriesBinaryRow, SeriesCertificate, SeriesProductRow, SeriesStatement};
+use super::{
+    SeriesBinaryRow, SeriesCertificate, SeriesDerivativeRow, SeriesIntegralRow, SeriesProductRow,
+    SeriesStatement,
+};
 use crate::budget::{Budget, BudgetKind};
 use crate::encoding::Encoder;
 use crate::error::Fault;
@@ -22,10 +25,12 @@ pub(crate) fn statement(
         S::Scale { .. } => 2,
         S::Mul { .. } => 3,
         S::Coefficient { .. } => 4,
+        S::Derive { .. } => 8,
+        S::Integrate { .. } => 9,
     })?;
     out.byte(0)?; // Object form, never a source congruence.
     match value {
-        S::Truncate { input, output } => {
+        S::Truncate { input, output } | S::Derive { input, output } => {
             write(input, out)?;
             out.byte(0)?;
             write(output, out)?;
@@ -55,6 +60,11 @@ pub(crate) fn statement(
             input,
             scalar,
             output,
+        }
+        | S::Integrate {
+            input,
+            constant: scalar,
+            output,
         } => {
             write(input, out)?;
             write(scalar, out)?;
@@ -82,11 +92,11 @@ pub(crate) fn read_statement(
 ) -> Result<SeriesStatement, Fault> {
     use crate::wire_decode::object;
     let mode = reader.byte()?;
-    if mode > 4 || reader.byte()? != 0 {
+    if !matches!(mode, 0..=4 | 8 | 9) || reader.byte()? != 0 {
         return Err(unsupported());
     }
     let input = object(reader, records)?;
-    let second = if matches!(mode, 1..=3) {
+    let second = if matches!(mode, 1..=3 | 9) {
         Some(object(reader, records)?)
     } else {
         None
@@ -133,6 +143,12 @@ pub(crate) fn read_statement(
             index: reader.index()?,
             value: output,
         },
+        8 => SeriesStatement::Derive { input, output },
+        9 => SeriesStatement::Integrate {
+            input,
+            constant: second.ok_or_else(invalid)?,
+            output,
+        },
         _ => return Err(unsupported()),
     })
 }
@@ -142,6 +158,24 @@ pub(crate) fn certificate(value: &SeriesCertificate, out: &mut Encoder<'_>) -> R
     out.byte(value.mode())?;
     out.byte(value.form())?;
     match value {
+        SeriesCertificate::Derive { rows, .. } => {
+            out.count(rows.len())?;
+            for row in rows {
+                crate::wire::index(row.index, out)?;
+                for value in [&row.input, &row.multiplier, &row.result] {
+                    out.number(value)?;
+                }
+            }
+        }
+        SeriesCertificate::Integrate { rows, .. } => {
+            out.count(rows.len())?;
+            for row in rows {
+                crate::wire::index(row.index, out)?;
+                for value in [&row.integer, &row.inverse, &row.input, &row.result] {
+                    out.number(value)?;
+                }
+            }
+        }
         SeriesCertificate::Truncate { coefficients, .. } => {
             crate::split_wire::numbers(coefficients, out)?;
         }
@@ -198,7 +232,7 @@ fn binary_rows(rows: &[SeriesBinaryRow], out: &mut Encoder<'_>) -> Result<(), Fa
 pub(crate) fn read_certificate(reader: &mut Reader<'_, '_>) -> Result<SeriesCertificate, Fault> {
     let mode = reader.byte()?;
     let form = reader.byte()?;
-    if mode > 4 || form != 0 {
+    if !matches!(mode, 0..=4 | 8 | 9) || form != 0 {
         return Err(unsupported());
     }
     Ok(match mode {
@@ -250,6 +284,37 @@ pub(crate) fn read_certificate(reader: &mut Reader<'_, '_>) -> Result<SeriesCert
             index: reader.index()?,
             value: reader.rational()?,
         },
+        8 => {
+            let count = reader.count(BudgetKind::JetEntries, 31, 192)?;
+            let mut rows = Vec::new();
+            rows.try_reserve_exact(count)
+                .map_err(|_| Fault::allocation(AT))?;
+            for _ in 0..count {
+                rows.push(SeriesDerivativeRow {
+                    index: reader.index()?,
+                    input: reader.rational()?,
+                    multiplier: reader.rational()?,
+                    result: reader.rational()?,
+                });
+            }
+            SeriesCertificate::Derive { form, rows }
+        }
+        9 => {
+            let count = reader.count(BudgetKind::JetEntries, 40, 256)?;
+            let mut rows = Vec::new();
+            rows.try_reserve_exact(count)
+                .map_err(|_| Fault::allocation(AT))?;
+            for _ in 0..count {
+                rows.push(SeriesIntegralRow {
+                    index: reader.index()?,
+                    integer: reader.rational()?,
+                    inverse: reader.rational()?,
+                    input: reader.rational()?,
+                    result: reader.rational()?,
+                });
+            }
+            SeriesCertificate::Integrate { form, rows }
+        }
         _ => return Err(unsupported()),
     })
 }
@@ -278,6 +343,8 @@ pub(crate) fn measure(value: &SeriesCertificate, budget: &mut Budget) -> Result<
         SeriesCertificate::Add { rows, .. } | SeriesCertificate::Scale { rows, .. } => rows.len(),
         SeriesCertificate::Mul { rows, .. } => rows.len(),
         SeriesCertificate::Coefficient { .. } => 1,
+        SeriesCertificate::Derive { rows, .. } => rows.len(),
+        SeriesCertificate::Integrate { rows, .. } => rows.len(),
     };
     budget.check(BudgetKind::JetEntries, size(count, AT)?, AT)?;
     let mut out = Encoder::new(budget, AT);

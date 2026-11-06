@@ -15,6 +15,18 @@ use crate::proof_model::{ApplicationDraft, Certificate, VerifiedWitness};
 /// A finite object operation; no variant denotes a source expansion or a centre change.
 #[derive(Clone, Debug)]
 pub enum SeriesOperation {
+    /// Formal derivative at exactly one fewer known coefficient; no ordinary proof slots.
+    Derive {
+        /// Original object of order at least two.
+        input: Handle,
+    },
+    /// Formal integral at exactly one greater order, consuming Defined(C) in slot zero.
+    Integrate {
+        /// Original admitted object.
+        input: Handle,
+        /// Exact rational constant independent of the coordinate.
+        constant: Handle,
+    },
     /// Explicit positive restriction, including a checked equal-order restriction.
     Truncate {
         /// Original admitted finite object.
@@ -61,6 +73,8 @@ impl SeriesOperation {
     const fn input(&self) -> &Handle {
         match self {
             Self::Truncate { input, .. }
+            | Self::Derive { input, .. }
+            | Self::Integrate { input, .. }
             | Self::Scale { input, .. }
             | Self::Coefficient { input, .. } => input,
             Self::Add { left, .. } | Self::Mul { left, .. } => left,
@@ -79,6 +93,11 @@ impl SeriesOperation {
     fn order(&self, cas: &Cas) -> Result<u32, Fault> {
         let available = cas.series_object(self.input())?.order;
         let order = match self {
+            Self::Derive { .. } => available
+                .checked_sub(1)
+                .filter(|n| *n > 0)
+                .ok_or_else(unsupported)?,
+            Self::Integrate { .. } => return available.checked_add(1).ok_or_else(unsupported),
             Self::Truncate { order, .. } => *order,
             Self::Add { right, order, .. } | Self::Mul { right, order, .. } => {
                 let common = available.min(cas.series_object(right)?.order);
@@ -131,6 +150,17 @@ fn workspace(
         let (a, b) = number(cas, scalar)?.component_bits();
         bits = bits.max(a).max(b);
     }
+    if let SeriesOperation::Integrate { constant, .. } = operation {
+        budget.work(1, AT)?;
+        let (a, b) = number(cas, constant)?.component_bits();
+        bits = bits.max(a).max(b);
+    }
+    if matches!(
+        operation,
+        SeriesOperation::Derive { .. } | SeriesOperation::Integrate { .. }
+    ) {
+        bits = bits.max(u64::from(order.bit_width()));
+    }
     let n = u64::from(order);
     let rows = if matches!(operation, SeriesOperation::Mul { .. }) {
         n.checked_mul(n.checked_add(1).ok_or_else(invalid)?)
@@ -161,7 +191,7 @@ fn workspace(
 }
 
 /// Copy a rational only after charging its exact retained component extent.
-fn copied(value: &Rational, budget: &mut Budget) -> Result<Rational, Fault> {
+pub(super) fn copied(value: &Rational, budget: &mut Budget) -> Result<Rational, Fault> {
     value.check(budget, AT)?;
     let (a, b) = value.component_bits();
     budget.work(
@@ -176,7 +206,7 @@ fn copied(value: &Rational, budget: &mut Budget) -> Result<Rational, Fault> {
 }
 
 /// Admit an output literal under the original checked declaration and binder frame.
-fn literal(
+pub(super) fn literal(
     cas: &mut Cas,
     input: &Handle,
     value: Rational,
@@ -202,7 +232,7 @@ fn literal(
 }
 
 /// The complete original metadata is copied only within the prepaid workspace.
-fn output(
+pub(super) fn output(
     cas: &mut Cas,
     input: &Handle,
     coefficients: Vec<Handle>,
@@ -224,12 +254,25 @@ fn output(
 }
 
 /// The candidate recurrence is separate from the checker and retains every explicit partial row.
+#[expect(
+    clippy::too_many_lines,
+    reason = "The closed finite-operation dispatcher retains candidate and certificate construction together"
+)]
 fn candidate(
     cas: &mut Cas,
     operation: &SeriesOperation,
     order: u32,
     budget: &mut Budget,
 ) -> Result<(S, C), Fault> {
+    match operation {
+        SeriesOperation::Derive { input } => {
+            return super::calculus::derive(cas, input, order, budget);
+        }
+        SeriesOperation::Integrate { input, constant } => {
+            return super::calculus::integrate(cas, input, constant, order, budget);
+        }
+        _ => {}
+    }
     if let SeriesOperation::Coefficient { input, index } = operation {
         return extracted(cas, input, *index, budget);
     }
@@ -326,7 +369,9 @@ fn candidate(
                 rows: products,
             },
         ),
-        SeriesOperation::Coefficient { .. } => return Err(invalid()),
+        SeriesOperation::Coefficient { .. }
+        | SeriesOperation::Derive { .. }
+        | SeriesOperation::Integrate { .. } => return Err(invalid()),
     })
 }
 
@@ -354,7 +399,7 @@ fn extracted(cas: &Cas, input: &Handle, index: u32, budget: &mut Budget) -> Resu
 }
 
 /// Borrow an original coefficient within the already validated positive truncation.
-fn entry<'a>(cas: &'a Cas, input: &Handle, index: u32) -> Result<&'a Rational, Fault> {
+pub(super) fn entry<'a>(cas: &'a Cas, input: &Handle, index: u32) -> Result<&'a Rational, Fault> {
     number(
         cas,
         cas.series_object(input)?
@@ -419,15 +464,18 @@ fn row(
             }
             Ok(sum)
         }
-        SeriesOperation::Coefficient { .. } => Err(invalid()),
+        SeriesOperation::Coefficient { .. }
+        | SeriesOperation::Derive { .. }
+        | SeriesOperation::Integrate { .. } => Err(invalid()),
     }
 }
 
 impl Cas {
     /// Construct finite candidates and replay them through the registered independent checker.
     ///
-    /// Scale consumes one ordinary scalar-definedness proof. Binary operations consume ordered
-    /// explicit truncation proofs for higher-order inputs. Output syntax is admitted atomically.
+    /// Scale and integration consume one ordinary scalar-definedness proof. Derivation consumes
+    /// no ordinary proofs. Binary operations consume ordered explicit truncation proofs for
+    /// higher-order inputs. Output syntax is admitted atomically.
     /// # Errors
     /// Returns typed unsupported capability for unavailable precision, invalid evidence for false
     /// premise joins, and typed exhaustion without publishing a partial object or judgment.
@@ -442,8 +490,10 @@ impl Cas {
                 budget.work(1, AT)?;
                 let order = operation.order(cas)?;
                 let count = match operation {
-                    SeriesOperation::Truncate { .. } | SeriesOperation::Coefficient { .. } => 0,
-                    SeriesOperation::Scale { .. } => 1,
+                    SeriesOperation::Truncate { .. }
+                    | SeriesOperation::Coefficient { .. }
+                    | SeriesOperation::Derive { .. } => 0,
+                    SeriesOperation::Scale { .. } | SeriesOperation::Integrate { .. } => 1,
                     SeriesOperation::Add { left, right, .. }
                     | SeriesOperation::Mul { left, right, .. } => {
                         usize::from(cas.series_object(left)?.order != order)
@@ -452,6 +502,16 @@ impl Cas {
                 };
                 if proofs.len() != count {
                     return Err(invalid());
+                }
+                if matches!(
+                    operation,
+                    SeriesOperation::Derive { .. } | SeriesOperation::Integrate { .. }
+                ) {
+                    budget.check(BudgetKind::JetOrder, u64::from(order - 1), AT)?;
+                    budget.check(BudgetKind::JetEntries, u64::from(order), AT)?;
+                }
+                if let SeriesOperation::Integrate { input, constant } = operation {
+                    super::check::constant(cas, cas.series_object(input)?, constant, budget)?;
                 }
                 let mut bytes = workspace(cas, operation, order, budget)?;
                 for proof in proofs {

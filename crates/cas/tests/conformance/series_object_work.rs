@@ -37,3 +37,38 @@ fn series_object_resource_boundaries() -> TestResult {
     }
     Ok(())
 }
+
+/// The enlarged order-four integral output retains every independent admission ceiling.
+/// ´test:integration:series-calculus-object-resource-boundaries´
+#[test]
+fn series_calculus_object_resource_boundaries() -> TestResult {
+    use crate::testing::series_work::attempt_values;
+    for (warm, ceilings, prefixes) in [
+        (
+            false,
+            [1622, 7313, 5705, 13, 23, 13, 23, 2, 3, 4, 0],
+            [1535, 1622, 1622, 1622, 1622, 1622, 1622, 1438, 37, 37, 0],
+        ),
+        (
+            true,
+            [1622, 7377, 93, 0, 8, 13, 23, 2, 3, 4, 0],
+            [1535, 130, 122, 0, 1449, 130, 130, 1438, 37, 37, 0],
+        ),
+    ] {
+        for ((kind, ceiling), prefix) in KINDS.into_iter().zip(ceilings).zip(prefixes) {
+            assert_eq!(
+                attempt_values(warm, kind, ceiling, &["-1/2", "1", "-1", "1"])?,
+                (true, ceilings[0]),
+                "{warm} {kind:?}"
+            );
+            if ceiling > 0 {
+                assert_eq!(
+                    attempt_values(warm, kind, ceiling - 1, &["-1/2", "1", "-1", "1"])?,
+                    (false, prefix),
+                    "{warm} {kind:?}"
+                );
+            }
+        }
+    }
+    Ok(())
+}

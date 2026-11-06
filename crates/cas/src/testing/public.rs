@@ -14,6 +14,11 @@ pub(crate) mod series;
 pub(crate) mod series_boundaries;
 #[expect(
     clippy::redundant_pub_crate,
+    reason = "shared independent calculus fixtures"
+)]
+pub(crate) mod series_calculus;
+#[expect(
+    clippy::redundant_pub_crate,
     reason = "shared finite arithmetic fixtures"
 )]
 pub(crate) mod series_proof;

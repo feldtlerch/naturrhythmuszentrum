@@ -40,8 +40,8 @@ pub(crate) fn number<'a>(cas: &'a Cas, handle: &Handle) -> Result<&'a Rational, 
 /// The statement determines the complete ordered arity before any proof payload is copied.
 pub(crate) fn premise_count(cas: &Cas, value: &S) -> Result<usize, Fault> {
     match value {
-        S::Truncate { .. } | S::Coefficient { .. } => Ok(0),
-        S::Scale { .. } => Ok(1),
+        S::Truncate { .. } | S::Coefficient { .. } | S::Derive { .. } => Ok(0),
+        S::Scale { .. } | S::Integrate { .. } => Ok(1),
         S::Add {
             left, right, order, ..
         }
@@ -94,12 +94,38 @@ fn scalar(
     number(cas, handle)?.check(budget, AT)
 }
 
+/// Constant independence precedes rational capability, preserving the malformed-scope split.
+pub(super) fn constant(
+    cas: &Cas,
+    basis: &SeriesObject<Handle>,
+    handle: &Handle,
+    budget: &mut Budget,
+) -> Result<(), Fault> {
+    super::independent(
+        &cas.state,
+        cas.checked(handle)?,
+        cas.checked(&basis.variable)?,
+        budget,
+    )?;
+    scalar(cas, basis, handle, budget)
+}
+
 /// Validate typed roles even when the payload is only a caller's expected judgment.
 pub(crate) fn roles(cas: &Cas, value: &S, budget: &mut Budget) -> Result<(), Fault> {
     let input = cas.series_object(value.input())?;
     input.preflight(budget)?;
     match value {
-        S::Truncate { output, .. } => compatible(input, cas.series_object(output)?, budget)?,
+        S::Truncate { output, .. } | S::Derive { output, .. } => {
+            compatible(input, cas.series_object(output)?, budget)?;
+        }
+        S::Integrate {
+            constant: value,
+            output,
+            ..
+        } => {
+            constant(cas, input, value, budget)?;
+            compatible(input, cas.series_object(output)?, budget)?;
+        }
         S::Add { right, output, .. } | S::Mul { right, output, .. } => {
             compatible(input, cas.series_object(right)?, budget)?;
             compatible(input, cas.series_object(output)?, budget)?;
@@ -118,7 +144,7 @@ pub(crate) fn roles(cas: &Cas, value: &S, budget: &mut Budget) -> Result<(), Fau
 }
 
 /// Exact equality never trusts a proposed arithmetic result or an unmetered large comparison.
-fn equal(left: &Rational, right: &Rational, budget: &mut Budget) -> Result<(), Fault> {
+pub(super) fn equal(left: &Rational, right: &Rational, budget: &mut Budget) -> Result<(), Fault> {
     if left.compare(right, budget)? != Ordering::Equal {
         return Err(invalid());
     }
@@ -126,7 +152,7 @@ fn equal(left: &Rational, right: &Rational, budget: &mut Budget) -> Result<(), F
 }
 
 /// Bounds precede the vector access, and each visited coefficient consumes `JetEntries`.
-fn coefficient<'a>(
+pub(super) fn coefficient<'a>(
     cas: &'a Cas,
     object: &SeriesObject<Handle>,
     index: u32,
@@ -176,7 +202,7 @@ fn restriction<'a>(
 }
 
 /// Check the ordinary scalar-definedness slot without manufacturing or dropping conditions.
-fn defined(
+pub(super) fn defined(
     cas: &Cas,
     factor: &Handle,
     basis: &SeriesObject<Handle>,
@@ -268,6 +294,14 @@ fn arithmetic_workspace(cas: &Cas, value: &S, budget: &mut Budget) -> Result<u64
         let (a, b) = number(cas, scalar)?.component_bits();
         bits = bits.max(a).max(b);
     }
+    if let S::Integrate { constant, .. } = value {
+        budget.work(1, AT)?;
+        let (a, b) = number(cas, constant)?.component_bits();
+        bits = bits.max(a).max(b);
+    }
+    if matches!(value, S::Derive { .. } | S::Integrate { .. }) {
+        bits = bits.max(u64::from(input.order.bit_width()));
+    }
     bits.checked_mul(u64::from(input.order))
         .and_then(|v| v.checked_mul(64))
         .and_then(|v| v.checked_add(1024))
@@ -284,6 +318,9 @@ fn arithmetic(
 ) -> Result<(), Fault> {
     let input = cas.series_object(value.input())?;
     match (value, certificate) {
+        (S::Derive { .. } | S::Integrate { .. }, _) => {
+            return super::calculus::check(cas, value, certificate, premises, budget);
+        }
         (S::Truncate { output, .. }, C::Truncate { coefficients, .. }) => {
             if !premises.is_empty() {
                 return Err(invalid());

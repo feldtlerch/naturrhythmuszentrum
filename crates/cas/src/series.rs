@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Exact finite objects modulo a positive power of the declared increment.
 
+mod calculus;
 #[expect(
     clippy::redundant_pub_crate,
     reason = "finite checking remains kernel-private"
@@ -19,7 +20,10 @@ pub use produce::SeriesOperation;
     reason = "portable checking remains kernel-private"
 )]
 pub(crate) mod portable;
-pub use model::{SeriesBinaryRow, SeriesCertificate, SeriesProductRow, SeriesStatement};
+pub use model::{
+    SeriesBinaryRow, SeriesCertificate, SeriesDerivativeRow, SeriesIntegralRow, SeriesProductRow,
+    SeriesStatement,
+};
 
 use crate::budget::{Budget, BudgetKind};
 use crate::encoding::Encoder;

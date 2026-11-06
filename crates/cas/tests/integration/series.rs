@@ -8,7 +8,7 @@ use crate::testing::series_proof::fixture;
 /// ´test:integration:series-output-absent-production´
 #[test]
 fn series_output_absent_production() -> TestResult {
-    for kind in 0..7 {
+    for kind in 0..12 {
         let mut source = crate::testing::series_proof::production(kind)?;
         let witness = source.base.cas.compute_series(
             &source.operation,
@@ -48,7 +48,7 @@ fn series_output_absent_production() -> TestResult {
 /// ´test:integration:series-fresh-expected-replay´
 #[test]
 fn series_fresh_expected_replay() -> TestResult {
-    for kind in 0..7 {
+    for kind in 0..12 {
         let mut sender = fixture(kind, false)?;
         let witness = sender.base.cas.check_proof(
             &sender.base.context,
@@ -84,8 +84,13 @@ fn series_fresh_expected_replay() -> TestResult {
 /// ´test:integration:series-scale-condition-replay´
 #[test]
 fn series_scale_condition_replay() -> TestResult {
-    for residual in [false, true] {
-        let mut source = crate::testing::series_proof::conditioned(residual, false)?;
+    for (integral, residual) in [(false, false), (false, true), (true, false), (true, true)] {
+        let make = if integral {
+            crate::testing::series_proof::conditioned_integral
+        } else {
+            crate::testing::series_proof::conditioned
+        };
+        let mut source = make(residual, false)?;
         let witness = source.base.cas.check_proof(
             &source.base.context,
             &source.steps,
@@ -99,7 +104,7 @@ fn series_scale_condition_replay() -> TestResult {
             .cas
             .export_witness(&witness, &mut default_budget()?)?;
         for reordered in [false, true] {
-            let mut receiver = crate::testing::series_proof::conditioned(residual, reordered)?;
+            let mut receiver = make(residual, reordered)?;
             if residual {
                 let mut changed = receiver.expected.clone();
                 changed.residuals.clear();

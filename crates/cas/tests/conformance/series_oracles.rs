@@ -66,13 +66,12 @@ fn series_small_polynomial_oracles() -> TestResult {
 /// ´test:integration:series-every-output-position-refused´
 #[test]
 fn series_every_output_position_refused() -> TestResult {
-    for kind in 0..7 {
-        let count = if kind == 0 || kind >= 5 {
-            1
-        } else if kind == 4 {
-            2
-        } else {
-            3
+    for kind in 0..12 {
+        let count = match kind {
+            0 | 5 | 6 | 8 => 1,
+            4 | 7 => 2,
+            10 => 4,
+            _ => 3,
         };
         for index in 0..count {
             let mut f = fixture(kind, false)?;
@@ -84,11 +83,13 @@ fn series_every_output_position_refused() -> TestResult {
                 S::Truncate { output, .. }
                 | S::Add { output, .. }
                 | S::Scale { output, .. }
+                | S::Derive { output, .. }
+                | S::Integrate { output, .. }
                 | S::Mul { output, .. } => output,
                 S::Coefficient { value, .. } => value,
             }
             .clone();
-            let replacement = if kind >= 5 {
+            let replacement = if matches!(kind, 5 | 6) {
                 let (Operator::Rational(value), _) = f.base.cas.expression(&target)? else {
                     return Err("rational".into());
                 };
@@ -137,15 +138,19 @@ fn series_every_output_position_refused() -> TestResult {
                 S::Truncate { output, .. }
                 | S::Add { output, .. }
                 | S::Scale { output, .. }
+                | S::Derive { output, .. }
+                | S::Integrate { output, .. }
                 | S::Mul { output, .. } => *output = replacement,
                 S::Coefficient { value, .. } => *value = replacement,
             }
             let before = f.base.cas.canonical_snapshot(&mut default_budget()?)?;
-            assert!(
+            assert_eq!(
                 f.base
                     .cas
                     .check_proof(&f.base.context, &f.steps, &mut default_budget()?)
-                    .is_err()
+                    .expect_err("altered output coefficient")
+                    .kind,
+                FaultKind::Invalid(InvalidCode::Rule)
             );
             assert_eq!(
                 f.base.cas.canonical_snapshot(&mut default_budget()?)?,
@@ -249,58 +254,60 @@ fn series_explicit_common_truncation() -> TestResult {
     Ok(())
 }
 
-/// A valid analytic side-series theorem does not supply an object-truncation premise.
+/// A valid analytic side-series theorem supplies neither truncation nor constant-definedness evidence.
 /// ´test:integration:series-germ-premise-refused´
 #[test]
 fn series_germ_premise_refused() -> TestResult {
-    let mut f = crate::testing::series_proof::production(4)?;
-    let at = crate::testing::germs::at(&mut f.base, "0", None)?;
-    let request = f.base.request(
-        crate::testing::germs::task(
-            &at,
-            nrz_cas::proof::GermMode::Series {
-                order: 1,
-                analytic: true,
-            },
-        ),
-        &[f.base.x.clone()],
-    )?;
-    let nrz_cas::request::Outcome::Proved { result, .. } = f.base.cas.run(&request) else {
-        return Err("checked germ".into());
-    };
-    assert!(matches!(
-        result.witness.judgment().statement,
-        Statement::Germ(_)
-    ));
-    let before = f.base.cas.canonical_snapshot(&mut default_budget()?)?;
-    assert_eq!(
-        f.base
+    for kind in [4, 7, 9] {
+        let mut f = crate::testing::series_proof::production(kind)?;
+        let at = crate::testing::germs::at(&mut f.base, "0", None)?;
+        let request = f.base.request(
+            crate::testing::germs::task(
+                &at,
+                nrz_cas::proof::GermMode::Series {
+                    order: 1,
+                    analytic: true,
+                },
+            ),
+            &[f.base.x.clone()],
+        )?;
+        let nrz_cas::request::Outcome::Proved { result, .. } = f.base.cas.run(&request) else {
+            return Err("checked germ".into());
+        };
+        assert!(matches!(
+            result.witness.judgment().statement,
+            Statement::Germ(_)
+        ));
+        let before = f.base.cas.canonical_snapshot(&mut default_budget()?)?;
+        assert_eq!(
+            f.base
+                .cas
+                .compute_series(
+                    &f.operation,
+                    std::slice::from_ref(result.witness.proof()),
+                    &mut default_budget()?
+                )
+                .err()
+                .ok_or("germ accepted as a finite series premise")?
+                .kind,
+            FaultKind::Invalid(InvalidCode::Rule)
+        );
+        assert_eq!(
+            f.base.cas.canonical_snapshot(&mut default_budget()?)?,
+            before
+        );
+        let bytes = f
+            .base
             .cas
-            .compute_series(
-                &f.operation,
-                std::slice::from_ref(result.witness.proof()),
-                &mut default_budget()?
-            )
-            .err()
-            .ok_or("germ accepted as a truncation premise")?
-            .kind,
-        FaultKind::Invalid(InvalidCode::Rule)
-    );
-    assert_eq!(
-        f.base.cas.canonical_snapshot(&mut default_budget()?)?,
-        before
-    );
-    let bytes = f
-        .base
-        .cas
-        .export_witness(&result.witness, &mut default_budget()?)?;
-    assert!(matches!(
-        f.base
-            .cas
-            .inspect(&bytes, &mut default_budget()?)?
-            .judgment()
-            .statement,
-        Statement::Germ(_)
-    ));
+            .export_witness(&result.witness, &mut default_budget()?)?;
+        assert!(matches!(
+            f.base
+                .cas
+                .inspect(&bytes, &mut default_budget()?)?
+                .judgment()
+                .statement,
+            Statement::Germ(_)
+        ));
+    }
     Ok(())
 }

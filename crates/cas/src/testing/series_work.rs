@@ -24,7 +24,17 @@ pub(crate) const KINDS: [BudgetKind; 11] = [
 
 /// Each attempt starts with identical committed syntax and an independent active allowance.
 pub(crate) fn attempt(warm: bool, kind: BudgetKind, amount: u64) -> TestResult<(bool, u64)> {
-    let (mut f, value) = fixture(&["1", "2", "0"])?;
+    attempt_values(warm, kind, amount, &["1", "2", "0"])
+}
+
+/// The same complete admission control covers the enlarged order-four integral output.
+pub(crate) fn attempt_values(
+    warm: bool,
+    kind: BudgetKind,
+    amount: u64,
+    values: &[&str],
+) -> TestResult<(bool, u64)> {
+    let (mut f, value) = fixture(values)?;
     if warm {
         admit(&mut f, value.clone())?;
     }

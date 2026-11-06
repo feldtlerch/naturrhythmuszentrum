@@ -11,7 +11,7 @@ use nrz_cas::{FaultKind, InvalidCode};
 /// ´test:integration:series-arithmetic-hand-fixtures´
 #[test]
 fn series_arithmetic_hand_fixtures() -> TestResult {
-    for kind in 0..7 {
+    for kind in 0..12 {
         let mut f = fixture(kind, false)?;
         assert_eq!(
             f.base
@@ -20,6 +20,8 @@ fn series_arithmetic_hand_fixtures() -> TestResult {
                     Statement::Series(s) => match s.as_ref() {
                         nrz_cas::series::SeriesStatement::Truncate { input, .. }
                         | nrz_cas::series::SeriesStatement::Scale { input, .. }
+                        | nrz_cas::series::SeriesStatement::Derive { input, .. }
+                        | nrz_cas::series::SeriesStatement::Integrate { input, .. }
                         | nrz_cas::series::SeriesStatement::Coefficient { input, .. } => input,
                         nrz_cas::series::SeriesStatement::Add { left, .. }
                         | nrz_cas::series::SeriesStatement::Mul { left, .. } => left,
@@ -54,7 +56,7 @@ fn series_arithmetic_hand_fixtures() -> TestResult {
 /// ´test:integration:series-arithmetic-row-mutations´
 #[test]
 fn series_arithmetic_row_mutations() -> TestResult {
-    for kind in 0..7 {
+    for kind in 0..12 {
         let mut f = fixture(kind, false)?;
         let root = f.steps.last_mut().ok_or("root")?;
         let Certificate::Series(value) = &mut root.certificate else {
@@ -66,6 +68,8 @@ fn series_arithmetic_row_mutations() -> TestResult {
             C::Mul { rows, .. } => {
                 rows.pop();
             }
+            C::Derive { rows, .. } => rows[0].result = rational("9")?,
+            C::Integrate { rows, .. } => rows[0].result = rational("9")?,
             C::Coefficient { value, .. } => *value = rational("9")?,
         }
         let before = f.base.cas.canonical_snapshot(&mut default_budget()?)?;
@@ -88,7 +92,7 @@ fn series_arithmetic_row_mutations() -> TestResult {
 /// ´test:integration:series-arithmetic-deferred-forms´
 #[test]
 fn series_arithmetic_deferred_forms() -> TestResult {
-    for kind in 0..7 {
+    for kind in 0..12 {
         for form in [1, 2] {
             let mut f = fixture(kind, false)?;
             let root = f.steps.last_mut().ok_or("root")?;
@@ -99,6 +103,8 @@ fn series_arithmetic_deferred_forms() -> TestResult {
                 C::Truncate { form: slot, .. }
                 | C::Add { form: slot, .. }
                 | C::Scale { form: slot, .. }
+                | C::Derive { form: slot, .. }
+                | C::Integrate { form: slot, .. }
                 | C::Mul { form: slot, .. }
                 | C::Coefficient { form: slot, .. } => *slot = form,
             }
@@ -124,8 +130,6 @@ fn series_arithmetic_deferred_forms() -> TestResult {
         "series.reciprocal",
         "series.divide",
         "series.invert",
-        "series.derive",
-        "series.integrate",
         "series.residual",
     ] {
         assert!(

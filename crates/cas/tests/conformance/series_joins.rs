@@ -94,13 +94,13 @@ fn series_metadata_joins() -> TestResult {
 /// ´test:integration:series-valid-premise-joins´
 #[test]
 fn series_valid_premise_joins() -> TestResult {
-    for kind in [2, 4] {
+    for kind in [2, 4, 9, 10] {
         for missing in [false, true] {
             let mut f = fixture(kind, false)?;
             if missing {
                 f.steps.last_mut().ok_or("root")?.premises.clear();
-            } else if kind == 2 {
-                let scalar = f.base.one.clone();
+            } else if kind != 4 {
+                let scalar = f.base.number("11")?;
                 f.steps[0] = defined(&mut f.base, &scalar)?;
             } else {
                 let input = object(&mut f.base, &f.field, &["9", "2", "3"])?;
@@ -124,11 +124,13 @@ fn series_valid_premise_joins() -> TestResult {
                 );
             }
             let before = f.base.cas.canonical_snapshot(&mut default_budget()?)?;
-            assert!(
+            assert_eq!(
                 f.base
                     .cas
                     .check_proof(&f.base.context, &f.steps, &mut default_budget()?)
-                    .is_err()
+                    .expect_err("missing or mismatched premise")
+                    .kind,
+                FaultKind::Invalid(InvalidCode::Rule)
             );
             assert_eq!(
                 f.base.cas.canonical_snapshot(&mut default_budget()?)?,

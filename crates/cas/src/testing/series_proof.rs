@@ -187,9 +187,54 @@ pub(crate) fn conditioned(residual: bool, reordered: bool) -> TestResult<Fixture
     Ok(f)
 }
 
+/// Reuse the same qualified ordinary fact while changing only the finite operation and rows.
+pub(crate) fn conditioned_integral(residual: bool, reordered: bool) -> TestResult<Fixture> {
+    let mut f = conditioned(residual, reordered)?;
+    let mut root = f.steps.pop().ok_or("scale root")?;
+    let Statement::Series(value) = &root.conclusion else {
+        return Err("series".into());
+    };
+    let S::Scale { input, scalar, .. } = value.as_ref() else {
+        return Err("scale".into());
+    };
+    let input = input.clone();
+    let constant = scalar.clone();
+    let original_context = f.base.context.clone();
+    f.base.context = root.context.clone();
+    let output = object(&mut f.base, &f.field, &["-1/2", "1", "1", "1"])?;
+    f.base.context = original_context;
+    root.rule = Primitive::SeriesIntegrate;
+    root.conclusion = Statement::Series(Box::new(S::Integrate {
+        input,
+        constant,
+        output,
+    }));
+    let mut rows = Vec::new();
+    for (index, integer, inverse, input) in [
+        (0, "1", "1", "1"),
+        (1, "2", "1/2", "2"),
+        (2, "3", "1/3", "3"),
+    ] {
+        rows.push(crate::test_api::series::SeriesIntegralRow {
+            index,
+            integer: rational(integer)?,
+            inverse: rational(inverse)?,
+            input: rational(input)?,
+            result: rational("1")?,
+        });
+    }
+    root.certificate = Certificate::Series(Box::new(C::Integrate { form: 0, rows }));
+    f.expected.statement = root.conclusion.clone();
+    f.steps.push(root);
+    Ok(f)
+}
+
 /// Build only original syntax and required evidence, independently of the expected result store.
 pub(crate) fn production(kind: usize) -> TestResult<Production> {
     use crate::test_api::series::SeriesOperation as O;
+    if kind >= 7 {
+        return super::series_calculus::production(kind);
+    }
     let mut base = Base::new()?;
     let field = base
         .cas
@@ -386,6 +431,9 @@ fn binary(values: &[(&str, &str, &str)]) -> TestResult<Vec<SeriesBinaryRow>> {
     reason = "Independent hand fixtures state every endpoint and arithmetic row explicitly"
 )]
 pub(crate) fn fixture(kind: usize, reordered: bool) -> TestResult<Fixture> {
+    if kind >= 7 {
+        return super::series_calculus::fixture(kind, reordered);
+    }
     let mut base = Base::new()?;
     if reordered {
         for value in ["-3/2", "22", "13", "5", "4", "3", "2", "-1/2"] {
