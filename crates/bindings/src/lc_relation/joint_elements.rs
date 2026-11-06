@@ -95,6 +95,11 @@ impl LcSampleTimes {
 }
 
 impl LcJointElementsCover {
+    /// Existing complete timing proof supplies its already-checked circle evidence.
+    pub(in crate::lc_relation) fn checked_pi(&self) -> &nrz_cas::pi_bounds::CheckedPiBounds {
+        self.0.effective.pi_bounds()
+    }
+
     /// Complete original timing question, retaining every supplied L/C constraint.
     #[must_use]
     pub fn timing(&self) -> &LcSampleTimes {

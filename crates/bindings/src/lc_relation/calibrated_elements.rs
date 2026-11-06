@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Shared inductance calibration coexists with bounded original capacitance and complete timing.
 
+mod forward;
 mod project;
+pub use forward::{LcCalibratedForwardCover, LcCalibratedForwardWitness};
 
 use super::{
     AT, LcRelationError,

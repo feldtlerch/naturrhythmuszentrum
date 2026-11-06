@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! One shared inductance calibration retains the simultaneous original capacitance and timing fibres.
 
+mod forward;
+
 use super::super::support::{TestResult, ledger};
 use super::support::{cycles, input, number, pi};
 use nrz_bindings::{

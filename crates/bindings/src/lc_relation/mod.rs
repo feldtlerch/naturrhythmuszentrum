@@ -10,7 +10,7 @@ pub use attempt::{LcBranchObligation, LcPairAttempt, LcUnresolvedBranches};
 mod calibrated_elements;
 pub use calibrated_elements::{
     LcCalibratedElements, LcCalibratedElementsCover, LcCalibratedElementsParameters,
-    LcCalibratedElementsWitness,
+    LcCalibratedElementsWitness, LcCalibratedForwardCover, LcCalibratedForwardWitness,
 };
 mod calibrated_future;
 mod calibration;
