@@ -985,4 +985,147 @@ mod tests {
         }
         Ok(())
     }
+
+    /// Actual source entry faults retain the public capability and invalid-evidence distinction.
+    /// ´test:unit:series-source-request-outcomes´
+    #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "Actual entry faults and request completion share their complete source setup"
+    )]
+    fn series_source_request_outcomes() -> TestResult {
+        use crate::series::{SourceClause as C, SourceRequest};
+        use crate::testing::native::{Fixture, admit};
+        let mut f = Fixture::new()?;
+        let field = admit(
+            &mut f.cas,
+            Draft::Solve(crate::solving::SolveDraft::CoefficientDomain(
+                crate::solving::CoefficientDomainData::Rational,
+            )),
+        )?;
+        let root = f.cas.materialize_derived(&f.one, &f.one, &mut budget()?)?;
+        let receipt = f.cas.walk_derived(&root, &mut budget()?)?.receipt;
+        let request = Request {
+            task: Task::Simplify,
+            context: f.context.clone(),
+            inputs: vec![CoveredInput { root, receipt }],
+            premises: Vec::new(),
+            limits: crate::budget::LimitsOverride::default(),
+        };
+        for clause in [
+            C::SineOrigin,
+            C::CosineOrigin,
+            C::ArctangentOrigin,
+            C::PolynomialSeed,
+            C::Truncate,
+            C::Add,
+            C::Sub,
+            C::ScaleLeft,
+            C::ScaleRight,
+            C::Neg,
+            C::Mul,
+        ] {
+            let mut ledger = budget()?;
+            let limits = ledger.limits().clone();
+            let (record, unsupported) = f.cas.prepare_execution(
+                &request,
+                &SearchPolicy::default(),
+                &limits,
+                &mut ledger,
+            )?;
+            assert!(!unsupported);
+            let source = SourceRequest {
+                clause,
+                source: f.x.clone(),
+                domain: f.domain.clone(),
+                field: field.clone(),
+                centre: f.zero.clone(),
+                variable: f.x.clone(),
+                scope: Vec::new(),
+                context: f.context.clone(),
+                order: 1,
+            };
+            let before = f.cas.canonical_snapshot(&mut budget()?)?;
+            let fault = f
+                .cas
+                .expand_series_source(&source, &[], &mut ledger)
+                .expect_err("missing typed premise");
+            assert_eq!(fault.kind, FaultKind::Invalid(InvalidCode::Rule));
+            assert!(
+                matches!(outcome(record,Execution{result:None,fault:Some(fault)},&ledger.usage(),&BudgetUsage::default()),Outcome::Invalid{fault:actual,..} if actual==fault)
+            );
+            assert_eq!(f.cas.canonical_snapshot(&mut budget()?)?, before);
+        }
+        let predicate = admit(
+            &mut f.cas,
+            Draft::Condition {
+                header: Reference::Existing(f.header.clone()),
+                scope: Vec::new(),
+                kind: PredicateKind::Defined,
+                arguments: vec![Reference::Existing(f.one.clone())],
+            },
+        )?;
+        let mut draft = crate::proof_model::ApplicationDraft {
+            rule: crate::rule::Primitive::CaseDomain,
+            context: f.context.clone(),
+            conclusion: Statement::PredicateFact {
+                region: f.domain.clone(),
+                predicate,
+            },
+            premises: Vec::new(),
+            substitutions: Vec::new(),
+            certificate: crate::proof_model::Certificate::None,
+        };
+        let (certificate, _) =
+            crate::case_check::reconstruct(&mut f.cas, &draft, &[], &mut budget()?)?;
+        draft.certificate = crate::proof_model::Certificate::Cases(Box::new(certificate));
+        let ordinary = f.cas.check_proof(&f.context, &[draft], &mut budget()?)?;
+        let pi = crate::testing::native::term(
+            &mut f.cas,
+            &f.header,
+            Operator::Constant(crate::model::Constant::Pi),
+            &[],
+        )?;
+        for clause in [
+            C::SineOrigin,
+            C::CosineOrigin,
+            C::ArctangentOrigin,
+            C::PolynomialSeed,
+        ] {
+            let mut ledger = budget()?;
+            let limits = ledger.limits().clone();
+            let (record, unsupported) = f.cas.prepare_execution(
+                &request,
+                &SearchPolicy::default(),
+                &limits,
+                &mut ledger,
+            )?;
+            assert!(!unsupported);
+            let source = SourceRequest {
+                clause,
+                source: f.one.clone(),
+                domain: f.domain.clone(),
+                field: field.clone(),
+                centre: pi.clone(),
+                variable: f.x.clone(),
+                scope: Vec::new(),
+                context: f.context.clone(),
+                order: 1,
+            };
+            let before = f.cas.canonical_snapshot(&mut budget()?)?;
+            let fault = f
+                .cas
+                .expand_series_source(&source, &[ordinary.proof().clone()], &mut ledger)
+                .expect_err("unavailable coefficient centre");
+            assert_eq!(
+                fault.kind,
+                FaultKind::Invalid(InvalidCode::SeriesUnsupported)
+            );
+            assert!(
+                matches!(outcome(record.clone(),Execution{result:None,fault:Some(fault)},&ledger.usage(),&BudgetUsage::default()),Outcome::Unresolved{request,blocker,..} if request==record && blocker==Some(fault))
+            );
+            assert_eq!(f.cas.canonical_snapshot(&mut budget()?)?, before);
+        }
+        Ok(())
+    }
 }

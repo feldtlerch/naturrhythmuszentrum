@@ -40,6 +40,7 @@ pub(crate) fn number<'a>(cas: &'a Cas, handle: &Handle) -> Result<&'a Rational, 
 /// The statement determines the complete ordered arity before any proof payload is copied.
 pub(crate) fn premise_count(cas: &Cas, value: &S) -> Result<usize, Fault> {
     match value {
+        S::Source(value) => Ok(value.clause.arity()),
         S::Truncate { .. } | S::Coefficient { .. } | S::Derive { .. } => Ok(0),
         S::Scale { .. } | S::Integrate { .. } => Ok(1),
         S::Add {
@@ -53,7 +54,7 @@ pub(crate) fn premise_count(cas: &Cas, value: &S) -> Result<usize, Fault> {
 }
 
 /// Every metadata component participates, including the full declared binder frame.
-fn compatible(
+pub(super) fn compatible(
     left: &SeriesObject<Handle>,
     right: &SeriesObject<Handle>,
     budget: &mut Budget,
@@ -112,9 +113,13 @@ pub(super) fn constant(
 
 /// Validate typed roles even when the payload is only a caller's expected judgment.
 pub(crate) fn roles(cas: &Cas, value: &S, budget: &mut Budget) -> Result<(), Fault> {
+    if let S::Source(value) = value {
+        return super::source::roles(cas, value, budget);
+    }
     let input = cas.series_object(value.input())?;
     input.preflight(budget)?;
     match value {
+        S::Source(_) => return Err(invalid()),
         S::Truncate { output, .. } | S::Derive { output, .. } => {
             compatible(input, cas.series_object(output)?, budget)?;
         }
@@ -236,6 +241,10 @@ pub(crate) fn check(
     premises: &[CheckedApplication],
     budget: &mut Budget,
 ) -> Result<ScopedConditions, Fault> {
+    if matches!(&draft.conclusion, Statement::Series(value) if matches!(value.as_ref(), S::Source(_)))
+    {
+        return super::source::check(cas, draft, premises, budget);
+    }
     let (Statement::Series(value), Certificate::Series(certificate)) =
         (&draft.conclusion, &draft.certificate)
     else {

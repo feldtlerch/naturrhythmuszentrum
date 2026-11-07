@@ -80,6 +80,7 @@ fn series_every_output_position_refused() -> TestResult {
                 return Err("series".into());
             };
             let target = match value.as_ref() {
+                S::Source(_) => return Err("object fixture".into()),
                 S::Truncate { output, .. }
                 | S::Add { output, .. }
                 | S::Scale { output, .. }
@@ -135,6 +136,7 @@ fn series_every_output_position_refused() -> TestResult {
                 return Err("series".into());
             };
             match value.as_mut() {
+                S::Source(_) => return Err("object fixture".into()),
                 S::Truncate { output, .. }
                 | S::Add { output, .. }
                 | S::Scale { output, .. }

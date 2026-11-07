@@ -18,6 +18,8 @@ fn series_arithmetic_hand_fixtures() -> TestResult {
                 .cas
                 .series_object(match &f.expected.statement {
                     Statement::Series(s) => match s.as_ref() {
+                        nrz_cas::series::SeriesStatement::Source(_) =>
+                            return Err("object fixture".into()),
                         nrz_cas::series::SeriesStatement::Truncate { input, .. }
                         | nrz_cas::series::SeriesStatement::Scale { input, .. }
                         | nrz_cas::series::SeriesStatement::Derive { input, .. }
@@ -63,6 +65,7 @@ fn series_arithmetic_row_mutations() -> TestResult {
             return Err("series certificate".into());
         };
         match value.as_mut() {
+            C::Source(_) => return Err("object fixture".into()),
             C::Truncate { coefficients, .. } => coefficients[0] = rational("9")?,
             C::Add { rows, .. } | C::Scale { rows, .. } => rows[0].result = rational("9")?,
             C::Mul { rows, .. } => {
@@ -88,10 +91,26 @@ fn series_arithmetic_row_mutations() -> TestResult {
     Ok(())
 }
 
-/// Source forms, polynomial seeds and composition are unavailable even for exact small inputs.
+/// Complete admitted source forms check; object bytes alone and unadmitted forms refuse.
 /// ´test:integration:series-arithmetic-deferred-forms´
 #[test]
 fn series_arithmetic_deferred_forms() -> TestResult {
+    for kind in 0..8 {
+        let mut f = crate::testing::series_source::lifted(kind, false)?;
+        let expected = f.expected.as_ref().ok_or("expected")?;
+        let value = crate::testing::series_source::statement(expected)?;
+        f.base
+            .cas
+            .check_series_source(value, &f.certificate, &f.proofs, &mut default_budget()?)?;
+    }
+    let mut seed = crate::testing::series_source::setup(3, 4, false, true)?;
+    let expected = seed.expected.as_ref().ok_or("expected")?;
+    seed.base.cas.check_series_source(
+        crate::testing::series_source::statement(expected)?,
+        &seed.certificate,
+        &seed.proofs,
+        &mut default_budget()?,
+    )?;
     for kind in 0..12 {
         for form in [1, 2] {
             let mut f = fixture(kind, false)?;
@@ -100,6 +119,7 @@ fn series_arithmetic_deferred_forms() -> TestResult {
                 return Err("series certificate".into());
             };
             match value.as_mut() {
+                C::Source(_) => return Err("object fixture".into()),
                 C::Truncate { form: slot, .. }
                 | C::Add { form: slot, .. }
                 | C::Scale { form: slot, .. }
@@ -126,7 +146,6 @@ fn series_arithmetic_deferred_forms() -> TestResult {
     }
     for key in [
         "series.compose",
-        "series.source",
         "series.reciprocal",
         "series.divide",
         "series.invert",

@@ -32,6 +32,12 @@ fn preflight(cas: &Cas, steps: &[ApplicationDraft], budget: &mut Budget) -> Resu
             continue;
         }
         let step = steps.get(index).ok_or_else(invalid)?;
+        if let Statement::Series(value) = &step.conclusion
+            && let crate::series::SeriesStatement::Source(value) = value.as_ref()
+            && step.premises.len() != value.clause.arity()
+        {
+            return Err(invalid());
+        }
         if !step.rule.specification().available {
             return Err(Fault::invalid(InvalidCode::UnsupportedFragment, AT));
         }
@@ -117,6 +123,7 @@ fn rule_conditions(
         | Primitive::SeriesAdd
         | Primitive::SeriesScale
         | Primitive::SeriesDerive
+        | Primitive::SeriesSource
         | Primitive::SeriesIntegrate
         | Primitive::SeriesMul
         | Primitive::SeriesCoefficient => {
@@ -421,6 +428,10 @@ impl Cas {
                     .try_reserve_exact(steps.len())
                     .map_err(|_| Fault::allocation(AT))?;
                 for step in steps {
+                    if matches!(&step.conclusion, Statement::Series(value) if matches!(value.as_ref(), crate::series::SeriesStatement::Source(_))) {
+                        proofs.push(check_source_step(candidate, step, &proofs, budget)?);
+                        continue;
+                    }
                     let mut premises = Vec::new();
                     premises
                         .try_reserve_exact(step.premises.len())
@@ -542,4 +553,55 @@ impl Cas {
         budget.restore_limits(previous);
         result
     }
+}
+
+/// New source paths retain every simultaneous premise copy independently of generic admission.
+fn check_source_step(
+    cas: &mut Cas,
+    step: &ApplicationDraft,
+    proofs: &[Handle],
+    budget: &mut Budget,
+) -> Result<Handle, Fault> {
+    let Statement::Series(statement) = &step.conclusion else {
+        return Err(invalid());
+    };
+    if step.premises.len() != crate::series::check::premise_count(cas, statement)? {
+        return Err(invalid());
+    }
+    let mut bytes = crate::series::codec::source_workspace(&step.certificate, budget)?;
+    for index in &step.premises {
+        let proof = proofs
+            .get(usize::try_from(*index).map_err(|_| invalid())?)
+            .ok_or_else(invalid)?;
+        bytes = bytes
+            .checked_add(crate::proof_view::application_bytes(
+                cas,
+                cas.checked(proof)?,
+                budget,
+            )?)
+            .ok_or_else(invalid)?;
+    }
+    budget.with_retained_payload(bytes, AT, |budget| {
+        let mut premises = Vec::new();
+        let mut ids = Vec::new();
+        premises
+            .try_reserve_exact(step.premises.len())
+            .map_err(|_| Fault::allocation(AT))?;
+        ids.try_reserve_exact(step.premises.len())
+            .map_err(|_| Fault::allocation(AT))?;
+        for index in &step.premises {
+            let proof = proofs
+                .get(usize::try_from(*index).map_err(|_| invalid())?)
+                .ok_or_else(invalid)?;
+            ids.push(cas.checked(proof)?);
+            premises.push(crate::proof_view::application(
+                cas,
+                cas.checked(proof)?,
+                budget,
+            )?);
+        }
+        let mut application = check_application(cas, step, &premises, budget)?;
+        application.premises = ids;
+        cas.publish_scoped(application, budget)
+    })
 }

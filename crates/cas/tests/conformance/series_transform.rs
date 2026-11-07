@@ -286,6 +286,109 @@ fn series_coordinate_substitution_identity() -> TestResult {
     Ok(())
 }
 
+/// Equal-spelled coordinates and their source syntax move together only through new checked evidence.
+/// ´test:integration:series-source-coordinate-substitution´
+#[test]
+fn series_source_coordinate_substitution() -> TestResult {
+    use nrz_cas::proof::Statement;
+    use nrz_cas::series::{SeriesStatement, SourceClause, SourceRequest};
+    let (mut cas, header, input, x, y) = fixture_with_twins(true)?;
+    let basis = cas.series_object(&input)?.clone();
+    let domain = cas.admissible_region(&basis.context)?;
+    let source = admit(
+        &mut cas,
+        Draft::Source {
+            key: "source-substitution".into(),
+            text: "original source".into(),
+        },
+        &mut default_budget()?,
+    )?;
+    let mut base = crate::testing::cases::Fixture {
+        cas,
+        header,
+        context: basis.context.clone(),
+        domain,
+        source,
+        x: x.clone(),
+        zero: basis.coefficients[1].clone(),
+        one: basis.coefficients[0].clone(),
+    };
+    let sine = base.term(Operator::Sine, &[x])?;
+    let coordinate = crate::testing::series_proof::defined(&mut base, &basis.variable)?;
+    let coordinate = base
+        .cas
+        .check_proof(&base.context, &[coordinate], &mut default_budget()?)?;
+    let guard = base
+        .cas
+        .trig_defined(&sine, coordinate.proof(), &mut default_budget()?)?;
+    let request = SourceRequest {
+        clause: SourceClause::SineOrigin,
+        source: sine.clone(),
+        domain: base.domain.clone(),
+        field: basis.field,
+        centre: base.zero.clone(),
+        variable: base.x.clone(),
+        scope: Vec::new(),
+        context: base.context.clone(),
+        order: 3,
+    };
+    let positive = base.cas.expand_series_source(
+        &request,
+        &[guard.proof().clone()],
+        &mut default_budget()?,
+    )?;
+    let Statement::Series(value) = &positive.judgment().statement else {
+        return Err("series".into());
+    };
+    let SeriesStatement::Source(value) = value.as_ref() else {
+        return Err("source".into());
+    };
+    let old_output = value.output.clone();
+    let substitutions = [Substitution {
+        key: "x".into(),
+        replacement: y.clone(),
+    }];
+    let new_source = base
+        .cas
+        .substitute(&sine, &substitutions, &mut default_budget()?)?;
+    let new_output = base
+        .cas
+        .substitute(&old_output, &substitutions, &mut default_budget()?)?;
+    assert_ne!(new_source, sine);
+    assert_eq!(base.cas.series_object(&new_output)?.variable, y);
+    let mut changed = request.clone();
+    changed.source = new_source.clone();
+    changed.variable = y.clone();
+    let before = base.cas.canonical_snapshot(&mut default_budget()?)?;
+    assert!(
+        base.cas
+            .expand_series_source(&changed, &[guard.proof().clone()], &mut default_budget()?)
+            .is_err()
+    );
+    assert_eq!(base.cas.canonical_snapshot(&mut default_budget()?)?, before);
+    let coordinate = crate::testing::series_proof::defined(&mut base, &y)?;
+    let coordinate = base
+        .cas
+        .check_proof(&base.context, &[coordinate], &mut default_budget()?)?;
+    let guard = base
+        .cas
+        .trig_defined(&new_source, coordinate.proof(), &mut default_budget()?)?;
+    let checked = base.cas.expand_series_source(
+        &changed,
+        &[guard.proof().clone()],
+        &mut default_budget()?,
+    )?;
+    let Statement::Series(value) = &checked.judgment().statement else {
+        return Err("series".into());
+    };
+    let SeriesStatement::Source(value) = value.as_ref() else {
+        return Err("source".into());
+    };
+    assert_eq!(value.output, new_output);
+    assert_eq!(value.source, new_source);
+    Ok(())
+}
+
 /// A replacement from a binder frame cannot become a captured series coordinate.
 /// ´test:integration:series-coordinate-capture-refusal´
 #[test]

@@ -22,6 +22,16 @@ pub(crate) mod series_calculus;
     reason = "shared finite arithmetic fixtures"
 )]
 pub(crate) mod series_proof;
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "shared source evidence fixtures"
+)]
+pub(crate) mod series_source;
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "shared complete source measurements"
+)]
+pub(crate) mod series_source_work;
 
 #[expect(
     clippy::redundant_pub_crate,

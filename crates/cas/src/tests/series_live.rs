@@ -599,7 +599,7 @@ fn series_portable_aggregate_premise_payload() -> TestResult {
 /// ´test:crate:series-as-germ-premise-refused´
 #[test]
 fn series_as_germ_premise_refused() -> TestResult {
-    for kind in 0..3 {
+    for kind in 0..4 {
         calculus_as_germ_premise(kind)?;
     }
     Ok(())
@@ -654,10 +654,30 @@ fn calculus_as_germ_premise(kind: usize) -> TestResult {
                 .clone(),
         );
     }
-    let series = f
-        .base
-        .cas
-        .compute_series(&operation, &proofs, &mut default_budget()?)?;
+    let source_request = crate::series::SourceRequest {
+        clause: crate::series::SourceClause::PolynomialSeed,
+        source: f.base.x.clone(),
+        domain: f.base.domain.clone(),
+        field: f.field.clone(),
+        centre: f.base.zero.clone(),
+        variable: f.base.x.clone(),
+        scope: Vec::new(),
+        context: f.base.context.clone(),
+        order: 2,
+    };
+    let series = if kind == 3 {
+        let x = f.base.x.clone();
+        let ordinary = source_defined(&mut f, &x)?;
+        f.base.cas.expand_series_source(
+            &source_request,
+            &[ordinary.proof().clone()],
+            &mut default_budget()?,
+        )?
+    } else {
+        f.base
+            .cas
+            .compute_series(&operation, &proofs, &mut default_budget()?)?
+    };
     let point = crate::boundary_regions::boundary(
         &mut f.base.cas,
         &f.base.domain,
@@ -692,6 +712,70 @@ fn calculus_as_germ_premise(kind: usize) -> TestResult {
         result.witness.proof().logical_id(),
         &mut default_budget()?,
     )?;
+    if kind == 3 {
+        let before = f.base.cas.canonical_snapshot(&mut default_budget()?)?;
+        assert_eq!(
+            f.base
+                .cas
+                .expand_series_source(
+                    &source_request,
+                    &[result.witness.proof().clone()],
+                    &mut default_budget()?
+                )
+                .expect_err("germ is not source domain evidence")
+                .kind,
+            FaultKind::Invalid(InvalidCode::Rule)
+        );
+        assert_eq!(
+            f.base.cas.canonical_snapshot(&mut default_budget()?)?,
+            before
+        );
+        let crate::proof_model::Statement::Series(value) = &series.judgment().statement else {
+            return Err("source statement".into());
+        };
+        let crate::series::SeriesStatement::Source(value) = value.as_ref() else {
+            return Err("source result".into());
+        };
+        let object_restriction = f.base.cas.compute_series(
+            &O::Truncate {
+                input: value.output.clone(),
+                order: 1,
+            },
+            &[],
+            &mut default_budget()?,
+        )?;
+        let mut restriction = source_request;
+        restriction.clause = crate::series::SourceClause::Truncate;
+        restriction.order = 1;
+        let positive = f.base.cas.expand_series_source(
+            &restriction,
+            &[series.proof().clone(), object_restriction.proof().clone()],
+            &mut default_budget()?,
+        )?;
+        let before = f.base.cas.canonical_snapshot(&mut default_budget()?)?;
+        assert_eq!(
+            f.base
+                .cas
+                .expand_series_source(
+                    &restriction,
+                    &[
+                        result.witness.proof().clone(),
+                        object_restriction.proof().clone()
+                    ],
+                    &mut default_budget()?,
+                )
+                .expect_err("valid germ is not a source-congruence premise")
+                .kind,
+            FaultKind::Invalid(InvalidCode::Rule),
+        );
+        assert_eq!(
+            f.base.cas.canonical_snapshot(&mut default_budget()?)?,
+            before
+        );
+        f.base
+            .cas
+            .export_witness(&positive, &mut default_budget()?)?;
+    }
     let mut premises = application
         .premises
         .iter()
@@ -933,5 +1017,1009 @@ fn series_integral_ordinary_premise_payload() -> TestResult {
     f.base
         .cas
         .export_witness(&ordinary, &mut default_budget()?)?;
+    Ok(())
+}
+
+/// Reconstruct ordinary definedness on the original large region, without an assumed predicate.
+fn source_defined(f: &mut Fixture, source: &Handle) -> TestResult<VerifiedWitness> {
+    use crate::proof_model::{Certificate, Statement};
+    let predicate = admit(
+        &mut f.base.cas,
+        Draft::Condition {
+            header: Reference::Existing(f.base.header.clone()),
+            scope: Vec::new(),
+            kind: crate::model::PredicateKind::Defined,
+            arguments: vec![Reference::Existing(source.clone())],
+        },
+    )?;
+    let mut draft = ApplicationDraft {
+        rule: crate::rule::Primitive::CaseDomain,
+        context: f.base.context.clone(),
+        conclusion: Statement::PredicateFact {
+            region: f.base.domain.clone(),
+            predicate,
+        },
+        premises: Vec::new(),
+        substitutions: Vec::new(),
+        certificate: Certificate::None,
+    };
+    let (certificate, _) =
+        crate::case_check::reconstruct(&mut f.base.cas, &draft, &[], &mut default_budget()?)?;
+    draft.certificate = Certificate::Cases(Box::new(certificate));
+    Ok(f.base
+        .cas
+        .check_proof(&f.base.context, &[draft], &mut default_budget()?)?)
+}
+
+/// A valid retained numerical enclosure is not an exact source or domain application.
+/// ´test:crate:series-source-enclosure-slot-refused´
+#[test]
+fn series_source_enclosure_slot_refused() -> TestResult {
+    use crate::enclosure::{EnclosureGoal, EnclosureRequest, RefinementPolicy};
+    let mut f = fixture(false)?;
+    let request = EnclosureRequest {
+        target: f.base.one.clone(),
+        context: f.base.context.clone(),
+        coordinates: Vec::new(),
+        goal: EnclosureGoal::Width,
+    };
+    let policy = RefinementPolicy {
+        version: 1,
+        precision: 4,
+        grid_ceiling: 64,
+        rounds: 2,
+        reduction_ceiling: 16,
+        term_ceiling: 64,
+        checking_work: 50_000,
+    };
+    let report = f
+        .base
+        .cas
+        .enclose(&request, policy, &mut default_budget()?, &mut |_| false)?;
+    assert!(report.checked.is_some());
+    let ids: Vec<_> = f
+        .base
+        .cas
+        .state
+        .indices
+        .keys()
+        .filter(|id| {
+            matches!(
+                f.base.cas.state.node(**id),
+                Ok(crate::graph::Vertex::AnonymousLemma(_))
+            )
+        })
+        .copied()
+        .collect();
+    assert_eq!(ids.len(), 1);
+    let id = ids[0];
+    let source = crate::series::SourceRequest {
+        clause: crate::series::SourceClause::PolynomialSeed,
+        source: f.base.one.clone(),
+        domain: f.base.domain.clone(),
+        field: f.field,
+        centre: f.base.zero.clone(),
+        variable: f.base.x.clone(),
+        scope: Vec::new(),
+        context: f.base.context.clone(),
+        order: 1,
+    };
+    let before = f.base.cas.canonical_snapshot(&mut default_budget()?)?;
+    assert!(matches!(
+        f.base
+            .cas
+            .expand_series_source(&source, &[f.base.cas.handle(id)], &mut default_budget()?)
+            .expect_err("enclosure is not an exact proof slot")
+            .kind,
+        FaultKind::Invalid(InvalidCode::UnsupportedFragment)
+    ));
+    assert_eq!(
+        f.base.cas.canonical_snapshot(&mut default_budget()?)?,
+        before
+    );
+    f.base.cas.check_enclosure(
+        &request,
+        policy,
+        report
+            .checked
+            .as_ref()
+            .ok_or("checked enclosure")?
+            .certificate(),
+        &mut default_budget()?,
+        &mut |_| false,
+    )?;
+    Ok(())
+}
+
+/// Seed, sine origin or the repeated sine product over the large ordinary region, with ordered live slots.
+#[expect(
+    clippy::too_many_lines,
+    reason = "The repeated product retains its origin, object product and composite hypothesis in one closed fixture"
+)]
+fn source_aggregate_fixture(
+    kind: usize,
+) -> TestResult<(Fixture, crate::series::SourceRequest, Vec<Handle>)> {
+    use crate::model::Operator;
+    use crate::series::{SourceClause, SourceRequest};
+    let (mut f, ordinary) = large_ordinary_constant()?;
+    let mut source = f.base.one.clone();
+    let mut proofs = vec![ordinary.proof().clone()];
+    let mut clause = SourceClause::PolynomialSeed;
+    let mut composite_guard = None;
+    if kind != 0 {
+        let x = f.base.x.clone();
+        source = term(
+            &mut f.base.cas,
+            &f.base.header,
+            Operator::Sine,
+            std::slice::from_ref(&x),
+        )?;
+        if kind == 2 {
+            use crate::domain_model::{ContextDraft, HypothesisRef};
+            use crate::graph::AssumptionDraft;
+            use crate::proof_model::{Certificate, Statement};
+            let composite = term(
+                &mut f.base.cas,
+                &f.base.header,
+                Operator::Mul,
+                &[source.clone(), source.clone()],
+            )?;
+            let predicate = admit(
+                &mut f.base.cas,
+                Draft::Condition {
+                    header: Reference::Existing(f.base.header.clone()),
+                    scope: Vec::new(),
+                    kind: crate::model::PredicateKind::Defined,
+                    arguments: vec![Reference::Existing(composite)],
+                },
+            )?;
+            f.base.context = admit(
+                &mut f.base.cas,
+                Draft::Context(ContextDraft::Root {
+                    header: Reference::Existing(f.base.header.clone()),
+                    admissible: Reference::Existing(f.base.domain.clone()),
+                    assumptions: vec![AssumptionDraft {
+                        key: "original-composite-defined".into(),
+                        condition: Reference::Existing(predicate.clone()),
+                    }],
+                }),
+            )?;
+            let draft = ApplicationDraft {
+                rule: crate::rule::Primitive::ContextHypothesis,
+                context: f.base.context.clone(),
+                conclusion: Statement::PredicateFact {
+                    region: f.base.domain.clone(),
+                    predicate,
+                },
+                premises: Vec::new(),
+                substitutions: Vec::new(),
+                certificate: Certificate::Hypothesis(HypothesisRef {
+                    context: f.base.context.clone(),
+                    slot: 0,
+                }),
+            };
+            composite_guard = Some(f.base.cas.check_proof(
+                &f.base.context,
+                &[draft],
+                &mut default_budget()?,
+            )?);
+        }
+        let coordinate = source_defined(&mut f, &x)?;
+        let total = f
+            .base
+            .cas
+            .trig_defined(&source, coordinate.proof(), &mut default_budget()?)?;
+        proofs = vec![total.proof().clone()];
+        clause = SourceClause::SineOrigin;
+    }
+    let mut request = SourceRequest {
+        clause,
+        source,
+        domain: f.base.domain.clone(),
+        field: f.field.clone(),
+        centre: f.base.zero.clone(),
+        variable: f.base.x.clone(),
+        scope: Vec::new(),
+        context: f.base.context.clone(),
+        order: 2,
+    };
+    if kind == 2 {
+        let sine = f
+            .base
+            .cas
+            .expand_series_source(&request, &proofs, &mut default_budget()?)?;
+        let crate::proof_model::Statement::Series(value) = &sine.judgment().statement else {
+            return Err("source statement".into());
+        };
+        let crate::series::SeriesStatement::Source(value) = value.as_ref() else {
+            return Err("source result".into());
+        };
+        let input = value.output.clone();
+        let product = f.base.cas.compute_series(
+            &O::Mul {
+                left: input.clone(),
+                right: input,
+                order: Some(2),
+            },
+            &[],
+            &mut default_budget()?,
+        )?;
+        let composite = term(
+            &mut f.base.cas,
+            &f.base.header,
+            Operator::Mul,
+            &[request.source.clone(), request.source.clone()],
+        )?;
+        let composite_defined = composite_guard.as_ref().ok_or("composite hypothesis")?;
+        request.source = composite;
+        request.clause = SourceClause::Mul;
+        proofs = vec![
+            sine.proof().clone(),
+            sine.proof().clone(),
+            product.proof().clone(),
+            composite_defined.proof().clone(),
+        ];
+    }
+    Ok((f, request, proofs))
+}
+
+/// One origin or seed slot and four mixed slots retain every simultaneous occurrence.
+/// ´test:crate:series-source-aggregate-premise-payload´
+#[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "Measured reservations, repeated slots and rollback share the same complete source fixture"
+)]
+fn series_source_aggregate_premise_payload() -> TestResult {
+    for kind in 0..3 {
+        let (mut f, request, proofs) = source_aggregate_fixture(kind)?;
+        let mut payloads = Vec::new();
+        for proof in &proofs {
+            payloads.push(crate::proof_view::application_bytes(
+                &f.base.cas,
+                proof.logical_id(),
+                &mut default_budget()?,
+            )?);
+        }
+        let mut probe = default_budget()?;
+        let outer = probe.limits().staged_payload_bytes;
+        let effective = f
+            .base
+            .cas
+            .transaction(&mut probe, |_, b| Ok(b.limits().staged_payload_bytes))?;
+        let enclosing = outer - effective;
+        let workspace =
+            u64::from(request.order) * 4 * (default_budget()?.limits().component_bits / 4 + 512);
+        let needed = workspace + payloads.iter().sum::<u64>();
+        let effective = needed - 1;
+        let allowance = enclosing + effective;
+        for (proof, payload) in proofs.iter().zip(&payloads) {
+            assert!(*payload <= effective);
+            let mut b = Budget::new(Limits {
+                staged_payload_bytes: effective,
+                ..default_budget()?.limits().clone()
+            })?;
+            crate::proof_view::application(&f.base.cas, proof.logical_id(), &mut b)?;
+        }
+        if kind == 2 {
+            assert_eq!(proofs[0], proofs[1]);
+            assert!(workspace + payloads.iter().sum::<u64>() - payloads[1] <= effective);
+        }
+        let before = f.base.cas.canonical_snapshot(&mut default_budget()?)?;
+        let mut b = Budget::new(Limits {
+            staged_payload_bytes: allowance,
+            ..default_budget()?.limits().clone()
+        })?;
+        let fault = f
+            .base
+            .cas
+            .expand_series_source(&request, &proofs, &mut b)
+            .expect_err("aggregate includes each owned slot");
+        assert_eq!(
+            fault,
+            crate::Fault::exhausted(
+                BudgetKind::StagedPayloadBytes,
+                effective,
+                needed,
+                crate::Location::new("formal series arithmetic")
+            )
+        );
+        let expected = [
+            (640, 12_288, vec![4408], 17_335, 16_695, 16_696, 30_534),
+            (640, 12_288, vec![592], 13_519, 12_879, 12_880, 13_220),
+            (
+                768,
+                12_288,
+                vec![980, 980, 1292, 700],
+                17_007,
+                16_239,
+                16_240,
+                17_996,
+            ),
+        ];
+        assert_eq!(
+            (
+                enclosing,
+                workspace,
+                payloads.clone(),
+                allowance,
+                effective,
+                needed,
+                b.usage().work
+            ),
+            expected[kind]
+        );
+        assert_eq!(
+            f.base.cas.canonical_snapshot(&mut default_budget()?)?,
+            before
+        );
+        for slots in [
+            Vec::new(),
+            vec![proofs[0].clone(); request.clause.arity() + 1],
+        ] {
+            let mut early = Budget::new(Limits {
+                work: 256,
+                ..default_budget()?.limits().clone()
+            })?;
+            assert_eq!(
+                f.base
+                    .cas
+                    .expand_series_source(&request, &slots, &mut early)
+                    .expect_err("typed arity precedes sizing")
+                    .kind,
+                FaultKind::Invalid(InvalidCode::Rule)
+            );
+            assert_eq!(early.usage().work, 256);
+        }
+        let positive =
+            f.base
+                .cas
+                .expand_series_source(&request, &proofs, &mut default_budget()?)?;
+        let bytes = f
+            .base
+            .cas
+            .export_witness(&positive, &mut default_budget()?)?;
+        f.base
+            .cas
+            .replay(&bytes, positive.judgment(), &mut default_budget()?)?;
+        let mut certificate = portable_certificate(&mut f.base.cas, &positive)?;
+        assert_eq!(&certificate.bytes[..4], &[0; 4]);
+        assert_eq!(certificate.bytes[4], request.clause.mode());
+        assert_eq!(
+            index(&certificate.bytes, &mut 5)?,
+            u32::try_from(proofs.len())?
+        );
+        let before = f.base.cas.canonical_snapshot(&mut default_budget()?)?;
+        let aggregate = payloads.iter().sum::<u64>();
+        let mut b = Budget::new(Limits {
+            staged_payload_bytes: aggregate - 1,
+            ..default_budget()?.limits().clone()
+        })?;
+        b.work(37, crate::Location::new("source portable reservation"))?;
+        let fault = replay_certificate(&mut f.base.cas, &certificate, &mut b)
+            .expect_err("all portable premise copies coexist");
+        assert_eq!(
+            fault,
+            crate::Fault::exhausted(
+                BudgetKind::StagedPayloadBytes,
+                aggregate - 1,
+                aggregate,
+                crate::Location::new(if kind == 2 {
+                    "formal series arithmetic"
+                } else {
+                    "scalar statement view"
+                })
+            )
+        );
+        assert_eq!(
+            (aggregate, b.usage().work),
+            [(4408, 14_144), (592, 646), (3952, 7577)][kind]
+        );
+        assert_eq!(
+            f.base.cas.canonical_snapshot(&mut default_budget()?)?,
+            before
+        );
+        replay_certificate(&mut f.base.cas, &certificate, &mut default_budget()?)?;
+        certificate.bytes[5..9].copy_from_slice(&u32::try_from(proofs.len() + 1)?.to_le_bytes());
+        let mut early = Budget::new(Limits {
+            work: 100,
+            ..default_budget()?.limits().clone()
+        })?;
+        assert_eq!(
+            replay_certificate(&mut f.base.cas, &certificate, &mut early)
+                .expect_err("portable typed arity before sizing")
+                .kind,
+            FaultKind::Invalid(InvalidCode::Rule)
+        );
+        assert_eq!(early.usage().work, 9);
+        assert_eq!(
+            f.base.cas.canonical_snapshot(&mut default_budget()?)?,
+            before
+        );
+    }
+    Ok(())
+}
+
+/// Seed x, sine origin or the repeated sine product on the large region D, every ordinary slot a
+/// visible context hypothesis.
+///
+/// Ordinary case reconstruction admits syntax against the whole retained store and a constant
+/// subject fills the exact constant cache, so supplied steps calibrate the source aggregate only
+/// when no earlier step needs more staged payload than the source slot itself.
+#[expect(
+    clippy::too_many_lines,
+    reason = "Every visible hypothesis, the origin and the repeated product share one closed context"
+)]
+fn source_assumed_fixture(
+    kind: usize,
+) -> TestResult<(Fixture, crate::series::SourceRequest, Vec<Handle>)> {
+    use crate::domain_model::{ContextDraft, HypothesisRef};
+    use crate::graph::AssumptionDraft;
+    use crate::model::{Operator, PredicateKind};
+    use crate::proof_model::{Certificate, Statement};
+    use crate::series::{SourceClause, SourceRequest};
+    let (mut f, _) = large_ordinary_constant()?;
+    let x = f.base.x.clone();
+    let source = if kind == 0 {
+        x.clone()
+    } else {
+        term(
+            &mut f.base.cas,
+            &f.base.header,
+            Operator::Sine,
+            std::slice::from_ref(&x),
+        )?
+    };
+    let mut subjects = vec![source.clone()];
+    if kind == 2 {
+        subjects.push(term(
+            &mut f.base.cas,
+            &f.base.header,
+            Operator::Mul,
+            &[source.clone(), source.clone()],
+        )?);
+    }
+    let mut predicates = Vec::new();
+    let mut assumptions = Vec::new();
+    for (slot, subject) in subjects.iter().enumerate() {
+        let predicate = admit(
+            &mut f.base.cas,
+            Draft::Condition {
+                header: Reference::Existing(f.base.header.clone()),
+                scope: Vec::new(),
+                kind: PredicateKind::Defined,
+                arguments: vec![Reference::Existing(subject.clone())],
+            },
+        )?;
+        assumptions.push(AssumptionDraft {
+            key: format!("original-defined-{slot}"),
+            condition: Reference::Existing(predicate.clone()),
+        });
+        predicates.push(predicate);
+    }
+    f.base.context = admit(
+        &mut f.base.cas,
+        Draft::Context(ContextDraft::Root {
+            header: Reference::Existing(f.base.header.clone()),
+            admissible: Reference::Existing(f.base.domain.clone()),
+            assumptions,
+        }),
+    )?;
+    let mut hypotheses = Vec::new();
+    for (slot, predicate) in predicates.into_iter().enumerate() {
+        let draft = ApplicationDraft {
+            rule: crate::rule::Primitive::ContextHypothesis,
+            context: f.base.context.clone(),
+            conclusion: Statement::PredicateFact {
+                region: f.base.domain.clone(),
+                predicate,
+            },
+            premises: Vec::new(),
+            substitutions: Vec::new(),
+            certificate: Certificate::Hypothesis(HypothesisRef {
+                context: f.base.context.clone(),
+                slot: slot.try_into()?,
+            }),
+        };
+        hypotheses.push(
+            f.base
+                .cas
+                .check_proof(&f.base.context, &[draft], &mut default_budget()?)?
+                .proof()
+                .clone(),
+        );
+    }
+    let mut request = SourceRequest {
+        clause: if kind == 0 {
+            SourceClause::PolynomialSeed
+        } else {
+            SourceClause::SineOrigin
+        },
+        source,
+        domain: f.base.domain.clone(),
+        field: f.field.clone(),
+        centre: f.base.zero.clone(),
+        variable: x,
+        scope: Vec::new(),
+        context: f.base.context.clone(),
+        order: 2,
+    };
+    let mut proofs = vec![hypotheses[0].clone()];
+    if kind == 2 {
+        let sine = f
+            .base
+            .cas
+            .expand_series_source(&request, &proofs, &mut default_budget()?)?;
+        let application = crate::proof_view::application(
+            &f.base.cas,
+            sine.proof().logical_id(),
+            &mut default_budget()?,
+        )?;
+        let input = source_parts(&application)?.0.output.clone();
+        let product = f.base.cas.compute_series(
+            &O::Mul {
+                left: input.clone(),
+                right: input,
+                order: Some(2),
+            },
+            &[],
+            &mut default_budget()?,
+        )?;
+        request.source = subjects[1].clone();
+        request.clause = SourceClause::Mul;
+        proofs = vec![
+            sine.proof().clone(),
+            sine.proof().clone(),
+            product.proof().clone(),
+            hypotheses[1].clone(),
+        ];
+    }
+    Ok((f, request, proofs))
+}
+
+/// Each ordered slot's dynamic application payload, counted per occurrence.
+fn slot_payloads(f: &Fixture, proofs: &[Handle]) -> TestResult<Vec<u64>> {
+    let mut payloads = Vec::new();
+    for proof in proofs {
+        payloads.push(crate::proof_view::application_bytes(
+            &f.base.cas,
+            proof.logical_id(),
+            &mut default_budget()?,
+        )?);
+    }
+    Ok(payloads)
+}
+
+/// The proof transaction's own staged reservation, measured rather than assumed.
+fn enclosing_reservation(f: &mut Fixture) -> TestResult<u64> {
+    let mut probe = default_budget()?;
+    let outer = probe.limits().staged_payload_bytes;
+    let effective = f
+        .base
+        .cas
+        .transaction(&mut probe, |_, b| Ok(b.limits().staged_payload_bytes))?;
+    Ok(outer - effective)
+}
+
+/// Every individual owned copy fits the calibrated effective limit on its own.
+fn single_copies_fit(
+    f: &Fixture,
+    proofs: &[Handle],
+    payloads: &[u64],
+    effective: u64,
+) -> TestResult {
+    for (proof, payload) in proofs.iter().zip(payloads) {
+        assert!(*payload <= effective);
+        let mut b = Budget::new(Limits {
+            staged_payload_bytes: effective,
+            ..default_budget()?.limits().clone()
+        })?;
+        crate::proof_view::application(&f.base.cas, proof.logical_id(), &mut b)?;
+    }
+    Ok(())
+}
+
+/// The produced source statement and rows, borrowed from their checked application.
+fn source_parts(
+    application: &crate::proof_model::CheckedApplication,
+) -> TestResult<(
+    &crate::series::SourceStatement,
+    &crate::series::SourceCertificate,
+)> {
+    use crate::proof_model::{Certificate, Statement};
+    use crate::series::{SeriesCertificate, SeriesStatement};
+    let Statement::Series(statement) = &application.judgment.statement else {
+        return Err("source statement".into());
+    };
+    let SeriesStatement::Source(statement) = statement.as_ref() else {
+        return Err("source result".into());
+    };
+    let Certificate::Series(certificate) = &application.certificate else {
+        return Err("source certificate".into());
+    };
+    let SeriesCertificate::Source(certificate) = certificate.as_ref() else {
+        return Err("source rows".into());
+    };
+    Ok((statement, certificate))
+}
+
+/// Re-express a checked proof closure as supplied steps, each distinct proof once, root last.
+fn proof_steps(cas: &crate::Cas, root: &Handle) -> TestResult<Vec<ApplicationDraft>> {
+    let mut steps = Vec::new();
+    let mut indices: Vec<(crate::graph::LogicalId, u32)> = Vec::new();
+    let mut pending = vec![(root.logical_id(), false)];
+    while let Some((id, expanded)) = pending.pop() {
+        if indices.iter().any(|(seen, _)| *seen == id) {
+            continue;
+        }
+        let application = crate::proof_view::application(cas, id, &mut default_budget()?)?;
+        if !expanded {
+            pending.push((id, true));
+            pending.extend(application.premises.iter().rev().map(|p| (*p, false)));
+            continue;
+        }
+        let mut premises = Vec::new();
+        for premise in &application.premises {
+            let (_, index) = indices
+                .iter()
+                .find(|(seen, _)| seen == premise)
+                .ok_or("premise precedes its consumer")?;
+            premises.push(*index);
+        }
+        indices.push((id, u32::try_from(steps.len())?));
+        steps.push(ApplicationDraft {
+            rule: application.rule,
+            context: application.judgment.context.clone(),
+            conclusion: application.judgment.statement.clone(),
+            premises,
+            substitutions: application.substitutions.clone(),
+            certificate: application.certificate.clone(),
+        });
+    }
+    Ok(steps)
+}
+
+/// An isolated record-41 invocation over the same checked claim and ordered premise records.
+fn portable_conclusion(
+    cas: &mut crate::Cas,
+    witness: &VerifiedWitness,
+) -> TestResult<PortableCertificate> {
+    use crate::series::portable::describe;
+    use crate::wire_build::Entity;
+    use crate::wire_decode::Decoded;
+    let id = witness.proof().logical_id();
+    let PortableCertificate {
+        mut records,
+        manifest,
+        ..
+    } = portable_certificate(cas, witness)?;
+    records.truncate(1);
+    records.push(Decoded::Application(witness.proof().clone()));
+    let mut conclusion = describe(cas, &Entity::Object(id), &mut default_budget()?)?;
+    for (offset, entity) in conclusion.references {
+        let index = match entity {
+            Entity::SeriesStatement(proof) if proof == id && offset == 0 => 0,
+            Entity::SeriesCertificate(proof) if proof == id && offset == 4 => 1,
+            Entity::Object(proof) => {
+                let index = u32::try_from(records.len())?;
+                records.push(Decoded::Application(cas.handle(proof)));
+                index
+            }
+            _ => return Err("conclusion dependency".into()),
+        };
+        assert_eq!(
+            &conclusion.payload[offset..offset + 4],
+            &0_u32.to_le_bytes()
+        );
+        conclusion.payload[offset..offset + 4].copy_from_slice(&index.to_le_bytes());
+    }
+    Ok(PortableCertificate {
+        bytes: conclusion.payload,
+        records,
+        manifest,
+    })
+}
+
+fn replay_conclusion(
+    cas: &mut crate::Cas,
+    conclusion: &PortableCertificate,
+    budget: &mut Budget,
+) -> Result<(), crate::Fault> {
+    let mut reader = crate::wire_read::Reader::new(&conclusion.bytes, budget)?;
+    crate::series::portable::decode(
+        cas,
+        41,
+        crate::domain_model::Layer::Logic,
+        None,
+        &mut reader,
+        &conclusion.records,
+        &conclusion.manifest,
+    )?;
+    reader.finished()
+}
+
+/// Supplied source rows refuse impossible arity before sizing and own every slot through publication.
+/// ´test:crate:series-source-supplied-premise-payload´
+#[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "Measured reservations, arity refusals and rollback share each produced source candidate"
+)]
+fn series_source_supplied_premise_payload() -> TestResult {
+    let mut observed = Vec::new();
+    for kind in 0..3 {
+        let (mut f, request, proofs) = source_aggregate_fixture(kind)?;
+        let positive =
+            f.base
+                .cas
+                .expand_series_source(&request, &proofs, &mut default_budget()?)?;
+        let application = crate::proof_view::application(
+            &f.base.cas,
+            positive.proof().logical_id(),
+            &mut default_budget()?,
+        )?;
+        let (statement, certificate) = source_parts(&application)?;
+        let payloads = slot_payloads(&f, &proofs)?;
+        let workspace = crate::series::codec::source_workspace(
+            &application.certificate,
+            &mut default_budget()?,
+        )?;
+        let enclosing = enclosing_reservation(&mut f)?;
+        let needed = workspace + payloads.iter().sum::<u64>();
+        let effective = needed - 1;
+        let allowance = enclosing + effective;
+        single_copies_fit(&f, &proofs, &payloads, effective)?;
+        if kind == 2 {
+            assert_eq!(proofs[0], proofs[1]);
+            assert!(needed - payloads[1] <= effective);
+        }
+        let before = f.base.cas.canonical_snapshot(&mut default_budget()?)?;
+        let mut b = Budget::new(Limits {
+            staged_payload_bytes: allowance,
+            ..default_budget()?.limits().clone()
+        })?;
+        assert_eq!(
+            f.base
+                .cas
+                .check_series_source(statement, certificate, &proofs, &mut b)
+                .expect_err("supplied rows own every slot"),
+            crate::Fault::exhausted(
+                BudgetKind::StagedPayloadBytes,
+                effective,
+                needed,
+                crate::Location::new("formal series arithmetic")
+            )
+        );
+        let mut arity = Vec::new();
+        for slots in [
+            Vec::new(),
+            vec![proofs[0].clone(); request.clause.arity() + 1],
+        ] {
+            let mut early = Budget::new(Limits {
+                work: 256,
+                ..default_budget()?.limits().clone()
+            })?;
+            assert_eq!(
+                f.base
+                    .cas
+                    .check_series_source(statement, certificate, &slots, &mut early)
+                    .expect_err("typed arity precedes sizing")
+                    .kind,
+                FaultKind::Invalid(InvalidCode::Rule)
+            );
+            assert!(payloads.iter().all(|p| early.usage().work < *p));
+            arity.push(early.usage().work);
+        }
+        assert_eq!(
+            f.base.cas.canonical_snapshot(&mut default_budget()?)?,
+            before
+        );
+        f.base
+            .cas
+            .check_series_source(statement, certificate, &proofs, &mut default_budget()?)?;
+        observed.push((
+            enclosing,
+            workspace,
+            payloads,
+            allowance,
+            effective,
+            needed,
+            b.usage().work,
+            arity,
+        ));
+    }
+    assert_eq!(
+        observed,
+        [
+            (
+                768,
+                352,
+                vec![4408],
+                5527,
+                4759,
+                4760,
+                18_302,
+                vec![256, 256]
+            ),
+            (768, 1604, vec![592], 2963, 2195, 2196, 1205, vec![256, 256]),
+            (
+                768,
+                52,
+                vec![980, 980, 1292, 700],
+                4771,
+                4003,
+                4004,
+                5721,
+                vec![256, 256]
+            ),
+        ]
+    );
+    Ok(())
+}
+
+/// Supplied proof steps refuse impossible source arity in preflight; one-slot steps own all scratch.
+///
+/// The repeated product's earlier object multiplication step needs more checking scratch than
+/// the product's own aggregate, so its four-slot ownership is calibrated on the live production
+/// and supplied-candidate routes, which share no generic supplied-proof reservation.
+/// ´test:crate:series-source-proof-step-premise-payload´
+#[test]
+fn series_source_proof_step_premise_payload() -> TestResult {
+    let mut observed = Vec::new();
+    for kind in 0..3 {
+        let (mut f, request, proofs) = source_assumed_fixture(kind)?;
+        let positive =
+            f.base
+                .cas
+                .expand_series_source(&request, &proofs, &mut default_budget()?)?;
+        let steps = proof_steps(&f.base.cas, positive.proof())?;
+        let root = steps.last().ok_or("root")?;
+        assert_eq!(root.premises.len(), proofs.len());
+        let payloads = slot_payloads(&f, &proofs)?;
+        let before = f.base.cas.canonical_snapshot(&mut default_budget()?)?;
+        let aggregate = if kind == 2 {
+            assert_eq!(root.premises[0], root.premises[1]);
+            None
+        } else {
+            let workspace =
+                crate::series::codec::source_workspace(&root.certificate, &mut default_budget()?)?;
+            let enclosing = enclosing_reservation(&mut f)?;
+            let needed = workspace + payloads.iter().sum::<u64>();
+            let effective = needed - 1;
+            let allowance = enclosing + effective;
+            single_copies_fit(&f, &proofs, &payloads, effective)?;
+            let mut b = Budget::new(Limits {
+                staged_payload_bytes: allowance,
+                ..default_budget()?.limits().clone()
+            })?;
+            assert_eq!(
+                f.base
+                    .cas
+                    .check_proof(&f.base.context, &steps, &mut b)
+                    .expect_err("supplied step owns workspace and slot together"),
+                crate::Fault::exhausted(
+                    BudgetKind::StagedPayloadBytes,
+                    effective,
+                    needed,
+                    crate::Location::new("typed proof admission")
+                )
+            );
+            Some((
+                enclosing,
+                workspace,
+                allowance,
+                effective,
+                needed,
+                b.usage().work,
+            ))
+        };
+        let mut arity = Vec::new();
+        for slots in [
+            Vec::new(),
+            vec![root.premises[0]; request.clause.arity() + 1],
+        ] {
+            let mut bad = steps.clone();
+            bad.last_mut().ok_or("root")?.premises = slots;
+            let mut early = Budget::new(Limits {
+                work: u64::try_from(steps.len())?,
+                ..default_budget()?.limits().clone()
+            })?;
+            assert_eq!(
+                f.base
+                    .cas
+                    .check_proof(&f.base.context, &bad, &mut early)
+                    .expect_err("preflight arity precedes sizing")
+                    .kind,
+                FaultKind::Invalid(InvalidCode::Rule)
+            );
+            assert!(payloads.iter().all(|p| early.usage().work < *p));
+            arity.push(early.usage().work);
+        }
+        assert_eq!(
+            f.base.cas.canonical_snapshot(&mut default_budget()?)?,
+            before
+        );
+        let checked = f
+            .base
+            .cas
+            .check_proof(&f.base.context, &steps, &mut default_budget()?)?;
+        assert_eq!(checked.judgment(), positive.judgment());
+        observed.push((steps.len(), payloads, aggregate, arity));
+    }
+    assert_eq!(
+        observed,
+        [
+            (
+                2,
+                vec![700],
+                Some((768, 648, 2115, 1347, 1348, 4029)),
+                vec![2, 2]
+            ),
+            (
+                2,
+                vec![700],
+                Some((768, 1604, 3071, 2303, 2304, 5510)),
+                vec![2, 2]
+            ),
+            (5, vec![1048, 1048, 1292, 700], None, vec![5, 5]),
+        ]
+    );
+    Ok(())
+}
+
+/// Isolated record 41 refuses impossible source arity before sizing its conclusion copy.
+/// ´test:crate:series-source-conclusion-arity´
+#[test]
+fn series_source_conclusion_arity() -> TestResult {
+    let mut observed = Vec::new();
+    for kind in 0..3 {
+        let (mut f, request, proofs) = source_aggregate_fixture(kind)?;
+        let positive =
+            f.base
+                .cas
+                .expand_series_source(&request, &proofs, &mut default_budget()?)?;
+        let mut conclusion = portable_conclusion(&mut f.base.cas, &positive)?;
+        assert_eq!(
+            index(&conclusion.bytes, &mut 8)?,
+            u32::try_from(proofs.len())?
+        );
+        replay_conclusion(&mut f.base.cas, &conclusion, &mut default_budget()?)?;
+        let mut payloads = slot_payloads(&f, &proofs)?;
+        payloads.push(crate::proof_view::application_bytes(
+            &f.base.cas,
+            positive.proof().logical_id(),
+            &mut default_budget()?,
+        )?);
+        let before = f.base.cas.canonical_snapshot(&mut default_budget()?)?;
+        let mut arity = Vec::new();
+        for count in [0, proofs.len() + 1] {
+            conclusion.bytes[8..12].copy_from_slice(&u32::try_from(count)?.to_le_bytes());
+            let mut early = Budget::new(Limits {
+                work: 100,
+                ..default_budget()?.limits().clone()
+            })?;
+            assert_eq!(
+                replay_conclusion(&mut f.base.cas, &conclusion, &mut early)
+                    .expect_err("portable conclusion arity precedes sizing")
+                    .kind,
+                FaultKind::Invalid(InvalidCode::Rule)
+            );
+            arity.push(early.usage().work);
+        }
+        assert!(payloads.iter().all(|p| 100 < *p));
+        assert_eq!(
+            f.base.cas.canonical_snapshot(&mut default_budget()?)?,
+            before
+        );
+        observed.push((payloads, arity));
+    }
+    assert_eq!(
+        observed,
+        [
+            (vec![4408, 760], vec![12, 12]),
+            (vec![592, 980], vec![12, 12]),
+            (vec![980, 980, 1292, 700, 872], vec![12, 12]),
+        ]
+    );
     Ok(())
 }

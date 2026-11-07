@@ -12,6 +12,20 @@ use crate::error::Fault;
 use crate::graph::{Handle, size};
 use crate::wire_read::Reader;
 
+/// Reserve source candidate ownership independently of generic supplied-proof behavior.
+pub(crate) fn source_workspace(
+    value: &crate::proof_model::Certificate,
+    budget: &mut Budget,
+) -> Result<u64, Fault> {
+    let crate::proof_model::Certificate::Series(value) = value else {
+        return Err(invalid());
+    };
+    let SeriesCertificate::Source(value) = value.as_ref() else {
+        return Err(invalid());
+    };
+    super::source::evidence_bytes(value, budget)
+}
+
 /// Complete local or portable statement payload, independent of its enclosing record.
 pub(crate) fn statement(
     value: &SeriesStatement,
@@ -19,7 +33,18 @@ pub(crate) fn statement(
     write: &mut impl FnMut(&Handle, &mut Encoder<'_>) -> Result<(), Fault>,
 ) -> Result<(), Fault> {
     use SeriesStatement as S;
+    if let S::Source(value) = value {
+        out.byte(value.clause.mode())?;
+        out.byte(value.clause.form())?;
+        out.byte(value.clause.selector())?;
+        write(&value.source, out)?;
+        write(&value.domain, out)?;
+        out.byte(2)?;
+        write(&value.output, out)?;
+        return Ok(());
+    }
     out.byte(match value {
+        S::Source(_) => return Err(invalid()),
         S::Truncate { .. } => 0,
         S::Add { .. } => 1,
         S::Scale { .. } => 2,
@@ -30,6 +55,7 @@ pub(crate) fn statement(
     })?;
     out.byte(0)?; // Object form, never a source congruence.
     match value {
+        S::Source(_) => return Err(invalid()),
         S::Truncate { input, output } | S::Derive { input, output } => {
             write(input, out)?;
             out.byte(0)?;
@@ -92,7 +118,23 @@ pub(crate) fn read_statement(
 ) -> Result<SeriesStatement, Fault> {
     use crate::wire_decode::object;
     let mode = reader.byte()?;
-    if !matches!(mode, 0..=4 | 8 | 9) || reader.byte()? != 0 {
+    let form = reader.byte()?;
+    if mode == 10 || form != 0 {
+        let clause = super::SourceClause::read(mode, form, reader.byte()?)?;
+        let source = object(reader, records)?;
+        let domain = object(reader, records)?;
+        if reader.byte()? != 2 {
+            return Err(unsupported());
+        }
+        let output = object(reader, records)?;
+        return Ok(SeriesStatement::Source(super::SourceStatement {
+            clause,
+            source,
+            domain,
+            output,
+        }));
+    }
+    if !matches!(mode, 0..=4 | 8 | 9) {
         return Err(unsupported());
     }
     let input = object(reader, records)?;
@@ -158,6 +200,17 @@ pub(crate) fn certificate(value: &SeriesCertificate, out: &mut Encoder<'_>) -> R
     out.byte(value.mode())?;
     out.byte(value.form())?;
     match value {
+        SeriesCertificate::Source(value) => {
+            out.byte(value.clause.selector())?;
+            crate::split_wire::numbers(&value.coefficients, out)?;
+            crate::split_wire::numbers(&value.companion, out)?;
+            out.count(value.units.len())?;
+            for row in &value.units {
+                crate::wire::index(row.index, out)?;
+                out.number(&row.integer)?;
+                out.number(&row.inverse)?;
+            }
+        }
         SeriesCertificate::Derive { rows, .. } => {
             out.count(rows.len())?;
             for row in rows {
@@ -229,9 +282,36 @@ fn binary_rows(rows: &[SeriesBinaryRow], out: &mut Encoder<'_>) -> Result<(), Fa
 }
 
 /// Bound row counts before allocation using the existing cumulative coefficient dimension.
+#[expect(
+    clippy::too_many_lines,
+    reason = "The closed mode decoder keeps every admitted payload layout together"
+)]
 pub(crate) fn read_certificate(reader: &mut Reader<'_, '_>) -> Result<SeriesCertificate, Fault> {
     let mode = reader.byte()?;
     let form = reader.byte()?;
+    if mode == 10 || form != 0 {
+        let clause = super::SourceClause::read(mode, form, reader.byte()?)?;
+        let coefficients = read_coefficients(reader)?;
+        let companion = read_coefficients(reader)?;
+        let count = reader.count(BudgetKind::JetEntries, 22, 192)?;
+        let mut units = Vec::new();
+        units
+            .try_reserve_exact(count)
+            .map_err(|_| Fault::allocation(AT))?;
+        for _ in 0..count {
+            units.push(super::SourceUnitRow {
+                index: reader.index()?,
+                integer: reader.rational()?,
+                inverse: reader.rational()?,
+            });
+        }
+        return Ok(SeriesCertificate::Source(super::SourceCertificate {
+            clause,
+            coefficients,
+            companion,
+            units,
+        }));
+    }
     if !matches!(mode, 0..=4 | 8 | 9) || form != 0 {
         return Err(unsupported());
     }
@@ -339,6 +419,12 @@ fn read_binary(reader: &mut Reader<'_, '_>) -> Result<Vec<SeriesBinaryRow>, Faul
 /// Meter the full owned row copy before generic proof admission clones it.
 pub(crate) fn measure(value: &SeriesCertificate, budget: &mut Budget) -> Result<(), Fault> {
     let count = match value {
+        SeriesCertificate::Source(value) => value
+            .coefficients
+            .len()
+            .checked_add(value.companion.len())
+            .and_then(|n| n.checked_add(value.units.len()))
+            .ok_or_else(invalid)?,
         SeriesCertificate::Truncate { coefficients, .. } => coefficients.len(),
         SeriesCertificate::Add { rows, .. } | SeriesCertificate::Scale { rows, .. } => rows.len(),
         SeriesCertificate::Mul { rows, .. } => rows.len(),
