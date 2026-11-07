@@ -116,7 +116,7 @@ fn kernel_mapped_family_trace_work_boundary() -> TestResult {
 /// ´claim:matrix:kernel-mapped-family-selection-work-boundary´
 #[test]
 fn kernel_mapped_family_selection_work_boundary() -> TestResult {
-    for work in [365_152, 365_151] {
+    for work in [366_881, 366_880] {
         let mut source = Fixture::new()?;
         let trace = source.trace(&mut ledger()?)?;
         let before = source.source.frame.cas.counts();
@@ -132,7 +132,7 @@ fn kernel_mapped_family_selection_work_boundary() -> TestResult {
             &source.source.steps,
             &mut budget,
         );
-        if work == 365_152 {
+        if work == 366_881 {
             let witness = result?;
             assert_eq!(witness.hypotheses().len(), 3);
             assert_eq!(budget.usage().work, work);
@@ -140,7 +140,7 @@ fn kernel_mapped_family_selection_work_boundary() -> TestResult {
             let Err(fault) = result else {
                 panic!("scalar selection must refuse below its full Work boundary");
             };
-            exhausted(&fault, work, 365_152);
+            exhausted(&fault, work, 366_881);
             assert_eq!(source.source.frame.cas.counts(), before);
             assert!(budget.usage().work >= 17);
         }
@@ -220,13 +220,13 @@ fn kernel_mapped_family_wire_work_boundaries() -> TestResult {
         assert_eq!(graph.counts(), before);
         assert_eq!(budget.limits(), &limits);
     }
-    for work in [549_150, 549_149] {
+    for work in [550_879, 550_878] {
         let mut receiver = Cas::new(Limits::default())?;
         let before = receiver.counts();
         let mut budget = allowance(work)?;
         let limits = budget.limits().clone();
         let result = receiver.inspect(&bytes, &mut budget);
-        if work == 549_150 {
+        if work == 550_879 {
             let witness = result?;
             assert_eq!(witness.hypotheses().len(), 3);
             assert_eq!(budget.usage().work, work);
@@ -235,7 +235,7 @@ fn kernel_mapped_family_wire_work_boundaries() -> TestResult {
             let Err(fault) = result else {
                 panic!("fresh scalar replay must exhaust below its full Work boundary");
             };
-            exhausted(&fault, work, 549_150);
+            exhausted(&fault, work, 550_879);
             assert_eq!(receiver.counts(), before);
         }
         assert_eq!(budget.limits(), &limits);

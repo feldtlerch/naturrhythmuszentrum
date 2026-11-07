@@ -8,10 +8,10 @@ use nrz_cas::{Cas, Fault, FaultKind, Location};
 
 /// Kind, proof Work, fresh inspection Work and portable witness bytes.
 const COSTS: [(u32, u64, u64, usize); 4] = [
-    (1, 404_211, 1_071_050, 4_004),
-    (2, 381_163, 961_180, 4_120),
-    (4, 313_199, 758_686, 3_575),
-    (5, 335_639, 876_456, 3_745),
+    (1, 404_211, 1_079_157, 4_004),
+    (2, 381_163, 970_602, 4_120),
+    (4, 313_199, 767_533, 3_575),
+    (5, 335_639, 883_988, 3_745),
 ];
 
 fn budget(amount: u64) -> TestResult<Budget> {
@@ -116,11 +116,11 @@ fn lattice_tuple_work() -> TestResult {
 #[test]
 fn lattice_tuple_direct_work() -> TestResult {
     for (kind, proof, replay, length) in [
-        (1, 456_354, 1_155_660, 4_113),
-        (2, 303_727, 884_277, 4_042),
-        (3, 295_200, 857_936, 3_872),
-        (4, 305_136, 759_867, 3_619),
-        (5, 334_530, 907_345, 3_862),
+        (1, 456_354, 1_163_767, 4_113),
+        (2, 303_727, 893_699, 4_042),
+        (3, 295_200, 867_358, 3_872),
+        (4, 305_136, 768_714, 3_619),
+        (5, 334_530, 914_877, 3_862),
     ] {
         proof_boundary(&mut super::direct::direct(kind)?, proof + 36, false)?;
         let bytes = proof_boundary(&mut super::direct::direct(kind)?, proof + 37, true)?

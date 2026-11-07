@@ -53,6 +53,45 @@ fn preflight(cas: &Cas, steps: &[ApplicationDraft], budget: &mut Budget) -> Resu
     Ok(())
 }
 
+/// Own the complete premise inventory until the checked step has been published.
+pub(crate) fn check_supplied(
+    cas: &mut Cas,
+    step: &ApplicationDraft,
+    proofs: &[Handle],
+    budget: &mut Budget,
+) -> Result<Handle, Fault> {
+    crate::proof_view::premise_arity(
+        cas,
+        step.rule,
+        &step.conclusion,
+        step.premises.len(),
+        budget,
+        AT,
+    )?;
+    let mut ids = Vec::new();
+    ids.try_reserve_exact(step.premises.len())
+        .map_err(|_| Fault::allocation(AT))?;
+    for index in &step.premises {
+        let proof = proofs
+            .get(usize::try_from(*index).map_err(|_| invalid())?)
+            .ok_or_else(invalid)?;
+        ids.push(proof.logical_id());
+    }
+    let bytes = crate::proof_view::premises_bytes(cas, &ids, budget, AT)?;
+    budget.with_retained_payload(bytes, AT, |budget| {
+        let mut premises = Vec::new();
+        premises
+            .try_reserve_exact(ids.len())
+            .map_err(|_| Fault::allocation(AT))?;
+        for id in &ids {
+            premises.push(crate::proof_view::application(cas, *id, budget)?);
+        }
+        let mut application = check_application(cas, step, &premises, budget)?;
+        application.premises = ids;
+        cas.publish_scoped(application, budget)
+    })
+}
+
 /// Preserve native conditions while using the existing exact scalar schema calculation.
 fn scalar(
     cas: &mut Cas,
@@ -421,27 +460,8 @@ impl Cas {
                     .try_reserve_exact(steps.len())
                     .map_err(|_| Fault::allocation(AT))?;
                 for step in steps {
-                    let mut premises = Vec::new();
-                    premises
-                        .try_reserve_exact(step.premises.len())
-                        .map_err(|_| Fault::allocation(AT))?;
-                    let mut ids = Vec::new();
-                    ids.try_reserve_exact(step.premises.len())
-                        .map_err(|_| Fault::allocation(AT))?;
-                    for index in &step.premises {
-                        let proof = proofs
-                            .get(usize::try_from(*index).map_err(|_| invalid())?)
-                            .ok_or_else(invalid)?;
-                        ids.push(proof.logical_id());
-                        premises.push(crate::proof_view::application(
-                            candidate,
-                            proof.logical_id(),
-                            budget,
-                        )?);
-                    }
-                    let mut application = check_application(candidate, step, &premises, budget)?;
-                    application.premises = ids;
-                    proofs.push(candidate.publish_scoped(application, budget)?);
+                    let proof = check_supplied(candidate, step, &proofs, budget)?;
+                    proofs.push(proof);
                 }
                 let witness = candidate.seal_scoped(proofs.last().ok_or_else(invalid)?, budget)?;
                 Ok(witness)

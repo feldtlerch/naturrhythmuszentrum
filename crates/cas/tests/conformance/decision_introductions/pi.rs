@@ -100,7 +100,7 @@ fn decision_pi_membership_costs() -> TestResult {
     receiver.inspect(&bytes, &mut replay)?;
     assert_eq!(
         (work, replay.usage().work, bytes.len()),
-        (381_454, 608_307, 3_073)
+        (382_265, 609_118, 3_073)
     );
     Ok(())
 }
@@ -159,7 +159,7 @@ fn resource_attempt(replay: bool, amount: u64, prior: u64, accepted: bool) -> Te
 /// ´test:integration:decision-pi-membership-resources´
 #[test]
 fn decision_pi_membership_resources() -> TestResult {
-    for (replay, work) in [(false, 381_454), (true, 608_307)] {
+    for (replay, work) in [(false, 382_265), (true, 609_118)] {
         resource_attempt(replay, work, 0, true)?;
         resource_attempt(replay, work - 1, 0, false)?;
         resource_attempt(replay, work, 1, false)?;

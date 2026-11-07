@@ -36,11 +36,11 @@ fn selected(budget: &mut Budget) -> TestResult<SelectedDecision> {
         .frame
         .cas
         .check_proof(&source.context, &source.steps, budget)?;
-    assert_eq!(budget.usage().work - start, 315_323);
+    assert_eq!(budget.usage().work - start, 316_915);
     let graph = Arc::new(Mutex::new(source.frame.cas));
     let before = graph.lock().map_err(|_| "graph owner poisoned")?.counts();
     let result = case.admit(Arc::clone(&graph), witness, case.attachment(), budget)?;
-    assert_eq!(budget.usage().work - start, 315_531);
+    assert_eq!(budget.usage().work - start, 317_123);
     assert_eq!(
         graph.lock().map_err(|_| "graph owner poisoned")?.counts(),
         before
@@ -50,19 +50,19 @@ fn selected(budget: &mut Budget) -> TestResult<SelectedDecision> {
 
 /// The lattice lane remeasures the scalar lifecycle, record closure and original-input association.
 /// ´test:integration:bindings-lattice-scalar-baseline´
-/// ´claim:bindings:lattice-scalar-baseline´ Four shared-signature symbol graphs reduce the associated scalar lifecycle to 359922 Work while authentication, witness bytes and independent replay remain unchanged.
+/// ´claim:bindings:lattice-scalar-baseline´ Four shared-signature symbol graphs and supplied-premise sizing account for `361_514` Work through association, with unchanged authentication and witness bytes.
 #[test]
 fn bindings_lattice_scalar_baseline() -> TestResult {
     let mut budget = ledger()?;
     let selected = selected(&mut budget)?;
     let count = selected.count(3, &mut budget)?;
     assert_eq!(count.value(), 3);
-    assert_eq!(budget.usage().work, 315_590);
+    assert_eq!(budget.usage().work, 317_182);
     assert_eq!(selected.retained_payload_bytes(), 13_842);
     assert_eq!(count.retained_payload_bytes(), 2_068);
     let case = selected.case();
     let associated = case.associate_inputs(&mut budget)?;
-    assert_eq!(budget.usage().work, 359_922);
+    assert_eq!(budget.usage().work, 361_514);
     assert_eq!(associated.retained_payload_bytes(), 17_858);
     let originals = associated
         .operands()
@@ -76,7 +76,7 @@ fn bindings_lattice_scalar_baseline() -> TestResult {
         .map(DecisionOperand::symbols)
         .collect::<Vec<_>>();
     associated.authenticate(case, &symbols, &mut budget)?;
-    assert_eq!(budget.usage().work, 359_936);
+    assert_eq!(budget.usage().work, 361_528);
     let graph = selected.cas()?;
     let before = graph.counts();
     let bytes = graph.export_witness(selected.witness(), &mut ledger()?)?;
@@ -85,7 +85,7 @@ fn bindings_lattice_scalar_baseline() -> TestResult {
     let mut replay = ledger()?;
     let mut receiver = Cas::new(Limits::default())?;
     let witness = receiver.inspect(&bytes, &mut replay)?;
-    assert_eq!(replay.usage().work, 247_365);
+    assert_eq!(replay.usage().work, 248_957);
     assert_eq!(receiver.counts().vertices, 36);
     assert_eq!(witness.hypotheses().len(), 1);
     let error = selected
@@ -158,10 +158,10 @@ fn bindings_lattice_scalar_association_work() -> TestResult {
 
 /// Complete lifecycle exhaustion and fresh replay publish no partial physical or CAS result.
 /// ´test:integration:bindings-lattice-scalar-cumulative-work´
-/// ´claim:bindings:lattice-scalar-cumulative-work´ The complete scalar lifecycle falls from 364597 to 359953 Work with unchanged evidence and atomic one-below refusal.
+/// ´claim:bindings:lattice-scalar-cumulative-work´ Against the 364597-Work pre-sharing baseline, shared-signature graphs and supplied-premise sizing require `361_545` Work with intact evidence and atomic one-below refusal.
 #[test]
 fn bindings_lattice_scalar_cumulative_work() -> TestResult {
-    for (work, accepted) in [(359_953, true), (359_952, false)] {
+    for (work, accepted) in [(361_545, true), (361_544, false)] {
         let mut budget = prior(work)?;
         let selected = selected(&mut budget)?;
         let before = selected.cas()?.counts();
@@ -190,7 +190,7 @@ fn bindings_lattice_scalar_cumulative_work() -> TestResult {
     let bytes = selected
         .cas()?
         .export_witness(selected.witness(), &mut ledger()?)?;
-    for (work, accepted) in [(247_382, true), (247_381, false)] {
+    for (work, accepted) in [(248_974, true), (248_973, false)] {
         let mut receiver = Cas::new(Limits::default())?;
         let before = receiver.counts();
         let snapshot = receiver.canonical_snapshot(&mut ledger()?)?;

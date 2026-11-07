@@ -283,6 +283,18 @@ pub(crate) fn scalar_claim(
     })
 }
 
+#[cfg(test)]
+thread_local! {
+    /// Observe owned application copies independently of sizing and charged Work.
+    static COPIES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Thread-local observation does not change the graph or the budget ledger.
+#[cfg(test)]
+pub(crate) fn copied_applications() -> usize {
+    COPIES.with(std::cell::Cell::get)
+}
+
 /// Read any authoritative application as a complete typed statement and condition set.
 pub(crate) fn application(
     cas: &Cas,
@@ -296,14 +308,20 @@ pub(crate) fn application(
         Vertex::AnonymousLemma(_) => {
             let value = cas.series_application(*id)?;
             prepay_scoped_copy(value, budget)?;
+            #[cfg(test)]
+            COPIES.with(|copies| copies.set(copies.get().saturating_add(1)));
             Ok(value.clone())
         }
         Vertex::ScopedApplication(value) => {
             prepay_scoped_copy(value, budget)?;
+            #[cfg(test)]
+            COPIES.with(|copies| copies.set(copies.get().saturating_add(1)));
             Ok(value.as_ref().clone())
         }
         Vertex::Application(value) => {
             prepay_scalar_copy(value, budget)?;
+            #[cfg(test)]
+            COPIES.with(|copies| copies.set(copies.get().saturating_add(1)));
             let claim = crate::proof_check::claim(cas, value, budget)?;
             let judgment = typed_claim(cas, &claim, budget)?;
             let mut conditions = ScopedConditions {
@@ -434,6 +452,67 @@ pub(crate) fn application_bytes(
         Vertex::Application(value) => prepay_scalar_copy(value, budget),
         _ => Err(invalid()),
     }
+}
+
+/// Refuse surplus typed slots before inspecting any referenced proof payload.
+/// Variable shapes use the declared `ProofNodes` ceiling and retain mode-specific
+/// validation in their checkers; aggregate payload reservation bounds their storage.
+pub(crate) fn premise_arity(
+    cas: &Cas,
+    rule: crate::rule::Primitive,
+    statement: &Statement,
+    count: usize,
+    budget: &Budget,
+    at: Location,
+) -> Result<(), Fault> {
+    use crate::rule::PremiseShape;
+
+    let count = size(count, at)?;
+    let valid = match rule.specification().premises {
+        PremiseShape::Exact(expected) => count == u64::from(expected),
+        PremiseShape::SeriesEvidence => {
+            let Statement::Series(value) = statement else {
+                return Err(Fault::invalid(InvalidCode::Rule, at));
+            };
+            value.primitive() == rule
+                && count == size(crate::series::check::premise_count(cas, value)?, at)?
+        }
+        PremiseShape::AtLeast(minimum) => {
+            // Formal coefficient closure permits one anchored identity; the
+            // checker still validates its exact frame, scope and certificate.
+            let formal_close = rule == crate::rule::Primitive::ContextClose
+                && matches!(statement, Statement::Solve(value)
+                    if matches!(value.as_ref(), crate::solving::SolveStatement::CoefficientEquality(_)));
+            count >= if formal_close { 1 } else { u64::from(minimum) }
+        }
+        PremiseShape::SolveEvidence
+        | PremiseShape::DistributionEvidence
+        | PremiseShape::BoundaryEvidence
+        | PremiseShape::CaseEvidence
+        | PremiseShape::JacobianCells => true,
+    };
+    if !valid {
+        return Err(Fault::invalid(InvalidCode::Rule, at));
+    }
+    // Dependent shapes retain the declared proof inventory ceiling; their checker
+    // validates the certificate-specific consumption of each admitted slot.
+    budget.check(BudgetKind::ProofNodes, count, at)
+}
+
+/// Count repeated references once per owned occurrence before the first copy.
+pub(crate) fn premises_bytes(
+    cas: &Cas,
+    proofs: &[LogicalId],
+    budget: &mut Budget,
+    at: Location,
+) -> Result<u64, Fault> {
+    let mut bytes = 0_u64;
+    for proof in proofs {
+        bytes = bytes
+            .checked_add(application_bytes(cas, *proof, budget)?)
+            .ok_or_else(|| Fault::capacity(BudgetKind::StagedPayloadBytes, at))?;
+    }
+    Ok(bytes)
 }
 
 /// Prepay the new lattice proposition without extending the shared preflight dispatch.

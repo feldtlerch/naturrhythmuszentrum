@@ -58,7 +58,7 @@ fn lc_replay_default_agrees_with_full_oracle() -> TestResult {
         crate::testing::solve_blind::family_lc(&target.cas, &witness)?;
         costs.push(budget.usage().work);
     }
-    assert_eq!(costs, [1_381_167, 1_880_885]);
+    assert_eq!(costs, [1_415_961, 1_915_679]);
     Ok(())
 }
 
@@ -70,7 +70,7 @@ fn capped_replay(
     short: u64,
     prior: u64,
 ) -> TestResult {
-    let required = 1_381_167;
+    let required = 1_415_961;
     let cap = required - short;
     let (mut target, expected) = receiver(original, set)?;
     let before = target.cas.counts();
@@ -138,6 +138,6 @@ fn lc_empty_exclusion_agrees_with_search() -> TestResult {
         crate::testing::solve_blind::family_lc(&target.cas, &witness)?;
         costs.push(budget.usage().work);
     }
-    assert_eq!(costs, [1_381_167, 1_730_108]);
+    assert_eq!(costs, [1_415_961, 1_764_902]);
     Ok(())
 }

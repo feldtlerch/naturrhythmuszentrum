@@ -1525,8 +1525,11 @@ fn coefficient_scoped_premise_refusal() -> TestResult {
         .err()
         .ok_or("native consumer accepted bound-context premise")?;
     assert_eq!(
-        fault.kind,
-        FaultKind::Invalid(InvalidCode::UnsupportedFragment)
+        fault,
+        nrz_cas::Fault::invalid(
+            InvalidCode::Rule,
+            nrz_cas::Location::new("typed proof admission"),
+        )
     );
     assert_eq!(fixture.cas.counts(), before);
     Ok(())

@@ -118,7 +118,7 @@ fn integer_family_pi_costs() -> TestResult {
         receiver.inspect(&bytes, &mut replay)?;
         rows.push((budget.usage().work, replay.usage().work, bytes.len()));
     }
-    assert_eq!(rows, [(166_952, 247_365, 1_562), (199_780, 299_788, 1_812)]);
+    assert_eq!(rows, [(168_544, 248_957, 1_562), (201_417, 301_425, 1_812)]);
     Ok(())
 }
 
@@ -204,10 +204,10 @@ fn resource_attempt(
 #[test]
 fn integer_family_pi_resources() -> TestResult {
     for (bounded, replay, work) in [
-        (false, false, 166_952),
-        (false, true, 247_365),
-        (true, false, 199_780),
-        (true, true, 299_788),
+        (false, false, 168_544),
+        (false, true, 248_957),
+        (true, false, 201_417),
+        (true, true, 301_425),
     ] {
         resource_attempt(bounded, replay, work, 0, true)?;
         resource_attempt(bounded, replay, work - 1, 0, false)?;

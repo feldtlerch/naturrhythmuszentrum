@@ -93,8 +93,8 @@ fn at_cap(
 /// The receiver and replay ledger both retain the unchanged blind-cubic profile except the tested cap.
 pub(crate) fn check(field: &Field) -> TestResult {
     let (coefficient_ops, work) = match field {
-        Field::Complex => (2_940_416, 358_125_477),
-        Field::Real => (2_008_224, 346_398_574),
+        Field::Complex => (2_940_416, 381_017_101),
+        Field::Real => (2_008_224, 379_173_871),
         _ => return Err("symbolic boundary field".into()),
     };
     let (cas, answer) = source(field)?;

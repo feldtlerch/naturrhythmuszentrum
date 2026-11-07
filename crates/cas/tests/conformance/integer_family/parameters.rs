@@ -264,8 +264,8 @@ fn integer_family_parameter_cover() -> TestResult {
     assert_eq!(
         measured,
         [
-            (2, 203_005, 3_479, 1_896, 326_223, 22_810),
-            (-2, 202_909, 3_479, 1_896, 326_127, 22_810),
+            (2, 204_627, 3_479, 1_896, 327_845, 22_810),
+            (-2, 204_531, 3_479, 1_896, 327_749, 22_810),
         ]
     );
     Ok(())
@@ -317,8 +317,8 @@ fn resource_attempt(replay: bool, kind: BudgetKind, amount: u64, prior: u64) -> 
 #[test]
 fn integer_family_parameter_resource_boundaries() -> TestResult {
     for (replay, work, staged, payload) in [
-        (false, 203_005, 109_280, 22_810),
-        (true, 326_223, 108_576, 22_810),
+        (false, 204_627, 110_680, 22_810),
+        (true, 327_845, 109_976, 22_810),
     ] {
         for (kind, amount) in [
             (BudgetKind::Work, work),

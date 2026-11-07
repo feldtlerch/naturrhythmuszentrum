@@ -132,7 +132,7 @@ fn kernel_live_trace_work_boundary() -> TestResult {
 /// ´claim:matrix:kernel-live-selection-work-boundary´
 #[test]
 fn kernel_live_selection_work_boundary() -> TestResult {
-    for work in [253_645, 253_644] {
+    for work in [255_237, 255_236] {
         let mut source = Fixture::new()?;
         let trace = source.trace(&mut ledger()?)?;
         let before = source.source.frame.cas.counts();
@@ -148,7 +148,7 @@ fn kernel_live_selection_work_boundary() -> TestResult {
             &source.source.steps,
             &mut budget,
         );
-        if work == 253_645 {
+        if work == 255_237 {
             let witness = result?;
             citations(&source.source.frame.cas, &witness)?;
             assert_eq!(budget.usage().work, work);
@@ -156,7 +156,7 @@ fn kernel_live_selection_work_boundary() -> TestResult {
             let Err(fault) = result else {
                 panic!("scalar selection must refuse below its full Work boundary");
             };
-            exhausted(&fault, work, 253_645);
+            exhausted(&fault, work, 255_237);
             assert_eq!(source.source.frame.cas.counts(), before);
             assert!(budget.usage().work >= 17);
         }
@@ -228,13 +228,13 @@ fn kernel_live_wire_work_boundaries() -> TestResult {
     };
     exhausted(&fault, 1916, 1917);
     assert_eq!(graph.counts(), before);
-    for work in [477_757, 477_756] {
+    for work in [479_349, 479_348] {
         let mut receiver = Cas::new(Limits::default())?;
         let before = receiver.counts();
         let mut budget = allowance(work)?;
         let limits = budget.limits().clone();
         let result = receiver.inspect(&bytes, &mut budget);
-        if work == 477_757 {
+        if work == 479_349 {
             let witness = result?;
             citations(&receiver, &witness)?;
             assert_eq!(budget.usage().work, work);
@@ -243,7 +243,7 @@ fn kernel_live_wire_work_boundaries() -> TestResult {
             let Err(fault) = result else {
                 panic!("fresh scalar replay must exhaust below its full Work boundary");
             };
-            exhausted(&fault, work, 477_757);
+            exhausted(&fault, work, 479_349);
             assert_eq!(receiver.counts(), before);
         }
         assert_eq!(budget.limits(), &limits);

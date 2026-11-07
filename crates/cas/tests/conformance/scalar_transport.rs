@@ -46,29 +46,29 @@ fn scalar_transport_checking_nonwork_boundaries() -> TestResult {
     for (depth, work, rows) in [
         (
             1,
-            65_016,
+            68_430,
             [
-                (StagedPayloadBytes, 24_435, 59_143),
-                (Depth, 3, 20_797),
-                (ConditionSteps, 62, 23_997),
+                (StagedPayloadBytes, 24_435, 62_557),
+                (Depth, 3, 24_211),
+                (ConditionSteps, 62, 27_411),
             ],
         ),
         (
             2,
-            86_509,
+            91_665,
             [
-                (StagedPayloadBytes, 32_227, 77_161),
-                (Depth, 4, 29_058),
-                (ConditionSteps, 97, 32_260),
+                (StagedPayloadBytes, 32_227, 82_317),
+                (Depth, 4, 34_214),
+                (ConditionSteps, 97, 37_416),
             ],
         ),
         (
             3,
-            109_356,
+            116_254,
             [
-                (StagedPayloadBytes, 40_019, 95_754),
-                (Depth, 5, 37_894),
-                (ConditionSteps, 141, 41_098),
+                (StagedPayloadBytes, 40_019, 102_652),
+                (Depth, 5, 44_792),
+                (ConditionSteps, 141, 47_996),
             ],
         ),
     ] {
@@ -94,8 +94,8 @@ fn scalar_transport_checking_resource_boundaries() -> TestResult {
     // The complete check is not prepaid; these totals include 37 prior Work and 19 live bytes.
     for (depth, total, prefix) in [
         (0, 33_628, 33_620),
-        (1, 65_016, 65_012),
-        (3, 109_356, 109_352),
+        (1, 68_430, 68_426),
+        (3, 116_254, 116_250),
     ] {
         assert_eq!(attempt(depth, Operation::Check, total)?, (true, total));
         assert_eq!(

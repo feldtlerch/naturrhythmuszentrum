@@ -28,11 +28,11 @@ const COSTS: [(Operation, bool, [u64; 18], [u64; 18]); 4] = [
         Operation::Replay,
         false,
         [
-            64_824, 87, 17, 2, 17_971, 8_276, 735, 0, 64_824, 17, 36, 17, 36, 3, 1, 20, 0, 0,
+            66_879, 87, 17, 2, 17_971, 8_276, 735, 0, 66_879, 17, 36, 17, 36, 3, 1, 20, 0, 0,
         ],
         [
-            64_762, 64_649, 33_059, 17_626, 59_609, 33_653, 263, 0, 64_762, 33_653, 33_653, 33_653,
-            33_653, 275, 18_022, 550, 0, 0,
+            66_817, 66_704, 35_114, 17_626, 61_664, 35_708, 263, 0, 66_817, 35_708, 35_708, 35_708,
+            35_708, 275, 18_022, 550, 0, 0,
         ],
     ),
     // Replay, warm: positive prefixes retain prior successful charges; zero prefixes are initial preflights.
@@ -40,10 +40,10 @@ const COSTS: [(Operation, bool, [u64; 18], [u64; 18]); 4] = [
         Operation::Replay,
         true,
         [
-            64_824, 87, 17, 2, 18_099, 210, 735, 0, 64_824, 16, 2, 17, 36, 3, 1, 20, 0, 0,
+            66_879, 87, 17, 2, 18_099, 210, 735, 0, 66_879, 16, 2, 17, 36, 3, 1, 20, 0, 0,
         ],
         [
-            64_762, 64_649, 33_059, 17_626, 59_609, 33_413, 263, 0, 64_762, 618, 10_996, 8_982,
+            66_817, 66_704, 35_114, 17_626, 61_664, 35_468, 263, 0, 66_817, 618, 10_996, 8_982,
             8_982, 275, 18_022, 550, 0, 0,
         ],
     ),
@@ -70,8 +70,8 @@ type BitRow = (Operation, bool, u64, [u64; 2], [u64; 2]);
 
 /// Bit refusals retain the literal successful prefix for each independently measured row.
 const BITS: [BitRow; 2] = [
-    (Operation::Replay, false, 64824, [65, 66], [1, 31_944]),
-    (Operation::Replay, true, 64824, [65, 66], [1, 31_944]),
+    (Operation::Replay, false, 66_879, [65, 66], [1, 33_999]),
+    (Operation::Replay, true, 66_879, [65, 66], [1, 33_999]),
 ];
 
 /// Concrete integer components and exact arithmetic refuse before oversized allocation.

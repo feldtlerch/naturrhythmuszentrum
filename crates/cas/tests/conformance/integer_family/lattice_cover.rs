@@ -259,12 +259,12 @@ fn lattice_cover_missing_premises() -> TestResult {
 
 /// Kind, composition Work, witness bytes, added graph bytes and fresh inspection Work.
 const COSTS: [(u32, u64, usize, u64, u64); 6] = [
-    (0, 123_728, 2_332, 2_251, 453_616), // Identity basis, unrestricted Z².
-    (1, 195_228, 3_664, 2_487, 746_989), // Identity basis, signed Integer box.
-    (2, 154_294, 3_005, 2_135, 553_490), // Identity basis, parameter/count intersection.
-    (3, 150_179, 2_910, 2_251, 691_884), // Translated determinant-one basis.
-    (4, 157_503, 3_110, 2_251, 717_998), // Translated negative-determinant skew basis.
-    (5, 182_930, 3_577, 2_266, 734_367), // Exact 2Pi phase, Pi offset, parameter range.
+    (0, 123_728, 2_332, 2_251, 459_387), // Identity basis, unrestricted Z².
+    (1, 195_228, 3_664, 2_487, 752_940), // Identity basis, signed Integer box.
+    (2, 154_294, 3_005, 2_135, 560_524), // Identity basis, parameter/count intersection.
+    (3, 150_179, 2_910, 2_251, 697_655), // Translated determinant-one basis.
+    (4, 157_503, 3_110, 2_251, 723_769), // Translated negative-determinant skew basis.
+    (5, 182_930, 3_577, 2_266, 741_811), // Exact 2Pi phase, Pi offset, parameter range.
 ];
 
 /// Measured finite composition and fresh replay costs name every fixture and preserve all old pins.

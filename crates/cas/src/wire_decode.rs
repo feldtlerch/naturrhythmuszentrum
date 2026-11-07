@@ -239,22 +239,15 @@ fn application(
         return Err(invalid());
     }
     let count = reader.count(BudgetKind::ProofNodes, 4, 512)?;
-    let mut premises = Vec::new();
+    crate::proof_view::premise_arity(cas, rule, &judgment.statement, count, reader.budget, AT)?;
     let mut ids = Vec::new();
-    premises
-        .try_reserve_exact(count)
-        .map_err(|_| Fault::allocation(AT))?;
     ids.try_reserve_exact(count)
         .map_err(|_| Fault::allocation(AT))?;
     for _ in 0..count {
         let proof = crate::series::portable::proof(reader, records)?;
         ids.push(cas.checked(proof)?);
-        premises.push(crate::proof_view::application(
-            cas,
-            proof.logical_id(),
-            reader.budget,
-        )?);
     }
+    let bytes = crate::proof_view::premises_bytes(cas, &ids, reader.budget, AT)?;
     let substitutions = crate::wire_statement::substitutions(reader, records)?;
     let certificate = crate::wire_statement::certificate(reader, records)?;
     let local: Vec<_> = (0..count)
@@ -268,16 +261,22 @@ fn application(
         substitutions,
         certificate,
     };
-    #[cfg(test)]
-    let before = reader.budget.usage();
-    let mut checked =
-        crate::scoped_check::check_application(cas, &draft, &premises, reader.budget)?;
-    #[cfg(test)]
-    crate::testing::replay_answer::record(rule, &before, &reader.budget.usage())?;
-    checked.premises = ids;
-    Ok(Decoded::Application(
-        cas.publish_scoped(checked, reader.budget)?,
-    ))
+    reader.budget.with_retained_payload(bytes, AT, |budget| {
+        let mut premises = Vec::new();
+        premises
+            .try_reserve_exact(count)
+            .map_err(|_| Fault::allocation(AT))?;
+        for id in &ids {
+            premises.push(crate::proof_view::application(cas, *id, budget)?);
+        }
+        #[cfg(test)]
+        let before = budget.usage();
+        let mut checked = crate::scoped_check::check_application(cas, &draft, &premises, budget)?;
+        #[cfg(test)]
+        crate::testing::replay_answer::record(rule, &before, &budget.usage())?;
+        checked.premises = ids;
+        Ok(Decoded::Application(cas.publish_scoped(checked, budget)?))
+    })
 }
 
 /// Compare reconstructed conditions and qualified hypotheses before sealing the root theorem.
@@ -341,3 +340,7 @@ pub(crate) fn magic(bytes: &[u8]) -> Result<(), Fault> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "tests/premise_ownership.rs"]
+mod premise_ownership;

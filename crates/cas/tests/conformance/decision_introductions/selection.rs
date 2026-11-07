@@ -88,9 +88,9 @@ fn decision_certified_selection_costs() -> TestResult {
         [
             (
                 "Integer".into(),
-                ("proved".into(), 384_787, 1_353_635, 3_186)
+                ("proved".into(), 384_787, 1_438_620, 3_186)
             ),
-            ("Sign".into(), ("proved".into(), 125_719, 594_593, 1_844)),
+            ("Sign".into(), ("proved".into(), 125_719, 614_642, 1_844)),
             ("Phase".into(), ("pending".into(), 128_522, 0, 0)),
         ]
     );
@@ -292,9 +292,9 @@ fn decision_certified_selection_boundaries() -> TestResult {
     for (example, amounts) in [
         (
             Example::Integer,
-            [377_460, 1_353_635, 162_478, 93_859, 3_186],
+            [377_460, 1_438_620, 166_333, 93_859, 3_186],
         ),
-        (Example::Sign, [119_734, 594_593, 159_172, 46_773, 1_844]),
+        (Example::Sign, [119_734, 614_642, 161_277, 46_773, 1_844]),
         (Example::Phase, [128_522, 0, 91_864, 89_283, 0]),
     ] {
         for (kind, amount) in [

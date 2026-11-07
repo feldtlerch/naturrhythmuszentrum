@@ -46,7 +46,7 @@ fn full_ladder_symbolic_work_has_explicit_boundary() -> ResultOf {
             baseline.generation,
             baseline.replay
         ),
-        (4_916_617, 1_703_795, 4_922_148, 2_116_155)
+        (4_916_617, 1_703_795, 4_922_148, 2_174_460)
     );
     Ok(())
 }

@@ -202,16 +202,16 @@ fn kernel_physical_family_lifecycle() -> TestResult {
     assert_eq!(setup.usage().work, 94_022);
     assert_eq!(captured - 17, 2952);
     assert_eq!(traced - captured, 312_744);
-    assert_eq!(selected - traced, 328_319);
+    assert_eq!(selected - traced, 330_048);
     assert_eq!(prepared_work - selected, 5371);
     assert_eq!(publication - prepared_work, 193);
     assert_eq!(current - publication, 191);
     assert_eq!(budget.usage().work - current, 35);
-    assert_eq!(budget.usage().work, 649_822);
-    assert_eq!(setup.usage().work + budget.usage().work - 17, 743_827);
+    assert_eq!(budget.usage().work, 651_551);
+    assert_eq!(setup.usage().work + budget.usage().work - 17, 745_556);
     assert_eq!(retained, 8672);
     assert_eq!(exported, 2487);
     assert_eq!(bytes.len(), 2487);
-    assert_eq!(replayed, 485_064);
+    assert_eq!(replayed, 486_793);
     Ok(())
 }

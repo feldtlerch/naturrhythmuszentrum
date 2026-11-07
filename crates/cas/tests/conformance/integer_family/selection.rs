@@ -273,8 +273,8 @@ fn integer_family_selection() -> TestResult {
     assert_eq!(
         measured,
         [
-            (false, 108_477, 3_767, 1_416, 182_078, 16_693, 16_181, 37),
-            (true, 141_257, 3_885, 1_666, 233_660, 19_710, 19_198, 37),
+            (false, 110_069, 3_767, 1_416, 183_670, 16_693, 16_181, 37),
+            (true, 142_894, 3_885, 1_666, 235_297, 19_710, 19_198, 37),
         ]
     );
     Ok(())
@@ -606,10 +606,10 @@ fn resource_attempt(
 #[test]
 fn integer_family_selection_resource_boundaries() -> TestResult {
     for (bounded, replay, work, staged, payload) in [
-        (false, false, 108_477, 79_744, 16_693),
-        (false, true, 182_078, 79_040, 16_181),
-        (true, false, 141_257, 87_616, 19_710),
-        (true, true, 233_660, 86_912, 19_198),
+        (false, false, 110_069, 79_744, 16_693),
+        (false, true, 183_670, 79_040, 16_181),
+        (true, false, 142_894, 87_616, 19_710),
+        (true, true, 235_297, 86_912, 19_198),
     ] {
         for (kind, amount) in [
             (BudgetKind::Work, work),

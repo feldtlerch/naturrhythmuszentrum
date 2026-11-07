@@ -15,7 +15,7 @@ fn lc_angular_frequency_cold_warm_work_boundaries() -> TestResult {
 }
 
 fn pipeline_boundaries<P: Scalar + 'static>(prepared: &Prepared) -> TestResult {
-    for (cold, required) in [(true, 5_900_324), (false, 141_973)] {
+    for (cold, required) in [(true, 5_953_508), (false, 141_973)] {
         for (available, prior, success, consumed) in [
             (required, 0, true, required),
             (required - 1, 0, false, required - 1),

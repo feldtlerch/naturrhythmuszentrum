@@ -8,9 +8,9 @@ use nrz_cas::{Cas, Fault, FaultKind, Location};
 
 /// Selection, fresh selection replay, full preparation, outputs, fresh identity replay, bytes, records.
 const COSTS: [(u64, u64, u64, u64, u64, usize, usize); 3] = [
-    (364_787, 905_604, 122_399, 99_607, 161_213, 3_745, 71),
-    (361_243, 896_822, 120_735, 96_281, 151_758, 3_700, 70),
-    (364_891, 906_028, 122_951, 100_327, 161_916, 3_745, 71),
+    (364_787, 913_136, 122_399, 99_607, 161_213, 3_745, 71),
+    (361_243, 904_354, 120_735, 96_281, 151_758, 3_700, 70),
+    (364_891, 913_560, 122_951, 100_327, 161_916, 3_745, 71),
 ];
 
 fn fixture(kind: usize) -> TestResult<Selection> {

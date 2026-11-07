@@ -266,11 +266,11 @@ fn decision_introduction_lifecycle_integer() -> TestResult {
     lifecycle(
         Example::Integer,
         &[
-            ("introduction", 322_565, 2_820, 2_775),
+            ("introduction", 323_376, 2_820, 2_775),
             ("frame", 1_648, 1_255, 0),
             ("interned", 1_646, 0, 0),
             ("membership", 113_794, 1_060, 2_927),
-            ("import", 538_289, 33_902, 2_927),
+            ("import", 539_100, 33_902, 2_927),
         ],
     )
 }
@@ -282,11 +282,11 @@ fn decision_introduction_lifecycle_sign() -> TestResult {
     lifecycle(
         Example::Sign,
         &[
-            ("introduction", 147_865, 2_640, 1_478),
+            ("introduction", 148_676, 2_640, 1_478),
             ("frame", 1_648, 1_255, 0),
             ("interned", 1_646, 0, 0),
             ("membership", 65_237, 1_060, 1_630),
-            ("import", 237_975, 18_368, 1_630),
+            ("import", 238_786, 18_368, 1_630),
         ],
     )
 }
@@ -298,11 +298,11 @@ fn decision_introduction_lifecycle_phase() -> TestResult {
     lifecycle(
         Example::Phase,
         &[
-            ("introduction", 195_044, 4_141, 2_255),
+            ("introduction", 196_666, 4_141, 2_255),
             ("frame", 2_402, 1_426, 0),
             ("interned", 2_400, 0, 0),
             ("membership", 100_405, 1_111, 2_402),
-            ("import", 359_124, 28_454, 2_402),
+            ("import", 360_746, 28_454, 2_402),
         ],
     )
 }
@@ -325,6 +325,6 @@ fn decision_introduction_cycle_refusal() -> TestResult {
         nrz_cas::FaultKind::Invalid(nrz_cas::InvalidCode::UnsupportedCertificate)
     );
     assert_eq!(source.cas.counts(), before);
-    assert_eq!(budget.usage().work, 237_390);
+    assert_eq!(budget.usage().work, 238_201);
     Ok(())
 }

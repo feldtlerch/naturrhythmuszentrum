@@ -16,7 +16,7 @@ use std::rc::Rc;
 /// ´test:integration:lc-root-preparation-cumulative-work-boundary´
 #[test]
 fn lc_root_preparation_cumulative_work_boundary() -> TestResult {
-    const REQUIRED: u64 = 5_564_569;
+    const REQUIRED: u64 = 5_617_753;
     for (available, prior, success) in [
         (REQUIRED, 0, true),
         (REQUIRED - 1, 0, false),
@@ -45,7 +45,7 @@ fn preparation(budget: &mut Budget) -> TestResult {
     let exact = cache.get_or_derive(graph, &key, budget)?;
     assert_eq!(
         exact.usage().after.work - exact.usage().before.work,
-        5_128_844
+        5_182_028
     );
     let before = budget.usage().work;
     let cached = cache.get_or_derive(graph, &key, budget)?;
@@ -148,7 +148,7 @@ pub(super) fn policy(kind: usize, available: u64, prior: u64) -> TestResult<Budg
 /// ´test:integration:lc-root-publication-cumulative-work-boundary´
 #[test]
 fn lc_root_publication_cumulative_work_boundary() -> TestResult {
-    const REQUIRED: u64 = 5_694_968;
+    const REQUIRED: u64 = 5_748_152;
     for (available, prior, success) in [
         (REQUIRED, 0, true),
         (REQUIRED - 1, 0, false),

@@ -143,8 +143,8 @@ fn skew_enclosure(source: &mut Selection, targets: &[Handle]) -> TestResult {
 #[test]
 fn lattice_nearest_floor_work() -> TestResult {
     for (mut source, proof, replay, bytes, records) in [
-        (prepared(5)?, 335_639, 876_456, 3_745, 71),
-        (skew()?, 502_480, 1_428_761, 4_638, 82),
+        (prepared(5)?, 335_639, 883_988, 3_745, 71),
+        (skew()?, 502_480, 1_437_374, 4_638, 82),
     ] {
         baseline_proof(&mut source, proof + 36, false)?;
         let witness =

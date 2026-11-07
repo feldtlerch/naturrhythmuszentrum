@@ -14,8 +14,8 @@ use nrz_cas::{
 #[test]
 fn bindings_lc_selection_baseline() -> TestResult {
     for (bounded, selection, replay, length) in [
-        (false, 166_952, 247_365, 1_562),
-        (true, 199_780, 299_788, 1_812),
+        (false, 168_544, 248_957, 1_562),
+        (true, 201_417, 301_425, 1_812),
     ] {
         let mut source = fixture(bounded, "3", "10/Pi")?;
         let mut budget = ledger()?;
@@ -54,7 +54,7 @@ fn bindings_lc_selection_baseline() -> TestResult {
 /// ´test:integration:bindings-lc-selection-work-baseline´
 #[test]
 fn bindings_lc_selection_work_baseline() -> TestResult {
-    for (bounded, required) in [(false, 166_952), (true, 199_780)] {
+    for (bounded, required) in [(false, 168_544), (true, 201_417)] {
         for (allowance, accepted) in [(required + 17, true), (required + 16, false)] {
             let mut source = fixture(bounded, "3", "10/Pi")?;
             let before = source.frame.cas.counts();

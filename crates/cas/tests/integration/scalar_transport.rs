@@ -18,29 +18,29 @@ fn scalar_transport_replay_nonwork_boundaries() -> TestResult {
     for (depth, work, rows) in [
         (
             1,
-            101_535,
+            104_949,
             [
-                (StagedPayloadBytes, 24_435, 95_269),
-                (Depth, 3, 55_026),
-                (ConditionSteps, 65, 101_245),
+                (StagedPayloadBytes, 24_435, 98_683),
+                (Depth, 3, 58_440),
+                (ConditionSteps, 65, 104_659),
             ],
         ),
         (
             2,
-            135_577,
+            140_733,
             [
-                (StagedPayloadBytes, 32_227, 125_836),
-                (Depth, 4, 75_619),
-                (ConditionSteps, 102, 135_287),
+                (StagedPayloadBytes, 32_227, 130_992),
+                (Depth, 4, 80_775),
+                (ConditionSteps, 102, 140_443),
             ],
         ),
         (
             3,
-            172_247,
+            179_145,
             [
-                (StagedPayloadBytes, 40_019, 158_252),
-                (Depth, 5, 98_061),
-                (ConditionSteps, 149, 171_957),
+                (StagedPayloadBytes, 40_019, 165_150),
+                (Depth, 5, 104_959),
+                (ConditionSteps, 149, 178_855),
             ],
         ),
     ] {
@@ -211,9 +211,9 @@ fn scalar_transport_portable_resource_boundaries() -> TestResult {
     use crate::testing::scalar_transport_work::{Operation, attempt};
     // Totals include 37 prior Work and retain 19 caller payload bytes throughout.
     for (depth, export, replay, prefix) in [
-        (0, 596, 62_163, 62_086),
-        (1, 932, 101_535, 101_425),
-        (3, 1_388, 172_247, 172_137),
+        (0, 596, 63_835, 63_758),
+        (1, 932, 104_949, 104_839),
+        (3, 1_388, 179_145, 179_035),
     ] {
         assert_eq!(attempt(depth, Operation::Export, export)?, (true, export));
         assert_eq!(attempt(depth, Operation::Export, export - 1)?, (false, 37));

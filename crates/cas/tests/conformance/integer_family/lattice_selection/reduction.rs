@@ -235,7 +235,7 @@ struct Costs {
 const COSTS: [Costs; 2] = [
     Costs {
         proof: 695_582,
-        replay: 1_644_023,
+        replay: 1_652_636,
         preparation: 311_228,
         outputs: 132_441,
         identity_replay: 205_491,
@@ -246,7 +246,7 @@ const COSTS: [Costs; 2] = [
     },
     Costs {
         proof: 684_538,
-        replay: 1_625_876,
+        replay: 1_634_489,
         preparation: 303_578,
         outputs: 130_563,
         identity_replay: 200_146,

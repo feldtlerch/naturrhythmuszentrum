@@ -121,24 +121,24 @@ pub(crate) fn attempt(
 /// The literal checker charges the component ceiling; declaration comparison and admission charge the name ceiling.
 /// Each cold and warm entry was measured separately, including the coupled intermediate policy.
 const RECEIPTS: [(Operation, bool, BudgetKind, u64); 8] = [
-    (Operation::Guarded, false, BudgetKind::NameBytes, 97_022),
-    (Operation::Guarded, true, BudgetKind::NameBytes, 97_022),
-    (Operation::Guarded, false, BudgetKind::ComponentBits, 83_006),
-    (Operation::Guarded, true, BudgetKind::ComponentBits, 83_006),
+    (Operation::Guarded, false, BudgetKind::NameBytes, 104_040),
+    (Operation::Guarded, true, BudgetKind::NameBytes, 104_040),
+    (Operation::Guarded, false, BudgetKind::ComponentBits, 90_024),
+    (Operation::Guarded, true, BudgetKind::ComponentBits, 90_024),
     (
         Operation::Guarded,
         false,
         BudgetKind::IntermediateBits,
-        83_006,
+        90_024,
     ),
     (
         Operation::Guarded,
         true,
         BudgetKind::IntermediateBits,
-        83_006,
+        90_024,
     ),
-    (Operation::Replay, false, BudgetKind::NameBytes, 64_588),
-    (Operation::Replay, true, BudgetKind::NameBytes, 64_588),
+    (Operation::Replay, false, BudgetKind::NameBytes, 66_643),
+    (Operation::Replay, true, BudgetKind::NameBytes, 66_643),
 ];
 
 pub(crate) fn success(operation: Operation, warm: bool, kind: BudgetKind, ordinary: u64) -> u64 {

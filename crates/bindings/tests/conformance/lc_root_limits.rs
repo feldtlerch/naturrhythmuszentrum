@@ -31,13 +31,13 @@ fn lc_root_original_admission_cumulative_boundary() -> TestResult {
             assert_eq!(fixture.cas.counts(), before);
         }
     }
-    let required = 1_391_795;
+    let required = 1_426_589;
     for ceiling in [required, required - 1] {
         let (mut fixture, request) = original([1, 1], &mut ledger()?)?;
         let set = proposal(&mut fixture, &theorem)?;
         let mut budget = Budget::new(Limits {
             work: ceiling,
-            replay_work: 1_381_167,
+            replay_work: 1_415_961,
             ..Limits::default()
         })?;
         budget.work(19, Location::new("prior caller work"))?;
@@ -80,7 +80,7 @@ fn lc_root_coverage_payload_boundaries() -> TestResult {
         }
         costs.push(upper);
     }
-    assert_eq!(costs, vec![352_789, 52_448]);
+    assert_eq!(costs, vec![356_090, 52_448]);
     Ok(())
 }
 
@@ -89,8 +89,8 @@ fn replay_limit(theorem: &Theorem, kind: BudgetKind, limit: u64, prior: u64) -> 
     let set = proposal(&mut fixture, theorem)?;
     let problem = RootProblem::check(&mut fixture.cas, request, &mut ledger()?)?;
     let mut limits = Limits {
-        work: 1_381_168,
-        replay_work: 1_381_167,
+        work: 1_415_962,
+        replay_work: 1_415_961,
         ..Limits::default()
     };
     match kind {
