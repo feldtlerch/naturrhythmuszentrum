@@ -249,3 +249,7 @@ requires = []
 [[document]]
 output = "docs/design/lc-streams.md"
 requires = []
+
+[[document]]
+output = "docs/design/tiles-streams-design.md"
+requires = []
