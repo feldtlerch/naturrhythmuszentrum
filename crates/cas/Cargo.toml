@@ -13,6 +13,7 @@ keywords = ["symbolic", "algebra", "exact", "graph"]
 categories = ["mathematics", "science"]
 
 [dependencies]
+tracing.workspace = true
 petgraph.workspace = true
 num-bigint.workspace = true
 num-integer.workspace = true

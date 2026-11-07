@@ -13,6 +13,7 @@ keywords = ["units", "dimensions", "validation"]
 categories = ["mathematics", "science"]
 
 [dependencies]
+tracing.workspace = true
 nrz-cas = { path = "../cas" }
 thiserror.workspace = true
 

@@ -13,6 +13,7 @@ keywords = ["numerics", "bounds", "validation"]
 categories = ["mathematics", "science"]
 
 [dependencies]
+tracing.workspace = true
 nrz-scalar.workspace = true
 
 [dev-dependencies]

@@ -15,6 +15,7 @@ categories = ["development-tools"]
 workspace = true
 
 [dependencies]
+tracing.workspace = true
 nrz-cas = { path = "../../crates/cas" }
 nrz-bindings = { path = "../../crates/bindings" }
 minijinja.workspace = true

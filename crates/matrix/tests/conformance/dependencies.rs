@@ -25,6 +25,7 @@ const PACKAGES: [Package; 6] = [
         name: "nrz-cas",
         manifest: "crates/cas/Cargo.toml",
         normal: &[
+            "tracing",
             "petgraph",
             "num-bigint",
             "num-integer",
@@ -37,25 +38,26 @@ const PACKAGES: [Package; 6] = [
     Package {
         name: "nrz-scalar",
         manifest: "crates/scalar/Cargo.toml",
-        normal: &["thiserror"],
+        normal: &["thiserror", "tracing"],
         development: &["num-bigint", "num-rational", "num-traits"],
     },
     Package {
         name: "nrz-accuracy",
         manifest: "crates/accuracy/Cargo.toml",
-        normal: &["nrz-scalar"],
+        normal: &["nrz-scalar", "tracing"],
         development: &["num-bigint", "num-rational", "num-traits"],
     },
     Package {
         name: "nrz-bindings",
         manifest: "crates/bindings/Cargo.toml",
-        normal: &["nrz-cas", "thiserror"],
+        normal: &["nrz-cas", "thiserror", "tracing"],
         development: &[],
     },
     Package {
         name: "nrz-matrix",
         manifest: "crates/matrix/Cargo.toml",
         normal: &[
+            "tracing",
             "faer",
             "nrz-scalar",
             "nrz-accuracy",
@@ -68,6 +70,7 @@ const PACKAGES: [Package; 6] = [
         name: "nrz-docgen",
         manifest: "tools/docgen/Cargo.toml",
         normal: &[
+            "tracing",
             "nrz-cas",
             "nrz-bindings",
             "minijinja",

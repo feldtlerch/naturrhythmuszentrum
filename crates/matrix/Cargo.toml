@@ -12,6 +12,7 @@ keywords = ["matrix", "numerics", "validation"]
 categories = ["mathematics", "science"]
 
 [dependencies]
+tracing.workspace = true
 faer.workspace = true
 nrz-scalar.workspace = true
 nrz-accuracy = { path = "../accuracy" }

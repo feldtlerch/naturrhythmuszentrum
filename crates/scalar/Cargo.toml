@@ -12,6 +12,7 @@ keywords = ["numerics", "interval", "validation"]
 categories = ["mathematics", "science"]
 
 [dependencies]
+tracing.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]

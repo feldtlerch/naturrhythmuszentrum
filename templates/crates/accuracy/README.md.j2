@@ -9,7 +9,7 @@
 
 ## Place in the engine · `sec:accuracy:engine`
 
-Accuracy depends only on `nrz-scalar` in production. Matrix uses both: scalar encloses primitive operations and imported constants, accuracy combines magnitudes and controls finite recovery policies, and matrix retains the resulting evidence against live heap versions. The descriptor dependency direction is matrix → bindings → CAS; neither scalar nor accuracy depends back on that meaning layer.
+Accuracy depends on `nrz-scalar` for numerical values and `tracing` for observation. Matrix uses both: scalar encloses primitive operations and imported constants, accuracy combines magnitudes and controls finite recovery policies, and matrix retains the resulting evidence against live heap versions. The descriptor dependency direction is matrix → bindings → CAS; neither scalar nor accuracy depends back on that meaning layer.
 
 A region's interpretation comes from its binding. Accuracy therefore owns no heap, quantity ledger, assurance token, source model or provenance store. Its caller validates the target, coordinate system, norm, coverage and versions before giving a magnitude physical significance. Exact constants reach these numerical calculations only through an admitted bindings export and scalar enclosure of the rational literal or supported π-factor operation. See `docs/design/descriptor-binding.md` and `docs/design/matrix-core-design.md`.
 

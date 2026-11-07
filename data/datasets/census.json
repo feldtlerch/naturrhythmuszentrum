@@ -36,7 +36,8 @@
         "serde",
         "serde_json",
         "thiserror",
-        "toml"
+        "toml",
+        "tracing"
       ],
       "path": "tools/docgen"
     },
@@ -51,7 +52,8 @@
       "has_readme_template": true,
       "name": "nrz-scalar",
       "normal_dependencies": [
-        "thiserror"
+        "thiserror",
+        "tracing"
       ],
       "path": "crates/scalar"
     },
@@ -66,7 +68,8 @@
       "has_readme_template": true,
       "name": "nrz-accuracy",
       "normal_dependencies": [
-        "nrz-scalar"
+        "nrz-scalar",
+        "tracing"
       ],
       "path": "crates/accuracy"
     },
@@ -81,7 +84,8 @@
         "nrz-accuracy",
         "nrz-bindings",
         "nrz-scalar",
-        "thiserror"
+        "thiserror",
+        "tracing"
       ],
       "path": "crates/matrix"
     },
@@ -93,7 +97,8 @@
       "name": "nrz-bindings",
       "normal_dependencies": [
         "nrz-cas",
-        "thiserror"
+        "thiserror",
+        "tracing"
       ],
       "path": "crates/bindings"
     },
@@ -109,7 +114,8 @@
         "num-integer",
         "num-rational",
         "num-traits",
-        "petgraph"
+        "petgraph",
+        "tracing"
       ],
       "path": "crates/cas"
     }
