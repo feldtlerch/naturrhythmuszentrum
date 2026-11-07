@@ -204,6 +204,27 @@ fn series_portable_mutation_controls() -> TestResult {
         ),
     ];
     for mode in 6..=11 {
+        if mode == 10 {
+            let mut source = crate::testing::series_source::setup(0, 4, false, false)?;
+            let checked = source.base.cas.expand_series_source(
+                &source.request,
+                &source.proofs,
+                &mut default_budget()?,
+            )?;
+            let valid = source
+                .base
+                .cas
+                .export_witness(&checked, &mut default_budget()?)?;
+            for reordered in [false, true] {
+                let mut receiver = crate::testing::series_source::receiver(0, 4, reordered)?;
+                receiver.base.cas.replay(
+                    &valid,
+                    receiver.expected.as_ref().ok_or("source expectation")?,
+                    &mut default_budget()?,
+                )?;
+            }
+            continue;
+        }
         if matches!(mode, 8 | 9) {
             let kind = if mode == 8 { 7 } else { 9 };
             let mut source = fixture(kind, false)?;
@@ -432,6 +453,7 @@ fn series_independent_wrong_expectation() -> TestResult {
                 return Err("series".into());
             };
             match value.as_mut() {
+                nrz_cas::series::SeriesStatement::Source(_) => return Err("object fixture".into()),
                 nrz_cas::series::SeriesStatement::Truncate { input, output }
                 | nrz_cas::series::SeriesStatement::Scale { input, output, .. }
                 | nrz_cas::series::SeriesStatement::Derive { input, output }

@@ -14,7 +14,9 @@ pub(crate) mod check;
 pub(crate) mod codec;
 mod model;
 mod produce;
+mod source;
 pub use produce::SeriesOperation;
+pub use source::{SourceCertificate, SourceClause, SourceRequest, SourceStatement, SourceUnitRow};
 #[expect(
     clippy::redundant_pub_crate,
     reason = "portable checking remains kernel-private"

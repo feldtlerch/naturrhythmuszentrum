@@ -18,6 +18,9 @@ mod series_exclusions;
 mod series_golden;
 mod series_limits;
 mod series_mutations;
+mod series_source_golden;
+mod series_source_limits;
+mod series_source_mutations;
 mod series_work;
 
 mod boundary;

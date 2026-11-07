@@ -16,6 +16,7 @@ mod series_object;
 mod series_object_work;
 mod series_oracles;
 mod series_scalar;
+mod series_source;
 mod square_free;
 
 mod case_refinement;
