@@ -1,0 +1,197 @@
+<!-- SPDX-License-Identifier: CC0-1.0 -->
+
+# Enclosed transcendental plans · `spec:nrz:enclosed-transcendental-plans-design`
+
+**Principle (Restricted kernel contract)** · `prin:nrz:transcendental-contract-scope`
+
+This design specifies prepared binary64 elementary kernels for tiled and streamed numerical evaluation against (`spec:nrz:tiles-streams-design`). It supplies operation laws and proof obligations, not an implementation claim or an LC model. Exact authority, lowered computations and current applications retain their separate identities under (`rule:nrz:tiles-streams-identities`). The kernel contracts below meet the LC consumer interface in (`sec:nrz:lc-evaluation-kernels`); a consumer needing another law or domain must identify that requirement rather than infer it from a similar function name.
+
+## Scope and ownership · `sec:nrz:transcendental-scope`
+
+**Decision (Prepared operation families)** · `dec:nrz:transcendental-families`
+
+Prepare exp, expm1, sigma, tanh and positive-base dyadic powers. Their coefficients and finite error arguments are checked once for an admitted box, target and arithmetic schedule. Subsequent numerical applications compute fresh answers at the supplied points or boxes inside that domain; a prepared domain enclosure is not a cached point answer. CAS retains exact mathematical authority, bindings retains original-operation correspondence and complete reading/companion inventories, scalar owns enclosure primitives, and matrix owns numerical region kernels and application evidence under (`req:nrz:tiles-streams-plan-owner`), (`def:nrz:descriptor-binding-lowering`). No crate dependency is reversed and no consumer activation becomes an engine type.
+
+## Kernel contract · `sec:nrz:transcendental-kernel-contract`
+
+**Definition (Endpoint guarantees)** · `def:nrz:transcendental-endpoints`
+
+Let an admitted input be the exact point a or the ordered exact real box [a,b], represented by checked input and import-error bindings. Each law below is increasing on its domain. This family selects ordered stored lower/upper endpoints L and U in finite binary64 under (`def:nrz:tiles-streams-lowering-key`), (`req:nrz:tiles-streams-matrix-owner`). A successful result [L,U] encloses its entire image: L <= f(a) <= f(b) <= U. For an absolute target p, the lower endpoint error f(a)-L and upper endpoint error U-f(b) are each at most 2^(-p). For a relative target they are respectively at most 2^(-p)\*abs(f(a)) and 2^(-p)\*abs(f(b)). An endpoint whose function value is exactly zero is published exactly for the relative contract. The intrinsic width f(b)-f(a) is not numerical error and cannot be required to fit a point target. Endpoint certification may use the stronger sufficient test that its enclosing interval has width at most the absolute target, or at most the relative target times a certified lower magnitude. This does not redefine the agreed endpoint criterion. A point has the same lower and upper endpoint obligations; two absolute endpoint errors bounded by epsilon permit point width up to 2*epsilon. There is no universal point-width promise; any stronger width request is a separate consumer check. Only the explicit L/U view is tested against these endpoint targets. A separately checked center/radius view may be wider and does not replace L/U for this test.
+
+**Definition (exp operation)** · `def:nrz:transcendental-exp-operation`
+
+f(x)=exp(x). The law is increasing on the domain in (`def:nrz:transcendental-exp-domain`); exp(0)=1 is published exactly after original input and exponent validation. Checked addition of one to the expm1 schedule, including final endpoint rounding.
+
+**Definition (exp domain)** · `def:nrz:transcendental-exp-domain`
+
+The complete mathematical input domain is [-2,0]. Original operand endpoints also satisfy (`rule:nrz:transcendental-refusals`).
+
+**Requirement (exp target)** · `req:nrz:transcendental-exp-target`
+
+The absolute per-endpoint target of (`def:nrz:transcendental-endpoints`) applies. Explicit binary64 endpoint export and the separate checked reading retain (`rule:nrz:transcendental-result-evidence`); the closed refusals are (`rule:nrz:transcendental-refusals`).
+
+**Definition (expm1 operation)** · `def:nrz:transcendental-expm1-operation`
+
+f(x)=exp(x)-1. The law is increasing on the domain in (`def:nrz:transcendental-expm1-domain`); expm1(0)=0 is published exactly after original input and exponent validation. Alternating Horner remainder, coefficient and execution errors, and relative conversion.
+
+**Definition (expm1 domain)** · `def:nrz:transcendental-expm1-domain`
+
+The complete mathematical input domain is [-2,0]. Original operand endpoints also satisfy (`rule:nrz:transcendental-refusals`).
+
+**Requirement (expm1 target)** · `req:nrz:transcendental-expm1-target`
+
+The relative per-endpoint target of (`def:nrz:transcendental-endpoints`) applies. Explicit binary64 endpoint export and the separate checked reading retain (`rule:nrz:transcendental-result-evidence`); the closed refusals are (`rule:nrz:transcendental-refusals`).
+
+**Definition (sigma operation)** · `def:nrz:transcendental-sigma-operation`
+
+f(x)=1/(1+exp(-x)). The law is increasing on the domain in (`def:nrz:transcendental-sigma-domain`); sigma(0)=1/2 is published exactly after original input and exponent validation. Argument negation, exponential correspondence, positive denominator and outward reciprocal.
+
+**Definition (sigma domain)** · `def:nrz:transcendental-sigma-domain`
+
+The complete mathematical input domain is [0,2]. Original operand endpoints also satisfy (`rule:nrz:transcendental-refusals`).
+
+**Requirement (sigma target)** · `req:nrz:transcendental-sigma-target`
+
+The absolute per-endpoint target of (`def:nrz:transcendental-endpoints`) applies. Explicit binary64 endpoint export and the separate checked reading retain (`rule:nrz:transcendental-result-evidence`); the closed refusals are (`rule:nrz:transcendental-refusals`).
+
+**Definition (tanh operation)** · `def:nrz:transcendental-tanh-operation`
+
+f(x)=-expm1(-2x)/(2+expm1(-2x)). The law is increasing on the domain in (`def:nrz:transcendental-tanh-domain`); tanh(0)=0 is published exactly after original input and exponent validation. Argument scaling, expm1 correspondence, positive denominator and quotient error.
+
+**Definition (tanh domain)** · `def:nrz:transcendental-tanh-domain`
+
+The complete mathematical input domain is [0,1]. Original operand endpoints also satisfy (`rule:nrz:transcendental-refusals`).
+
+**Requirement (tanh target)** · `req:nrz:transcendental-tanh-target`
+
+The relative per-endpoint target of (`def:nrz:transcendental-endpoints`) applies. Explicit binary64 endpoint export and the separate checked reading retain (`rule:nrz:transcendental-result-evidence`); the closed refusals are (`rule:nrz:transcendental-refusals`).
+
+**Definition (power operation)** · `def:nrz:transcendental-power-operation`
+
+f(x)=x^q, q=m/2^k. The law is increasing on the domain in (`def:nrz:transcendental-power-domain`); 1^q=1 is published exactly after original input and exponent validation. Exact exponent classification, repeated roots and integer-power correspondence with rounding.
+
+**Definition (power domain)** · `def:nrz:transcendental-power-domain`
+
+The complete mathematical input domain is 0<a<=b<=2, 0<q<=1 with exact dyadic q. Original operand endpoints also satisfy (`rule:nrz:transcendental-refusals`).
+
+**Requirement (power target)** · `req:nrz:transcendental-power-target`
+
+Only outward inclusion is promised, with no width target. Explicit binary64 endpoint export and the separate checked reading retain (`rule:nrz:transcendental-result-evidence`); the closed refusals are (`rule:nrz:transcendental-refusals`).
+
+**Table (Laws and guarantees)** · `tab:nrz:transcendental-laws`
+
+|Operation|Law and evidence|Domain and refusals|Endpoint target and result evidence|
+|---------|----------------|-------------------|-----------------------------------|
+|exp|(`def:nrz:transcendental-exp-operation`)|(`def:nrz:transcendental-exp-domain`), (`rule:nrz:transcendental-refusals`)|(`req:nrz:transcendental-exp-target`), (`rule:nrz:transcendental-result-evidence`)|
+|expm1|(`def:nrz:transcendental-expm1-operation`)|(`def:nrz:transcendental-expm1-domain`), (`rule:nrz:transcendental-refusals`)|(`req:nrz:transcendental-expm1-target`), (`rule:nrz:transcendental-result-evidence`)|
+|sigma|(`def:nrz:transcendental-sigma-operation`)|(`def:nrz:transcendental-sigma-domain`), (`rule:nrz:transcendental-refusals`)|(`req:nrz:transcendental-sigma-target`), (`rule:nrz:transcendental-result-evidence`)|
+|tanh|(`def:nrz:transcendental-tanh-operation`)|(`def:nrz:transcendental-tanh-domain`), (`rule:nrz:transcendental-refusals`)|(`req:nrz:transcendental-tanh-target`), (`rule:nrz:transcendental-result-evidence`)|
+|power|(`def:nrz:transcendental-power-operation`)|(`def:nrz:transcendental-power-domain`), (`rule:nrz:transcendental-refusals`)|(`req:nrz:transcendental-power-target`), (`rule:nrz:transcendental-result-evidence`)|
+
+**Rule (Closed numerical refusals)** · `rule:nrz:transcendental-refusals`
+
+Each operation refuses an operand outside its complete domain with outside-domain; power also uses outside-domain for an exponent outside (0,1]. Power refuses an in-range non-dyadic exponent with non-dyadic-exponent. Every operation refuses any supplied operand endpoint whose magnitude is nonzero and below 2^(-1022), the smallest positive normal binary64 value, with below-normal-operand. This is a magnitude rule, including negative endpoints, not the signed comparison x < 2^(-1022). Exactly zero remains admitted wherever the operation's domain admits zero; a power base with zero lower endpoint remains outside-domain. The below-normal rule governs operand endpoints, not all real interior points of a box and not every intermediate term or output. Targets or finite schedules whose required enclosure cannot be certified in the declared binary64 environment refuse with target-not-certifiable. These four names are the closed numerical refusal vocabulary. Resource exhaustion, stale attachment, malformed representation and unsupported engine evidence remain the engine's distinct failures, not mathematical domain refutations. Multiple invalid premises retain their checks and diagnostic scope; acceptance fixtures isolate one cause and do not impose a new precedence rule.
+
+**Rule (Evidence of a result)** · `rule:nrz:transcendental-result-evidence`
+
+Each successful masked application retains the authenticated prepared law and lowering revision, original operation and exponent where present, admitted domain and target, arithmetic schedule/environment, constant/coefficient import-error references, actual input-import error references and output-restoration map/error references, and current ordered input/output bindings, region versions, maps and masks. It exports ordered stored lower/upper endpoints L/U in binary64 with original endpoint association, target kind and endpoint-error evidence, using (`req:nrz:tiles-streams-matrix-owner`) and the consumer interface (`sec:nrz:lc-evaluation-kernels`). The final endpoint test includes all import, arithmetic and restoration errors once. Numeric endpoints do not assign open/closed semantic face ownership. Domain, target and refusal masks identify which cells have results. Evidence is shared authority plus current numerical companions and attachment, not a new exact certificate or descriptor per cell. Publication and semantic use retain (`rule:nrz:tiles-streams-barrier-publication`), (`rule:nrz:descriptor-binding-certified-feedback`). A numerical refusal carries its original cell association, reason and unavailable output, never an uncertified substitute value.
+
+For this family, construct the separate centre, deterministic-total-radius and numerical-only-error readings required by (`req:nrz:tiles-streams-matrix-owner`) as follows, for the actual represented input centre c and whole represented input box. In particular, an outward symmetric input reading that extends beyond the endpoint box needs its own domain and whole-box enclosure check; it must not silently reuse a narrower premise. Evaluate the nominal law f(c) with the proved schedule and its own import/restoration correspondence to obtain a certified nominal interval [Lc,Uc], independently of endpoint slack. Choose a finite binary64 output center y_hat and outward bounds e >= max(abs(Lc-y_hat),abs(Uc-y_hat)) and r_y >= max(abs(L-y_hat),abs(U-y_hat),e), where L/U cover that reading's complete input box. These bounds discharge the two reading obligations of (`req:nrz:tiles-streams-matrix-owner`). An independently proved tighter nominal bound is permitted. If the center changes to y_new, the bound e+abs(y_new-y_hat), rounded outward, remains valid, or a fresh nominal check may tighten it; recompute the total radius for that center. Inability to certify the reading makes that reading unavailable, not the endpoint result inaccurate.
+
+Even perfect endpoint evaluation does not bound the nominal-center error by endpoint slack. For exp on [-2,0], c=-1 and the exact image midpoint is (1+exp(-2))/2. Its displacement from exp(-1) is (1-exp(-1))^2/2, approximately 0.1998, before any rounding of that midpoint. Centering instead at exp(-1) with a symmetric radius reaching 1 gives lower-endpoint excess (1-exp(-1))^2. Thus center/radius consumers may receive a wider view while the retained L/U endpoints still meet their target. The nominal evaluation and any recentering discrepancy are explicit evidence, not inferred from a narrow endpoint error.
+
+**Example (A binary64 target that cannot be met)** · `ex:nrz:transcendental-spacing`
+
+For exp(-1), the exact value lies strictly between 1/4 and 1/2 and is irrational. Adjacent binary64 values in that binade are separated by 2^(-54). Any enclosing binary64 endpoints therefore have width at least 2^(-54). Even allowing two endpoint errors of 2^(-60), their sum is at most 2^(-59), smaller than that spacing. Thus the 60-bit absolute request refuses. An exact rational evaluator on a finer grid can succeed at the same request and cannot establish binary64 impossibility. This impossibility is for the normative explicit binary64 endpoint export, not every exact-dyadic center/radius representation. For h=2^(-60), 1-h < exp(-h) < 1-h+h^2/2. The binary64 pair c=1, r=h has exact-dyadic effective endpoints 1-h and 1+h, each with error below 2^(-58). Explicit binary64 endpoints must instead straddle exp(-h) between at least 1-2^(-53) and 1, wider than 2*2^(-58); that endpoint request refuses. The distinct center/radius reading does not invalidate this refusal. Exact dyadic c-r and c+r remain legitimate under (`rule:nrz:decision-exact-certificate`), but are not the normative export of this family.
+
+## Preparation and numerical schedules · `sec:nrz:transcendental-preparation`
+
+**Rule (Authority and application keys)** · `rule:nrz:transcendental-keys`
+
+Instantiate (`def:nrz:tiles-streams-exact-key`) with the canonical original law, exact admitted box, target kind and bits where applicable, exact exponent, all analytic premises, constant identities, finite schedule and proof/checker revisions. Distinguish a statement key from a proof-byte key when witness identity matters. Specialize (`def:nrz:tiles-streams-lowering-key`), (`req:nrz:tiles-streams-matrix-owner`) with this family's ordered stored lower/upper endpoints in binary64, checked readings from (`rule:nrz:transcendental-result-evidence`), finite schedule and coefficient specialization, including whether an FMA instruction or separate multiply/add steps are proved. Actual floating data, addresses, arrival order, tile ordinal, occupancy and live versions do not become exact authority keys under (`rule:nrz:tiles-streams-key-boundary`). Current attachment checks still authenticate them where required. Specializing to exact rational endpoints intentionally creates another mathematical domain key; reusing a general domain does not do so for every incoming point.
+
+Lookup precedes construction under (`rule:nrz:tiles-streams-lookup-order`). A hit charges actual key, lookup, authentication, application and any fresh import/copy work under (`rule:nrz:tiles-streams-cache-charge`); it does not reconstruct constants or replay their proofs. A miss prepares and checks finite exact evidence with the cumulative caller ledger before admission. Constants use (`def:nrz:tiles-streams-constant-key`), while imported numerical coefficient regions use (`def:nrz:tiles-streams-prelude-key`). Full flush releases numerical preludes; warmed exact authority can survive and serves a charged fresh import. No cache key or allocation choice waives an operand or target check.
+
+**Requirement (A finite schedule has a finite proof)** · `req:nrz:transcendental-schedule-proof`
+
+Preparation establishes exact rational bounds for constants, coefficient approximation, truncation, reduction and every rounding stage, and checks their composed bound over the admitted domain. It fixes finite degree, reduction candidates, switch thresholds, root steps and exponent schedule before numerical execution. Bounded directed interval operations or error-free transforms with a proved outward residual may implement the bound; an ordinary library transcendental followed by one nextafter has no such proof. The arithmetic model identifies rounding mode, subnormal behavior, compiler contraction and permitted target instructions. Gradual underflow must be accounted for with absolute error where a relative unit-roundoff model fails; flushing subnormals to zero is not silently admitted. Exact preparation/replay follows (`rule:nrz:enclosures-design-checker`), (`rule:nrz:enclosures-design-work`); native execution does not replay that checker per cell.
+
+**Requirement (Exponential schedule evidence)** · `req:nrz:transcendental-exp-schedule`
+
+The certification baseline derives exp(x) by checked addition of one to the expm1 enclosure in (`req:nrz:transcendental-small-schedule`), with a final absolute endpoint check. It uses no ln(2) classifier or nonzero switch. A reduced route or switch is admitted only as a separately proved schedule, with its reconstruction, all feasible classification candidates and every boundary covered; a measured speed advantage does not replace that proof. Retain the exact exp(0)=1 shortcut after validation.
+
+**Requirement (Cancellation-sensitive schedules)** · `req:nrz:transcendental-small-schedule`
+
+For x=-a, 0<=a<=2, the baseline uses expm1(-a)=-a*G_N(a) up to its certified remainder, where G_N(a)=sum from j=0 to N-1 of (-a)^j/(j+1)!, N>=1. Evaluate this polynomial by one fixed explicitly rounded alternating Horner schedule with separate multiply/add instructions, without subtracting rounded exp(-a) from one. The omitted alternating terms decrease from the relevant tail: their successive magnitude ratio is at most 2/(N+2)<1. Absolute truncation error is at most a^(N+1)/(N+1)!. For a>0, exp(a)>=1+a implies 1-exp(-a)>=a/(1+a)>=a/3, so the truncation relative error is at most 3*a^N/(N+1)!. At a=0 use the exact zero shortcut after validation, not division by a zero magnitude. Degree and coefficient precision are bounded preparation parameters selected by the complete proof, not a fixed degree promise for every target. Coefficient and argument imports, each Horner operation, gradual underflow, composition and export all consume the target; these analytic bounds alone do not certify binary64 execution. Bounded failure to prove the target yields target-not-certifiable, while exhausted engine resources retain their separate outcome.
+
+The native baseline admits precisely the environment described by crates/scalar/src/context.rs: x86_64 Linux GNU, round-to-nearest ties-to-even, gradual underflow, correctly rounded primitives and an unchanged floating environment, with compiler/profile boundary evidence. Fast math and excess precision are unsupported. Runtime probes are admission checks, not universal proofs of compiler or future environment behavior. An FMA variant requires its own schedule proof and lowering key. Tanh uses the expm1 law: for e=expm1(-2x), 2+e=1+exp(-2x)>1. The quotient derivative is -2/(2+e)^2 and its relative sensitivity magnitude is 2/(2+e)<2 for x>0. These guide but do not replace finite quotient-rounding and final target checks. Sigma similarly uses a positive denominator and outward reciprocal; sigma'(x)=sigma(x)*(1-sigma(x))<=1/4 includes argument import error. Both compositions retain their exact zero-input identities.
+
+**Requirement (Power schedule evidence)** · `req:nrz:transcendental-power-schedule`
+
+Represent the exponent exactly as canonical reduced bounded integers m and k for m/2^k, and classify it before conversion to floating point. Size or step excess is a resource outcome, never non-dyadic-exponent; a rounded float cannot classify dyadicness. For q=m/2^k, compute k positive square roots followed by a fixed integer-power schedule for m; preparation bounds the supported integer size, step count and outward rounding without silently capping the mathematical domain. Unsupported resource sizes report their resource limit. The law is increasing in the positive base. Squared endpoint inequalities can check a proposed square-root enclosure, with a proved outward correction for binary64 rounding. Products include all input and roundoff errors. No log/exp approximation is needed for this route. The normal-operand guard applies to the original base endpoints, not to a fictitious new client request at every internal step. A scalar square-root primitive's own stronger guard must nevertheless be discharged before calling it. Width is not promised for power; useful sharpness is measured separately. Negative exponents, exponent zero and exponents above one are not admitted by this plan and the pinned independent evaluator uses the same exponent domain.
+
+## Execution over regions · `sec:nrz:transcendental-regions`
+
+**Rule (Masked numerical applications)** · `rule:nrz:transcendental-region-application`
+
+The same lowered plan applies over finite tiles and arrived stream-segment regions under (`rule:nrz:tiles-streams-lowering-application`). It consumes only demanded, present input entries and their matching companions, with no read through a hole; empty masks perform no scalar evaluation. Each cell computes a fresh endpoint enclosure using the prepared finite schedule, then contributes success or typed refusal to the corresponding output mask. Guard classification, rounding and mask arithmetic are native work. There is zero exact Work, descriptor construction or CAS invocation per cell between barriers, including hidden child budgets. Predeclared scratch, coefficients and output companions retain total binding coverage and engine lifetime protection. Target checking is conservative: inability to establish the bound yields a refusal, not a guessed last bit. Repeated coordinates retain their dependence under (`rule:nrz:descriptor-binding-error-composition`).
+
+**Rule (Refused cells and decisions)** · `rule:nrz:transcendental-barrier-route`
+
+Native guard/refusal masks are numerical evidence attached to the current input versions; they do not themselves select a semantic branch. A consumer decision barrier consumes them through its declared membership recipe under (`def:nrz:tiles-streams-membership-recipe`). It may publish the refusal, select an already declared fallback/refinement, or remain undecided when the premise is not established. Exact rational fallback is charged at that barrier and publishes its own representation and assurance, rather than being counted as a successful binary64 kernel. It cannot satisfy an impossible binary64 output request by renaming rational endpoints. Remaining allowances and spent Work persist across attempts under (`rule:nrz:tiles-streams-undecided`). Uniform branches may share checked authority; a nonuniform input does not require one exact descriptor per cell. A finite tile's refusal does not erase other cells' valid answers.
+
+Flush follows (`def:nrz:tiles-streams-node-flush`), (`rule:nrz:tiles-streams-flush-completion`). The pointwise kernel uses its actual available mask; missing required inputs remain unavailable when upstream is terminal. A consumer barrier states its own flushed readiness and aggregate meaning. This plan adds neither a stream finality protocol nor an LC decision policy. Output readers and evidence delivery retain their pins until finished; warm authority does not keep numerical heap occupations alive.
+
+## Consumer targets · `sec:nrz:transcendental-targets`
+
+**Rule (End-to-end width belongs to the consumer)** · `rule:nrz:transcendental-target-budget`
+
+A consumer starts with an exact expression, input uncertainty and a final error requirement. It allocates allowances to input/constant imports, each operation and restoration using full-box interval propagation or proved sensitivity bounds, then checks the final enclosure. A plan receives only its operation's domain and endpoint target. An LC adapter under (`sec:nrz:lc-evaluation-kernels`) or other consumer records its selected target and any additional width check explicitly; power inclusion alone supplies no width guarantee. Two extra bits in an inner call are not a universal composition theorem. Where uncertainty alone exceeds a total-width requirement, raising arithmetic precision cannot solve it. At a zero of a relative-target operation exact zero handles the endpoint; near a square-root singularity use enclosure propagation or a positive lower bound, not an unbounded derivative treated as a constant. Refinement is finite, explicit and charged at its appropriate phase.
+
+**Example (A three-square-root consumer)** · `ex:nrz:transcendental-activation-consumer`
+
+One consumer uses p=s/(1+s), beta=2\*ln(2), t=tanh(p), Q(p)=sigma(beta\*p)\*sqrt(t\*(1-eta^2\*t)), and A(p)=sqrt(sqrt(Q(p)/Q(1))), with s>=0 and 0<=eta^2<1. A clamped consumer substitutes max(s,wall) before reduction. This is a consumer expression, not an engine type or a claim about a paper beyond those stated premises. Since 0<=p<1, beta<2 and 0<=t<1, the sigmoid and tanh inputs fit their domains and the radicand is nonnegative. The consumer proves Q(1)>0 and each root/normalization domain for its actual boxes; interval relaxation may still require refinement. At p=0, t=Q=A=0 exactly. This path uses zero-capable square roots, not the strictly-positive power plan at zero.
+
+For p>0, A=(sigma(beta\*p)/Q(1))^(1/4)\*(t\*(1-eta^2\*t))^(1/8). Thus log-sensitivity to sigma is 1/4, to Q(1) is -1/4, and to t is (1-2\*eta^2\*t)/(8\*(1-eta^2\*t)). These identities do not license assuming Q monotone or ignoring the leakage factor. A consumer obtains finite bounds over its actual positive boxes, includes the beta and Q(1) enclosure errors, and budgets each primitive against the final absolute target, for example 2^(-40). If a box includes zero, direct outward composition remains the applicable check. No fixed primitive precision is promised to meet the final target for every standing, leakage or input box.
+
+## Observation and acceptance · `sec:nrz:transcendental-observation`
+
+**Requirement (Phase and construction evidence)** · `req:nrz:transcendental-observation-evidence`
+
+Use the adopted vocabulary of (`dec:nrz:tiles-streams-tracing`), (`def:nrz:tiles-streams-spans`), with this operation family and revision in the fields: nrz.prepare for cold exact authority, nrz.lookup and nrz.proof for cache and proof work, nrz.replay for independent replay, nrz.lower for checked schedules, nrz.prelude for numerical imports, nrz.kernel for masked evaluation, nrz.barrier and nrz.refine for semantic decisions or fallback, nrz.publish for result availability, and nrz.flush and nrz.retire for draining and release. Existing loan/handback/deliver/wait spans identify transport and consumer latency. The subscriber attributes exclusive intervals under (`rule:nrz:tiles-streams-attribution`); no resettable second Work ledger or per-cell exact metering is introduced. Construction and CAS events must make a supposedly warm rebuild visible, including attempted and rolled-back work. Cache, mask, layout and memory events identify hits, evaluated/refused counts and retained/peak capacity. The accounting coverage manifest must name native operations with no Work charge, including allocation, imports, validation, rounding, mask scans and publication, under (`req:nrz:tiles-streams-accounting-coverage`). Zero Work is not zero time. Observer loss prevents a complete-counter claim.
+
+**Criterion (Oracle and refusal acceptance)** · `crit:nrz:transcendental-oracle-acceptance`
+
+Use a separately versioned oracle payload inside the CC0 dataset envelope, not problem-data v2. Dataset admission requires its separately versioned schema and checker, including this family's ordered stored lower/upper endpoints in binary64 under (`def:nrz:tiles-streams-lowering-key`), (`req:nrz:tiles-streams-matrix-owner`) and the distinct endpoint, nominal-centre and execution-proof evidence scopes. The proposed prepared-binary64 oracle dataset uses namespace org.naturrhythmuszentrum.test.oracle.prepared-binary64, version [1,0,0], owner NRZ, ordered sources, labels and structured independent-route records referenced by rows. Rows identify operation, exact rational point or box, exact power exponent, target, expected enclosure or one closed refusal reason, and point or separate endpoint oracle intervals. Every published endpoint oracle is the nonempty intersection of independently certified routes and is at most 2^(-120) wide. Acceptance requires the result to contain every oracle interval and meet its operation target; overlap alone is insufficient. Every promised exact result requires a singleton oracle, including zero, one and one half. Other oracle intervals must be refined far enough to certify the requested relative endpoint bounds using endpoint-specific nonzero magnitude evidence; the 120-bit width ceiling alone is insufficient near zero. Full box images need not have oracle-sized width.
+
+The initial 17-row sample covers E1 exp(-1); E2 and E3 exp at -6931471805599454/10^16 and -6931471805599453/10^16, below and above -ln(2); M1, M2 and M0 expm1 at -2^(-10), -2^(-40) and zero; the sigma row on [6931471805599453/10^16,6931471805599454/10^16], containing ln(2); T1, T2, T0 and T3 tanh at 2^(-10), 2^(-40), zero and one; P1 power on [1-2^(-52),1+2^(-52)] with exponent 1/4 and P2 at base 1/2 with exponent 1/4. R1 uses base 2^(-1023), R2 exp(1), R3 exponent 1/3, and R4 the 60-bit exp(-1) request. Successful exp/sigma rows request 40 absolute bits; expm1/tanh request 40 relative bits; power requests only outward inclusion. These 17 rows are a sample, not complete acceptance. Acceptance covers both sides and equality at every implemented reduction or switch boundary, every domain endpoint, signed below-normal cases, normal and subnormal neighbors, zero-containing boxes, underflowing intermediates, sparse/empty masks and every mask outcome. It joins fresh-store expected-claim replay, altered proof/argument/rounding/target mutations, changed companions, stale versions, resource outcomes and full flush followed by warm reimport. Original below-normal endpoints are capability refusals, not physical invalidity or a universal engine normal-operand rule.
+
+The independent rational-grid evaluator in the public repository https://github.com/siedelweber/peer-network-rs at commit a1102cc, path packages/graph/src/numeric/activation/bounded.rs, provides a second reading of the elementary laws, domains and cancellation-sensitive forms. It refuses power exponents outside (0,1] and uses a sufficient stricter relative test; the agreed per-endpoint bound remains this contract. Its alternating expansion has no native reduction/switch schedule. Therefore it validates values and relevant series inequalities, but schedule acceptance additionally needs the outward-rounding proof for every admitted schedule and boundary fixtures above. Finite oracle tests do not prove a universal bound. The sample's exact CAS enclosure route and independent interval route likewise check values, not compiler arithmetic assumptions.
+
+**Requirement (Performance evidence and reuse controls)** · `req:nrz:transcendental-measurements`
+
+Report cold preparation, warm authority lookup, lowering, prelude import, kernel execution, barriers/refinement, independent replay, publication and flush separately, with complete end-to-end time as well. Compare varying-input kernels to plain binary64 evaluation of the same laws and materialized outputs on the same machine, pinned CPU, release build and recorded target/FMA environment; generate inputs outside the timed expression and consume all results. Report per-cell time, counts, masks, deterministic Work by charged phase, construction/CAS counts, peak numerical capacity and retained exact storage. Include logarithmic populations, multiple independent runs, uncertainty, load/pressure and refused-cell proportions, with full-output and answer-reading timings distinguished. Cold/warm, changed points inside the same domain, changed domain/target/exponent, segment arrival, sparse/empty masks and full flush followed by warm reimport exercise the reuse claim. Holding authority and schedule fixed must yield zero exact Work and zero exact construction/CAS calls inside the numerical kernel. Barriers retain their actual costs. Neither a speed ratio nor a polynomial fit grants soundness or establishes a universal throughput threshold.
+
+## Proof integration and bounded preparation · `sec:nrz:transcendental-review`
+
+**Decision (Closed schedule proof support)** · `dec:nrz:transcendental-proof-support`
+
+The executable register crates/cas/src/enclosure/mod.rs defines the existing schema meanings. Reuse them only within their checked premises as specified below; add closed, versioned proof support for the selected expm1 schedule and the changed exp/tanh compositions. Existing meanings remain intact. Exp(x)-1 expressed through exp and rational subtraction supplies mathematical reference evidence, not the cancellation-free remainder, relative conversion or native execution theorem. The new parameterized theorem covers every admitted endpoint and import binding, coefficient errors, rounding, normal/subnormal transitions, exact shortcuts, reconstruction and conservative target tests. Native comparisons and masks also require the family application law. Finite ground scalar KernelCertificate and CAS scalar-inventory replay may discharge a charged barrier fallback; they are not replayed per cell in the kernel pass.
+
+**Table (Existing proof scope)** · `tab:nrz:transcendental-proof-scope`
+
+|Schema and mathematical evidence|Native boundary requiring another checked law or adapter|
+|--------------------------------|--------------------------------------------------------|
+|enclosure.rational-inclusion@1: rational interval arithmetic, polynomial/coefficient bounds, separated reciprocal, intersection and grid rounding (`[CAS-thm:cas:enclosure-rational-inclusion]`).|The rational-grid transcript is not a universal IEEE rounding or FMA theorem.|
+|enclosure.root-grid@1: nonnegative root endpoints by squared/grid-neighbor inequalities, including nested roots (`[CAS-thm:cas:enclosure-root-grid]`).|enclosure/roots.rs checks its own grid endpoints; arbitrary native endpoints need an endpoint law and rounding bridge.|
+|enclosure.positive-power@1: positive-base integer, dyadic-root and log/exp route correspondence (`[CAS-thm:cas:enclosure-positive-power]`).|enclosure/power/check.rs uses bounded small_ratio, route checks and exact powers; it does not certify an arbitrary native integer-power schedule.|
+|enclosure.exp-taylor@1: identities and implemented finite Taylor/squaring/reciprocal evidence, including independent oracle bounds (`[CAS-thm:cas:enclosure-exp-taylor]`).|enclosure/exp/check.rs requires a nonnegative reduced argument at most 1/2, exact binary scaling, repeated squaring and negative-argument reciprocal; neither ln(2) floor reduction nor alternating Horner is that transcript.|
+|enclosure.log-atanh@1: independent rational ln(2) bounds if needed (`[CAS-thm:cas:enclosure-log-atanh]`).|A constant certificate proves neither a floating classifier nor its candidate cover or reconstruction.|
+|enclosure.sigmoid-compose@1 and enclosure.tanh-compose@1: exponential quotient identities, endpoints, zero identities and ranges (`[CAS-thm:cas:enclosure-sigmoid-compose]`), (`[CAS-thm:cas:enclosure-tanh-compose]`).|enclosure/saturating.rs replay consumes ExpEvidence; tanh through expm1 needs rewrite/composition correspondence and rounding evidence.|
+|enclosure.smooth-derivative@1 and enclosure.clamp-generalized@1: supported full-box derivatives and branchwise/generalized derivatives with continuity/domain premises (`[CAS-thm:cas:enclosure-smooth-derivative]`), (`[CAS-thm:cas:enclosure-clamp-generalized]`).|Sensitivity evidence supplies neither floating error bounds nor differentiability at a clamp kink.|
+
+Paths in the table are relative to crates/cas/src. The optional scalar root certificate requires strictly positive input, while scalar Enclosure::sqrt permits zero; neither capability is widened by this plan. This family supplies only the positive square root on [2^(-1022),2] through q=1/2, not the additional capabilities required by (`sec:nrz:lc-evaluation-kernels`), (`req:nrz:lc-evaluation-kernel-domains`). New laws state their own extrema rule; increasing endpoints cannot simply be reused for reciprocal or sine/cosine. Binary32 and statistical Jacobian/covariance assurance are separate capabilities, not implied here.
+
+**Requirement (Explicit finite resource bounds)** · `req:nrz:transcendental-resource-bounds`
+
+Expose bounds on target encoding, exact exponent bits, root count, integer-power operations, polynomial degree, reduction candidates, refinement attempts, proof/checking Work, key/proof bytes, coefficient/scratch/output storage and retained ownership. Admission records concrete ceilings before preparation or execution; this design does not choose universal numerical ceilings or a Work tariff. Size and step excess report resource outcomes without redefining the mathematical domain. Retain cumulative spent Work and reserve checking/publication capacity separately, charging actual owner boundaries under (`rule:nrz:tiles-streams-cache-charge`). The baseline schedule, endpoint export and proof-scope decisions above resolve the joint-review choices; implementation must provide the closed checkers and complete fixtures before admitting a schedule.
