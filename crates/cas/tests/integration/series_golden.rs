@@ -99,14 +99,18 @@ fn region(key: &'static str, members: &[&'static str]) -> Record {
 }
 
 /// Both order-three objects retain the exact interpretation, coordinate and original context.
-fn object(key: &'static str, coefficients: [&'static str; 3]) -> Record {
+fn object(key: &'static str, coefficients: &[&'static str]) -> Record {
     let mut parts = vec![
         Part::Ref("Q"),
         Part::Ref("zero"),
         Part::Ref("x"),
         bytes(count(0)),
         Part::Ref("context"),
-        bytes(join(&[vec![0], count(3), count(3)])),
+        bytes(join(&[
+            vec![0],
+            count(u32::try_from(coefficients.len()).expect("fixture order")),
+            count(u32::try_from(coefficients.len()).expect("fixture count")),
+        ])),
     ];
     for value in coefficients {
         parts.push(Part::Ref(value));
@@ -248,8 +252,8 @@ fn records() -> Vec<Record> {
                 ])),
             ],
         },
-        object("input", ["one", "two", "three"]),
-        object("output", ["half", "minus-one", "minus-three-halves"]),
+        object("input", &["one", "two", "three"]),
+        object("output", &["half", "minus-one", "minus-three-halves"]),
         Record {
             name: "series-statement",
             tag: 39,
@@ -301,12 +305,16 @@ fn records() -> Vec<Record> {
 
 /// Canonical order follows the independently stated minimum-ready-record grammar.
 fn golden() -> TestResult<Vec<u8>> {
-    let records = records();
+    encode_records(&records(), closure())
+}
+
+/// Encode hand-authored records without consulting any production descriptor.
+fn encode_records(records: &[Record], manifest: Vec<u8>) -> TestResult<Vec<u8>> {
     let mut assigned = BTreeMap::new();
     let mut encoded = Vec::new();
     while assigned.len() < records.len() {
         let mut candidates = Vec::new();
-        for record in &records {
+        for record in records {
             if assigned.contains_key(record.name) {
                 continue;
             }
@@ -340,7 +348,7 @@ fn golden() -> TestResult<Vec<u8>> {
         encoded.push(value);
     }
     let mut result = b"NRZCAS05".to_vec();
-    result.extend(closure());
+    result.extend(manifest);
     result.extend(count(u32::try_from(encoded.len())?));
     for record in encoded {
         result.extend(record);
@@ -398,6 +406,184 @@ fn series_independent_golden() -> TestResult {
             .cas
             .proof_citations(witness.proof(), &mut default_budget()?)?;
         assert_eq!(rules.len(), 2);
+    }
+    Ok(())
+}
+
+/// Hand-authored mode eight and nine payloads reuse only the independently stated scalar grammar.
+#[expect(
+    clippy::too_many_lines,
+    reason = "Independent golden records retain every literal wire field together"
+)]
+fn calculus_records(integrate: bool) -> (Vec<Record>, Vec<u8>) {
+    let mode = if integrate { 9 } else { 8 };
+    let key = if integrate {
+        "series.integrate"
+    } else {
+        "series.derive"
+    };
+    let manifest = if integrate {
+        join(&[count(2), name("case.domain"), count(1), name(key), count(1)])
+    } else {
+        join(&[count(1), name(key), count(1)])
+    };
+    let mut values = records();
+    values.retain(|record| {
+        matches!(
+            record.name,
+            "real"
+                | "complex"
+                | "header"
+                | "ambient"
+                | "context"
+                | "Q"
+                | "x"
+                | "zero"
+                | "one"
+                | "two"
+                | "three"
+        ) || (integrate
+            && matches!(
+                record.name,
+                "singleton-meet" | "intersection" | "ordinary-proof" | "ordinary-statement"
+            ))
+    });
+    values.push(expression("six", join(&[vec![0], number(false, 6, 1)])));
+    if integrate {
+        values.push(Record {
+            name: "defined",
+            tag: 7,
+            layer: 0,
+            parts: vec![
+                Part::Ref("header"),
+                bytes(join(&[count(0), vec![0], count(1)])),
+                Part::Ref("one"),
+            ],
+        });
+    }
+    values.push(object(
+        "input",
+        if integrate {
+            &["two", "six"]
+        } else {
+            &["one", "two", "three"]
+        },
+    ));
+    values.push(object(
+        "output",
+        if integrate {
+            &["one", "two", "three"]
+        } else {
+            &["two", "six"]
+        },
+    ));
+    let mut statement = vec![
+        bytes(join(&[count(u32::from(integrate)), name(key), count(1)])),
+        Part::Ref("context"),
+        bytes(vec![mode, 0]),
+        Part::Ref("input"),
+    ];
+    if integrate {
+        statement.push(Part::Ref("one"));
+    }
+    statement.extend([
+        bytes(vec![0]),
+        Part::Ref("output"),
+        bytes(join(&[count(0), count(0), manifest.clone()])),
+    ]);
+    values.push(Record {
+        name: "series-statement",
+        tag: 39,
+        layer: 0,
+        parts: statement,
+    });
+    let mut rows = join(&[vec![mode, 0], count(2)]);
+    if integrate {
+        for (index, integer, inverse_denominator, input, result) in
+            [(0, 1, 1, 2, 2), (1, 2, 2, 6, 3)]
+        {
+            rows.extend(count(index));
+            rows.extend(number(false, integer, 1));
+            rows.extend(number(false, 1, inverse_denominator));
+            rows.extend(number(false, input, 1));
+            rows.extend(number(false, result, 1));
+        }
+    } else {
+        for (index, input, multiplier, result) in [(0, 2, 1, 2), (1, 3, 2, 6)] {
+            rows.extend(count(index));
+            rows.extend(number(false, input, 1));
+            rows.extend(number(false, multiplier, 1));
+            rows.extend(number(false, result, 1));
+        }
+    }
+    let mut certificate = vec![
+        Part::Ref("series-statement"),
+        bytes(join(&[vec![mode], count(u32::from(integrate))])),
+    ];
+    if integrate {
+        certificate.push(Part::Ref("ordinary-proof"));
+    }
+    certificate.push(bytes(rows));
+    values.push(Record {
+        name: "series-certificate",
+        tag: 40,
+        layer: 0,
+        parts: certificate,
+    });
+    let mut conclusion = vec![
+        Part::Ref("series-statement"),
+        Part::Ref("series-certificate"),
+        bytes(count(u32::from(integrate))),
+    ];
+    if integrate {
+        conclusion.push(Part::Ref("ordinary-proof"));
+    }
+    conclusion.push(bytes(manifest.clone()));
+    values.push(Record {
+        name: "conclusion",
+        tag: 41,
+        layer: 0,
+        parts: conclusion,
+    });
+    (values, manifest)
+}
+
+/// Both calculus modes replay hand bytes; self-export is a separate equality control.
+/// ´test:integration:series-calculus-independent-goldens´
+#[test]
+fn series_calculus_independent_goldens() -> TestResult {
+    for (integrate, kind) in [(false, 7), (true, 9)] {
+        let (records, manifest) = calculus_records(integrate);
+        let bytes = encode_records(&records, manifest)?;
+        for reordered in [false, true] {
+            let mut f = fixture(kind, reordered)?;
+            let witness = f
+                .base
+                .cas
+                .replay(&bytes, &f.expected, &mut default_budget()?)?;
+            assert!(witness.is_discharged());
+            assert_eq!(witness.hypotheses(), []);
+            assert_eq!(
+                f.base
+                    .cas
+                    .proof_citations(witness.proof(), &mut default_budget()?)?
+                    .len(),
+                if integrate { 2 } else { 1 }
+            );
+        }
+        let mut source = fixture(kind, false)?;
+        let checked = source.base.cas.check_proof(
+            &source.base.context,
+            &source.steps,
+            &mut default_budget()?,
+        )?;
+        assert_eq!(
+            source
+                .base
+                .cas
+                .export_witness(&checked, &mut default_budget()?)?,
+            bytes
+        );
     }
     Ok(())
 }

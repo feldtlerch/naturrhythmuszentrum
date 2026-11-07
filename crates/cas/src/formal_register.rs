@@ -42,7 +42,7 @@ const fn named(
 /// Every native and solving primitive in the same ASCII key order as `PRIMITIVES`.
 ///
 /// Unavailable schemas remain represented assumptions and cannot certify an application.
-pub static PRIMITIVE_SCHEMAS: [PrimitiveSchema; 94] = [
+pub static PRIMITIVE_SCHEMAS: [PrimitiveSchema; 96] = [
     named(
         Primitive::CaseCongruence,
         "thm:cas:primitive-case-congruence",
@@ -488,6 +488,18 @@ pub static PRIMITIVE_SCHEMAS: [PrimitiveSchema; 94] = [
         "No ordered proof premises; the complete original object and exact coefficient value.",
     ),
     named(
+        Primitive::SeriesDerive,
+        "thm:cas:primitive-series-derive",
+        "Formal differentiation reconstructs every coefficient at exactly one smaller order. Available for Q objects with rational centres, object form 0 only; no source calculus.",
+        "No ordinary proof slots; complete ascending input, positive-integer multiplier and result rows.",
+    ),
+    named(
+        Primitive::SeriesIntegrate,
+        "thm:cas:primitive-series-integrate",
+        "Formal integration checks the rational constant and every integer inverse at exactly one greater order. Available for Q objects with rational centres, object form 0 only; no source calculus.",
+        "Slot zero is an ordinary checked `PredicateFact` for Defined(C) on the complete input context. Finite integer-unit rows check d*v=1 in Q and retain every coefficient and condition.",
+    ),
+    named(
         Primitive::SeriesMul,
         "thm:cas:primitive-series-mul",
         "Truncated multiplication checks every convolution pair and partial sum at the recorded common order. Only object form 0 executes under the version-one contract.",
@@ -616,19 +628,21 @@ impl Primitive {
         match self {
             Self::SeriesAdd => &PRIMITIVE_SCHEMAS[71],
             Self::SeriesCoefficient => &PRIMITIVE_SCHEMAS[73],
-            Self::SeriesMul => &PRIMITIVE_SCHEMAS[74],
-            Self::SeriesScale => &PRIMITIVE_SCHEMAS[75],
-            Self::SeriesTruncate => &PRIMITIVE_SCHEMAS[76],
+            Self::SeriesDerive => &PRIMITIVE_SCHEMAS[74],
+            Self::SeriesIntegrate => &PRIMITIVE_SCHEMAS[75],
+            Self::SeriesMul => &PRIMITIVE_SCHEMAS[76],
+            Self::SeriesScale => &PRIMITIVE_SCHEMAS[77],
+            Self::SeriesTruncate => &PRIMITIVE_SCHEMAS[78],
 
-            Self::AtanOdd => &PRIMITIVE_SCHEMAS[85],
-            Self::AtanOne => &PRIMITIVE_SCHEMAS[86],
-            Self::AtanZero => &PRIMITIVE_SCHEMAS[87],
-            Self::CosEven => &PRIMITIVE_SCHEMAS[88],
-            Self::CosHalfPi => &PRIMITIVE_SCHEMAS[89],
-            Self::TrigDefined => &PRIMITIVE_SCHEMAS[90],
-            Self::HalfPiWitness => &PRIMITIVE_SCHEMAS[91],
-            Self::SinHalfPi => &PRIMITIVE_SCHEMAS[92],
-            Self::SinOdd => &PRIMITIVE_SCHEMAS[93],
+            Self::AtanOdd => &PRIMITIVE_SCHEMAS[87],
+            Self::AtanOne => &PRIMITIVE_SCHEMAS[88],
+            Self::AtanZero => &PRIMITIVE_SCHEMAS[89],
+            Self::CosEven => &PRIMITIVE_SCHEMAS[90],
+            Self::CosHalfPi => &PRIMITIVE_SCHEMAS[91],
+            Self::TrigDefined => &PRIMITIVE_SCHEMAS[92],
+            Self::HalfPiWitness => &PRIMITIVE_SCHEMAS[93],
+            Self::SinHalfPi => &PRIMITIVE_SCHEMAS[94],
+            Self::SinOdd => &PRIMITIVE_SCHEMAS[95],
             Self::Solve(schema) => solving(schema),
             Self::CaseCongruence => &PRIMITIVE_SCHEMAS[0],
             Self::CaseDomain => &PRIMITIVE_SCHEMAS[1],
@@ -688,7 +702,7 @@ impl Primitive {
             Self::RegionConstruct => &PRIMITIVE_SCHEMAS[66],
             Self::RegionDecide => &PRIMITIVE_SCHEMAS[67],
             Self::SeriesCaseRestrict => &PRIMITIVE_SCHEMAS[72],
-            Self::SumCaseSplit => &PRIMITIVE_SCHEMAS[84],
+            Self::SumCaseSplit => &PRIMITIVE_SCHEMAS[86],
         }
     }
 }
@@ -710,13 +724,13 @@ const fn solving(schema: SolveSchema) -> &'static PrimitiveSchema {
         SolveSchema::BinomialCoverage => &PRIMITIVE_SCHEMAS[68],
         SolveSchema::RealIsolationAndOrder => &PRIMITIVE_SCHEMAS[69],
         SolveSchema::RootSelectionRefinement => &PRIMITIVE_SCHEMAS[70],
-        SolveSchema::ParameterImageCoverage => &PRIMITIVE_SCHEMAS[77],
-        SolveSchema::ImplicitFunctionBranch => &PRIMITIVE_SCHEMAS[78],
-        SolveSchema::Membership => &PRIMITIVE_SCHEMAS[79],
-        SolveSchema::MultiplicityTransfer => &PRIMITIVE_SCHEMAS[80],
-        SolveSchema::ProductCompleteness => &PRIMITIVE_SCHEMAS[81],
-        SolveSchema::TotalPredicateSplit => &PRIMITIVE_SCHEMAS[82],
-        SolveSchema::SolutionTransport => &PRIMITIVE_SCHEMAS[83],
+        SolveSchema::ParameterImageCoverage => &PRIMITIVE_SCHEMAS[79],
+        SolveSchema::ImplicitFunctionBranch => &PRIMITIVE_SCHEMAS[80],
+        SolveSchema::Membership => &PRIMITIVE_SCHEMAS[81],
+        SolveSchema::MultiplicityTransfer => &PRIMITIVE_SCHEMAS[82],
+        SolveSchema::ProductCompleteness => &PRIMITIVE_SCHEMAS[83],
+        SolveSchema::TotalPredicateSplit => &PRIMITIVE_SCHEMAS[84],
+        SolveSchema::SolutionTransport => &PRIMITIVE_SCHEMAS[85],
     }
 }
 

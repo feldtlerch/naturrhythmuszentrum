@@ -101,6 +101,10 @@ fn scalar(
 }
 
 /// Dispatch each closed native family while keeping scalar projection explicit.
+#[expect(
+    clippy::too_many_lines,
+    reason = "The closed primitive dispatcher keeps every registered checker visible together"
+)]
 fn rule_conditions(
     cas: &mut Cas,
     draft: &ApplicationDraft,
@@ -112,6 +116,8 @@ fn rule_conditions(
         Primitive::SeriesTruncate
         | Primitive::SeriesAdd
         | Primitive::SeriesScale
+        | Primitive::SeriesDerive
+        | Primitive::SeriesIntegrate
         | Primitive::SeriesMul
         | Primitive::SeriesCoefficient => {
             crate::series::check::check(cas, draft, premises, budget)?

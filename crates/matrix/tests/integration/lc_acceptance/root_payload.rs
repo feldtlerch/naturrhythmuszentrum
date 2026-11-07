@@ -18,13 +18,13 @@ fn lc_root_covariance_payload_boundaries() -> TestResult {
     numerical::<f32>(
         &fixture,
         &contract,
-        [[154_067, 154_067], [156_747, 1448]],
+        [[154_292, 154_292], [156_972, 1448]],
         &mut budget,
     )?;
     numerical::<f64>(
         &fixture,
         &contract,
-        [[154_091, 154_091], [157_019, 1504]],
+        [[154_316, 154_316], [157_244, 1504]],
         &mut budget,
     )
 }

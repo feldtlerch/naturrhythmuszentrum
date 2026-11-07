@@ -850,4 +850,139 @@ mod tests {
         }
         Ok(())
     }
+
+    /// Actual calculus producer faults preserve unavailable capability versus malformed scope.
+    /// ´test:unit:series-calculus-request-outcomes´
+    #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "Each complete mutation retains its setup, precise fault and rollback evidence together"
+    )]
+    fn series_calculus_request_outcomes() -> TestResult {
+        use crate::series::{SeriesObject, SeriesOperation};
+        use crate::testing::native::{Fixture, admit, term};
+        for kind in 0..4 {
+            let mut f = Fixture::new()?;
+            let field = admit(
+                &mut f.cas,
+                Draft::Solve(crate::solving::SolveDraft::CoefficientDomain(
+                    crate::solving::CoefficientDomainData::Rational,
+                )),
+            )?;
+            let input = admit(
+                &mut f.cas,
+                Draft::SeriesObject(SeriesObject {
+                    field: Reference::Existing(field),
+                    centre: Reference::Existing(f.zero.clone()),
+                    variable: Reference::Existing(f.x.clone()),
+                    scope: Vec::new(),
+                    context: Reference::Existing(f.context.clone()),
+                    order: 1,
+                    coefficients: vec![Reference::Existing(f.one.clone())],
+                }),
+            )?;
+            let mut proofs = Vec::new();
+            let operation = if kind == 0 {
+                SeriesOperation::Derive { input }
+            } else {
+                let constant = match kind {
+                    1 => term(
+                        &mut f.cas,
+                        &f.header,
+                        Operator::Constant(crate::model::Constant::Pi),
+                        &[],
+                    )?,
+                    2 => f.x.clone(),
+                    _ => term(
+                        &mut f.cas,
+                        &f.header,
+                        Operator::Mul,
+                        &[f.zero.clone(), f.x.clone()],
+                    )?,
+                };
+                let predicate = admit(
+                    &mut f.cas,
+                    Draft::Condition {
+                        header: Reference::Existing(f.header.clone()),
+                        scope: Vec::new(),
+                        kind: PredicateKind::Defined,
+                        arguments: vec![Reference::Existing(constant.clone())],
+                    },
+                )?;
+                let mut draft = crate::proof_model::ApplicationDraft {
+                    rule: crate::rule::Primitive::CaseDomain,
+                    context: f.context.clone(),
+                    conclusion: Statement::PredicateFact {
+                        region: f.domain.clone(),
+                        predicate,
+                    },
+                    premises: Vec::new(),
+                    substitutions: Vec::new(),
+                    certificate: crate::proof_model::Certificate::None,
+                };
+                let (certificate, _) =
+                    crate::case_check::reconstruct(&mut f.cas, &draft, &[], &mut budget()?)?;
+                draft.certificate = crate::proof_model::Certificate::Cases(Box::new(certificate));
+                proofs.push(
+                    f.cas
+                        .check_proof(&f.context, &[draft], &mut budget()?)?
+                        .proof()
+                        .clone(),
+                );
+                SeriesOperation::Integrate { input, constant }
+            };
+            let root = f.cas.materialize_derived(&f.one, &f.one, &mut budget()?)?;
+            let receipt = f.cas.walk_derived(&root, &mut budget()?)?.receipt;
+            let request = Request {
+                task: Task::Simplify,
+                context: f.context.clone(),
+                inputs: vec![CoveredInput { root, receipt }],
+                premises: Vec::new(),
+                limits: crate::budget::LimitsOverride::default(),
+            };
+            let mut ledger = budget()?;
+            let limits = ledger.limits().clone();
+            let (record, unsupported) = f.cas.prepare_execution(
+                &request,
+                &SearchPolicy::default(),
+                &limits,
+                &mut ledger,
+            )?;
+            assert!(!unsupported);
+            let before = f.cas.canonical_snapshot(&mut budget()?)?;
+            let fault = f
+                .cas
+                .compute_series(&operation, &proofs, &mut ledger)
+                .expect_err("calculus capability");
+            assert_eq!(
+                fault.kind,
+                FaultKind::Invalid(if kind < 2 {
+                    InvalidCode::SeriesUnsupported
+                } else {
+                    InvalidCode::Scope
+                })
+            );
+            let actual = outcome(
+                record.clone(),
+                Execution {
+                    result: None,
+                    fault: Some(fault),
+                },
+                &ledger.usage(),
+                &BudgetUsage::default(),
+            );
+            match actual {
+                Outcome::Unresolved {
+                    request, blocker, ..
+                } if kind < 2 => {
+                    assert_eq!(request, record);
+                    assert_eq!(blocker, Some(fault));
+                }
+                Outcome::Invalid { fault: actual, .. } if kind >= 2 => assert_eq!(actual, fault),
+                other => return Err(format!("changed calculus outcome: {other:?}").into()),
+            }
+            assert_eq!(f.cas.canonical_snapshot(&mut budget()?)?, before);
+        }
+        Ok(())
+    }
 }

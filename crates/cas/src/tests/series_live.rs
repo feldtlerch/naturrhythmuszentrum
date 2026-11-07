@@ -599,13 +599,65 @@ fn series_portable_aggregate_premise_payload() -> TestResult {
 /// ´test:crate:series-as-germ-premise-refused´
 #[test]
 fn series_as_germ_premise_refused() -> TestResult {
+    for kind in 0..3 {
+        calculus_as_germ_premise(kind)?;
+    }
+    Ok(())
+}
+
+/// Each finite producer is refused in the analytic jet slot while the original theorem remains valid.
+#[expect(
+    clippy::too_many_lines,
+    reason = "The bridge control retains setup, valid evidence and rollback in one place"
+)]
+fn calculus_as_germ_premise(kind: usize) -> TestResult {
     let mut f = fixture(false)?;
     let input = object(&mut f.base, &f.field, &["1", "2"])?;
-    let series = f.base.cas.compute_series(
-        &O::Truncate { input, order: 1 },
-        &[],
-        &mut default_budget()?,
-    )?;
+    let operation = match kind {
+        0 => O::Truncate { input, order: 1 },
+        1 => O::Derive { input },
+        _ => O::Integrate {
+            input,
+            constant: f.base.one.clone(),
+        },
+    };
+    let mut proofs = Vec::new();
+    if kind == 2 {
+        let predicate = admit(
+            &mut f.base.cas,
+            Draft::Condition {
+                header: Reference::Existing(f.base.header.clone()),
+                scope: Vec::new(),
+                kind: crate::model::PredicateKind::Defined,
+                arguments: vec![Reference::Existing(f.base.one.clone())],
+            },
+        )?;
+        let mut draft = ApplicationDraft {
+            rule: crate::rule::Primitive::CaseDomain,
+            context: f.base.context.clone(),
+            conclusion: crate::proof_model::Statement::PredicateFact {
+                region: f.base.domain.clone(),
+                predicate,
+            },
+            premises: Vec::new(),
+            substitutions: Vec::new(),
+            certificate: crate::proof_model::Certificate::None,
+        };
+        let (certificate, _) =
+            crate::case_check::reconstruct(&mut f.base.cas, &draft, &[], &mut default_budget()?)?;
+        draft.certificate = crate::proof_model::Certificate::Cases(Box::new(certificate));
+        proofs.push(
+            f.base
+                .cas
+                .check_proof(&f.base.context, &[draft], &mut default_budget()?)?
+                .proof()
+                .clone(),
+        );
+    }
+    let series = f
+        .base
+        .cas
+        .compute_series(&operation, &proofs, &mut default_budget()?)?;
     let point = crate::boundary_regions::boundary(
         &mut f.base.cas,
         &f.base.domain,
@@ -697,5 +749,189 @@ fn series_as_germ_premise_refused() -> TestResult {
         &premises,
         &mut default_budget()?,
     )?;
+    Ok(())
+}
+
+/// A complex original region enlarges ordinary definedness evidence while coefficients stay one.
+fn large_ordinary_constant() -> TestResult<(Fixture, VerifiedWitness)> {
+    use crate::domain_model::{AmbientDomain, ContextDraft, RegionDraft, RegionExpr};
+    use crate::model::{Operator, PredicateKind};
+    use crate::proof_model::{Certificate, Statement};
+    let mut f = fixture(false)?;
+    let mut members = Vec::new();
+    for index in 0..8 {
+        let prefix = "1234567890".repeat(24);
+        let value = term(
+            &mut f.base.cas,
+            &f.base.header,
+            Operator::Rational(crate::Rational::parse(
+                &format!("{prefix}{index}"),
+                &mut default_budget()?,
+            )?),
+            &[],
+        )?;
+        let difference = term(
+            &mut f.base.cas,
+            &f.base.header,
+            Operator::Sub,
+            &[f.base.x.clone(), value],
+        )?;
+        let predicate = admit(
+            &mut f.base.cas,
+            Draft::Condition {
+                header: Reference::Existing(f.base.header.clone()),
+                scope: Vec::new(),
+                kind: PredicateKind::Positive,
+                arguments: vec![Reference::Existing(difference)],
+            },
+        )?;
+        members.push(Reference::Existing(admit(
+            &mut f.base.cas,
+            Draft::Region(RegionDraft {
+                header: Reference::Existing(f.base.header.clone()),
+                scope: Vec::new(),
+                ambient: AmbientDomain::Real("x".into()),
+                expression: RegionExpr::GuardTrue {
+                    base: Reference::Existing(f.base.domain.clone()),
+                    predicate: Reference::Existing(predicate),
+                },
+            }),
+        )?));
+    }
+    f.base.domain = admit(
+        &mut f.base.cas,
+        Draft::Region(RegionDraft {
+            header: Reference::Existing(f.base.header.clone()),
+            scope: Vec::new(),
+            ambient: AmbientDomain::Real("x".into()),
+            expression: RegionExpr::Union(members),
+        }),
+    )?;
+    f.base.context = admit(
+        &mut f.base.cas,
+        Draft::Context(ContextDraft::Root {
+            header: Reference::Existing(f.base.header.clone()),
+            admissible: Reference::Existing(f.base.domain.clone()),
+            assumptions: Vec::new(),
+        }),
+    )?;
+    let predicate = admit(
+        &mut f.base.cas,
+        Draft::Condition {
+            header: Reference::Existing(f.base.header.clone()),
+            scope: Vec::new(),
+            kind: PredicateKind::Defined,
+            arguments: vec![Reference::Existing(f.base.one.clone())],
+        },
+    )?;
+    let mut draft = ApplicationDraft {
+        rule: crate::rule::Primitive::CaseDomain,
+        context: f.base.context.clone(),
+        conclusion: Statement::PredicateFact {
+            region: f.base.domain.clone(),
+            predicate,
+        },
+        premises: Vec::new(),
+        substitutions: Vec::new(),
+        certificate: Certificate::None,
+    };
+    let (certificate, conditions) =
+        crate::case_check::reconstruct(&mut f.base.cas, &draft, &[], &mut default_budget()?)?;
+    assert_eq!(conditions.requirements, []);
+    assert_eq!(conditions.residuals, []);
+    assert_eq!(conditions.hypotheses, []);
+    assert!(certificate.cells.iter().any(|cells| cells.cuts.len() == 8));
+    draft.certificate = Certificate::Cases(Box::new(certificate));
+    let witness = f
+        .base
+        .cas
+        .check_proof(&f.base.context, &[draft], &mut default_budget()?)?;
+    assert!(witness.is_discharged());
+    Ok((f, witness))
+}
+
+/// One ordinary slot reserves its full payload beside candidate workspace; this is not two-slot evidence.
+/// ´test:crate:series-integral-ordinary-premise-payload´
+#[test]
+fn series_integral_ordinary_premise_payload() -> TestResult {
+    let (mut f, ordinary) = large_ordinary_constant()?;
+    let input = object(&mut f.base, &f.field, &["1"])?;
+    let operation = O::Integrate {
+        input,
+        constant: f.base.one.clone(),
+    };
+    let proof = ordinary.proof().clone();
+    let payload = crate::proof_view::application_bytes(
+        &f.base.cas,
+        proof.logical_id(),
+        &mut default_budget()?,
+    )?;
+    let mut probe = default_budget()?;
+    let outer = probe.limits().staged_payload_bytes;
+    let effective = f.base.cas.transaction(&mut probe, |_, budget| {
+        Ok(budget.limits().staged_payload_bytes)
+    })?;
+    let checkpoint = outer - effective;
+    // Output count two, maximum width two (integer workspace), one four-byte empty scope.
+    let workspace = 3_600;
+    let needed = workspace + payload;
+    let effective = needed - 1;
+    let allowance = checkpoint + effective;
+    assert!(payload <= effective && workspace <= effective);
+    let mut copy_budget = Budget::new(Limits {
+        staged_payload_bytes: effective,
+        ..default_budget()?.limits().clone()
+    })?;
+    crate::proof_view::application(&f.base.cas, proof.logical_id(), &mut copy_budget)?;
+    let before = f.base.cas.canonical_snapshot(&mut default_budget()?)?;
+    let mut budget = Budget::new(Limits {
+        staged_payload_bytes: allowance,
+        ..default_budget()?.limits().clone()
+    })?;
+    let fault = f
+        .base
+        .cas
+        .compute_series(&operation, std::slice::from_ref(&proof), &mut budget)
+        .expect_err("ordinary payload coexists with candidate workspace");
+    assert_eq!(
+        fault,
+        crate::Fault::exhausted(
+            BudgetKind::StagedPayloadBytes,
+            effective,
+            needed,
+            crate::Location::new("formal series arithmetic")
+        )
+    );
+    assert_eq!((payload, checkpoint, workspace), (4408, 704, 3600));
+    assert_eq!((allowance, effective, needed), (8711, 8007, 8008));
+    assert_eq!(budget.usage().work, 18_465);
+    assert_eq!(budget.limits().staged_payload_bytes, allowance);
+    assert_eq!(
+        f.base.cas.canonical_snapshot(&mut default_budget()?)?,
+        before
+    );
+    let mut early = Budget::new(Limits {
+        work: 257,
+        ..default_budget()?.limits().clone()
+    })?;
+    assert_eq!(
+        f.base
+            .cas
+            .compute_series(&operation, &[proof.clone(), proof.clone()], &mut early)
+            .expect_err("surplus slots precede dynamic sizing")
+            .kind,
+        FaultKind::Invalid(InvalidCode::Rule)
+    );
+    assert_eq!(early.usage().work, 257);
+    assert_eq!(
+        f.base.cas.canonical_snapshot(&mut default_budget()?)?,
+        before
+    );
+    f.base
+        .cas
+        .compute_series(&operation, &[proof], &mut default_budget()?)?;
+    f.base
+        .cas
+        .export_witness(&ordinary, &mut default_budget()?)?;
     Ok(())
 }

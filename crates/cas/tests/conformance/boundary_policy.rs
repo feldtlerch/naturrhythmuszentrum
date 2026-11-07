@@ -6,7 +6,7 @@ use nrz_cas::proof::PRIMITIVES;
 use nrz_cas::request::CostPolicy;
 
 /// Complete independent expected weights for all registered semantic-version-one schemas.
-const EXPECTED: [(&str, u64); 94] = [
+const EXPECTED: [(&str, u64); 96] = [
     ("case.congruence", 4),
     ("case.domain", 2),
     ("case.eliminate", 4),
@@ -81,6 +81,8 @@ const EXPECTED: [(&str, u64); 94] = [
     ("series.add", 4),
     ("series.case-restrict", 4),
     ("series.coefficient", 2),
+    ("series.derive", 4),
+    ("series.integrate", 4),
     ("series.mul", 8),
     ("series.scale", 4),
     ("series.truncate", 2),
@@ -108,7 +110,7 @@ const EXPECTED: [(&str, u64); 94] = [
 #[test]
 fn active_policy_complete_manifest() -> TestResult {
     let policy = CostPolicy::default();
-    assert_eq!(policy.version, 15);
+    assert_eq!(policy.version, 16);
     assert_eq!(PRIMITIVES.len(), EXPECTED.len());
     let actual: Vec<_> = PRIMITIVES
         .iter()
@@ -153,7 +155,7 @@ fn active_policy_complete_manifest() -> TestResult {
     let one = fixture.one.clone();
     let request = fixture.request(nrz_cas::request::Task::Simplify, std::slice::from_ref(&one))?;
     let mut search = nrz_cas::request::SearchPolicy::default();
-    search.costs.version = 14;
+    search.costs.version = 15;
     assert!(matches!(
         fixture.cas.run_with_policy(&request, &search),
         nrz_cas::request::Outcome::Invalid { .. }

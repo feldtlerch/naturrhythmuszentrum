@@ -109,8 +109,11 @@ fn series_enclosure_typed_evidence_refused() -> TestResult {
     use nrz_cas::decision::{EnclosureOrigin, RationalEnclosure};
     use nrz_cas::proof::Certificate;
     use nrz_cas::{FaultKind, InvalidCode, Rational};
-    for reordered in [false, true] {
-        let mut f = fixture(3, reordered)?;
+    for (kind, reordered) in [3, 7, 9]
+        .into_iter()
+        .flat_map(|kind| [false, true].map(|reordered| (kind, reordered)))
+    {
+        let mut f = fixture(kind, reordered)?;
         let enclosure = RationalEnclosure {
             target: f.base.one.clone(),
             context: f.base.context.clone(),

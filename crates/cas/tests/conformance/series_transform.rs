@@ -11,10 +11,20 @@ use nrz_cas::syntax::{Draft, Field, Operator, Substitution};
 use nrz_cas::{Cas, Handle, Location, Rational, Reference};
 
 fn fixture() -> TestResult<(Cas, Handle, Handle, Handle, Handle)> {
+    fixture_with_twins(false)
+}
+
+fn fixture_with_twins(twins: bool) -> TestResult<(Cas, Handle, Handle, Handle, Handle)> {
     let mut cas = Cas::new(Limits::default())?;
+    let mut declarations = environment(Field::Real, &["x", "y"]);
+    if twins {
+        for declaration in &mut declarations.declarations {
+            declaration.display_name = "x".into();
+        }
+    }
     let header = admit(
         &mut cas,
-        Draft::Header(HeaderDraft::Core(environment(Field::Real, &["x", "y"]))),
+        Draft::Header(HeaderDraft::Core(declarations)),
         &mut default_budget()?,
     )?;
     let nodes = cas.admit(
@@ -22,7 +32,11 @@ fn fixture() -> TestResult<(Cas, Handle, Handle, Handle, Handle)> {
             Draft::Region(RegionDraft {
                 header: Reference::Existing(header.clone()),
                 scope: Vec::new(),
-                ambient: AmbientDomain::Assignments,
+                ambient: if twins {
+                    AmbientDomain::Real("x".into())
+                } else {
+                    AmbientDomain::Assignments
+                },
                 expression: RegionExpr::Ambient,
             }),
             Draft::Context(ContextDraft::Root {
@@ -86,6 +100,124 @@ fn fixture() -> TestResult<(Cas, Handle, Handle, Handle, Handle)> {
         &mut default_budget()?,
     )?;
     Ok((cas, header, object, nodes[3].clone(), nodes[4].clone()))
+}
+
+/// Equal-spelled declarations remain distinct through calculus and capture-safe object substitution.
+/// ´test:integration:series-calculus-coordinate-twins´
+#[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "The coordinate identity control keeps both hand certificates and rollback together"
+)]
+fn series_calculus_coordinate_twins() -> TestResult {
+    use crate::testing::series_proof::{defined, rational};
+    use nrz_cas::proof::{ApplicationDraft, Certificate, Statement};
+    use nrz_cas::series::{
+        SeriesCertificate as C, SeriesDerivativeRow, SeriesIntegralRow, SeriesOperation as O,
+        SeriesStatement as S,
+    };
+    for integrate in [false, true] {
+        let (mut cas, header, input, x, y) = fixture_with_twins(true)?;
+        let original = cas.series_object(&input)?.clone();
+        let domain = cas.admissible_region(&original.context)?;
+        let source = admit(
+            &mut cas,
+            Draft::Source {
+                key: "calculus-transform".into(),
+                text: "formal coordinate fixture".into(),
+            },
+            &mut default_budget()?,
+        )?;
+        let mut base = crate::testing::cases::Fixture {
+            cas,
+            header,
+            context: original.context.clone(),
+            domain,
+            source,
+            x,
+            zero: original.coefficients[1].clone(),
+            one: original.coefficients[0].clone(),
+        };
+        let mut steps = Vec::new();
+        let mut proofs = Vec::new();
+        let (operation, certificate) = if integrate {
+            let constant = base.zero.clone();
+            steps.push(defined(&mut base, &constant)?);
+            proofs.push(
+                base.cas
+                    .check_proof(&base.context, &steps, &mut default_budget()?)?
+                    .proof()
+                    .clone(),
+            );
+            let mut rows = Vec::new();
+            for (index, integer, inverse, input, result) in [
+                (0, "1", "1", "1", "1"),
+                (1, "2", "1/2", "0", "0"),
+                (2, "3", "1/3", "1", "1/3"),
+            ] {
+                rows.push(SeriesIntegralRow {
+                    index,
+                    integer: rational(integer)?,
+                    inverse: rational(inverse)?,
+                    input: rational(input)?,
+                    result: rational(result)?,
+                });
+            }
+            (
+                O::Integrate { input, constant },
+                C::Integrate { form: 0, rows },
+            )
+        } else {
+            let mut rows = Vec::new();
+            for (index, input, multiplier, result) in [(0, "0", "1", "0"), (1, "1", "2", "2")] {
+                rows.push(SeriesDerivativeRow {
+                    index,
+                    input: rational(input)?,
+                    multiplier: rational(multiplier)?,
+                    result: rational(result)?,
+                });
+            }
+            (O::Derive { input }, C::Derive { form: 0, rows })
+        };
+        let witness = base
+            .cas
+            .compute_series(&operation, &proofs, &mut default_budget()?)?;
+        let Statement::Series(mut statement) = witness.judgment().statement.clone() else {
+            return Err("series".into());
+        };
+        let (S::Derive { output, .. } | S::Integrate { output, .. }) = statement.as_mut() else {
+            return Err("calculus".into());
+        };
+        let changed = base.cas.substitute(
+            output,
+            &[Substitution {
+                key: "x".into(),
+                replacement: y.clone(),
+            }],
+            &mut default_budget()?,
+        )?;
+        assert_eq!(base.cas.series_object(&changed)?.variable, y);
+        assert_ne!(output, &changed);
+        *output = changed;
+        steps.push(ApplicationDraft {
+            rule: statement.primitive(),
+            context: base.context.clone(),
+            conclusion: Statement::Series(statement),
+            premises: if integrate { vec![0] } else { Vec::new() },
+            substitutions: Vec::new(),
+            certificate: Certificate::Series(Box::new(certificate)),
+        });
+        let before = base.cas.canonical_snapshot(&mut default_budget()?)?;
+        assert_eq!(
+            base.cas
+                .check_proof(&base.context, &steps, &mut default_budget()?)
+                .expect_err("coordinate identity")
+                .kind,
+            nrz_cas::FaultKind::Invalid(nrz_cas::InvalidCode::Rule)
+        );
+        assert_eq!(base.cas.canonical_snapshot(&mut default_budget()?)?, before);
+    }
+    Ok(())
 }
 
 /// The entire coordinate identity changes while field, centre, context, order and coefficients stay fixed.

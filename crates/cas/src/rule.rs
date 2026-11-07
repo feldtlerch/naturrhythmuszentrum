@@ -4,6 +4,10 @@
 /// A compiled checker whose mathematical meaning is fixed by its semantic version.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Primitive {
+    /// Fixed-order derivative of a rational finite object.
+    SeriesDerive,
+    /// Fixed-order integral with ordinary definedness and checked integer units.
+    SeriesIntegrate,
     /// Exact object restriction to a positive smaller order.
     SeriesTruncate,
     /// Coefficientwise finite object addition.
@@ -277,6 +281,8 @@ impl Primitive {
                 | Self::SeriesTruncate
                 | Self::SeriesAdd
                 | Self::SeriesScale
+                | Self::SeriesDerive
+                | Self::SeriesIntegrate
                 | Self::SeriesMul
                 | Self::SeriesCoefficient
                 | Self::SinOdd
@@ -327,6 +333,8 @@ impl Primitive {
             Self::SeriesTruncate => ("series.truncate", 2),
             Self::SeriesAdd => ("series.add", 4),
             Self::SeriesScale => ("series.scale", 4),
+            Self::SeriesDerive => ("series.derive", 4),
+            Self::SeriesIntegrate => ("series.integrate", 4),
             Self::SeriesMul => ("series.mul", 8),
             Self::SeriesCoefficient => ("series.coefficient", 2),
             Self::SinOdd => ("trig.sin-odd", 2),
@@ -424,6 +432,8 @@ impl Primitive {
             Self::SeriesTruncate
             | Self::SeriesAdd
             | Self::SeriesScale
+            | Self::SeriesDerive
+            | Self::SeriesIntegrate
             | Self::SeriesMul
             | Self::SeriesCoefficient => ConclusionKind::Series,
             Self::LimitCaseRestrict | Self::SeriesCaseRestrict => ConclusionKind::Germ,
@@ -471,6 +481,8 @@ impl Primitive {
             Self::SeriesTruncate
             | Self::SeriesAdd
             | Self::SeriesScale
+            | Self::SeriesDerive
+            | Self::SeriesIntegrate
             | Self::SeriesMul
             | Self::SeriesCoefficient => PremiseShape::SeriesEvidence,
             Self::Solve(_) => PremiseShape::SolveEvidence,
@@ -528,6 +540,8 @@ impl Primitive {
             Self::SeriesTruncate
             | Self::SeriesAdd
             | Self::SeriesScale
+            | Self::SeriesDerive
+            | Self::SeriesIntegrate
             | Self::SeriesMul
             | Self::SeriesCoefficient => CertificateSchema::Series,
             Self::HalfPiWitness => CertificateSchema::HalfPiWitness,
@@ -563,7 +577,7 @@ impl Primitive {
 }
 
 /// Every registered primitive, in ASCII key order; availability is separate metadata.
-pub const PRIMITIVES: [Primitive; 94] = [
+pub const PRIMITIVES: [Primitive; 96] = [
     Primitive::CaseCongruence,
     Primitive::CaseDomain,
     Primitive::CaseEliminate,
@@ -638,6 +652,8 @@ pub const PRIMITIVES: [Primitive; 94] = [
     Primitive::SeriesAdd,
     Primitive::SeriesCaseRestrict,
     Primitive::SeriesCoefficient,
+    Primitive::SeriesDerive,
+    Primitive::SeriesIntegrate,
     Primitive::SeriesMul,
     Primitive::SeriesScale,
     Primitive::SeriesTruncate,

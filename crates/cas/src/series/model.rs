@@ -8,6 +8,22 @@ use crate::rule::Primitive;
 /// A finite computation in the increment ring, never an equality of source functions.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SeriesStatement {
+    /// Formal object derivative with exactly one fewer known coefficient.
+    Derive {
+        /// Original object of order at least two.
+        input: Handle,
+        /// Proposed object of order one less than the input.
+        output: Handle,
+    },
+    /// Formal object antiderivative with an independently specified rational constant.
+    Integrate {
+        /// Original admitted object.
+        input: Handle,
+        /// Coordinate-independent rational with ordinary definedness evidence in slot zero.
+        constant: Handle,
+        /// Proposed object of order one greater than the input.
+        output: Handle,
+    },
     /// Restrict a complete object to the output's positive coefficient count.
     Truncate {
         /// Original object, including all coefficients beyond the requested order.
@@ -93,9 +109,51 @@ pub struct SeriesProductRow {
     pub sum: Rational,
 }
 
+/// One derivative coefficient and its independently reconstructed positive integer multiplier.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SeriesDerivativeRow {
+    /// Ascending output index.
+    pub index: u32,
+    /// Original input coefficient at index plus one.
+    pub input: Rational,
+    /// Proposed exact embedding of index plus one in Q.
+    pub multiplier: Rational,
+    /// Proposed product.
+    pub result: Rational,
+}
+
+/// One integral coefficient with finite checked integer-unit evidence.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SeriesIntegralRow {
+    /// Ascending input index.
+    pub index: u32,
+    /// Proposed exact embedding of index plus one in Q.
+    pub integer: Rational,
+    /// Proposed inverse, checked by multiplication to exactly one.
+    pub inverse: Rational,
+    /// Original coefficient, including zero-valued entries.
+    pub input: Rational,
+    /// Proposed coefficient at output index plus one.
+    pub result: Rational,
+}
+
 /// Untrusted finite evidence; only a registered checker can establish a judgment.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SeriesCertificate {
+    /// Reserved mode eight, with no ordinary-proof slots.
+    Derive {
+        /// Only object form zero is executable.
+        form: u8,
+        /// Complete ascending derivative rows.
+        rows: Vec<SeriesDerivativeRow>,
+    },
+    /// Reserved mode nine, with one ordinary constant-definedness proof.
+    Integrate {
+        /// Only object form zero is executable.
+        form: u8,
+        /// Complete ascending input rows and their checked integer units.
+        rows: Vec<SeriesIntegralRow>,
+    },
     /// Mode zero, comparing every retained coefficient.
     Truncate {
         /// Only object form zero is executable.
@@ -148,6 +206,8 @@ impl SeriesStatement {
     #[must_use]
     pub const fn primitive(&self) -> Primitive {
         match self {
+            Self::Derive { .. } => Primitive::SeriesDerive,
+            Self::Integrate { .. } => Primitive::SeriesIntegrate,
             Self::Truncate { .. } => Primitive::SeriesTruncate,
             Self::Add { .. } => Primitive::SeriesAdd,
             Self::Scale { .. } => Primitive::SeriesScale,
@@ -159,7 +219,14 @@ impl SeriesStatement {
     /// Every original object and result, in semantic role order.
     pub(crate) fn objects(&self) -> Vec<&Handle> {
         match self {
-            Self::Truncate { input, output } => vec![input, output],
+            Self::Truncate { input, output } | Self::Derive { input, output } => {
+                vec![input, output]
+            }
+            Self::Integrate {
+                input,
+                constant,
+                output,
+            } => vec![input, constant, output],
             Self::Add {
                 left,
                 right,
@@ -185,6 +252,8 @@ impl SeriesStatement {
     pub(crate) const fn input(&self) -> &Handle {
         match self {
             Self::Truncate { input, .. }
+            | Self::Derive { input, .. }
+            | Self::Integrate { input, .. }
             | Self::Scale { input, .. }
             | Self::Coefficient { input, .. } => input,
             Self::Add { left, .. } | Self::Mul { left, .. } => left,
@@ -197,6 +266,8 @@ impl SeriesCertificate {
     #[must_use]
     pub const fn mode(&self) -> u8 {
         match self {
+            Self::Derive { .. } => 8,
+            Self::Integrate { .. } => 9,
             Self::Truncate { .. } => 0,
             Self::Add { .. } => 1,
             Self::Scale { .. } => 2,
@@ -210,6 +281,8 @@ impl SeriesCertificate {
     pub const fn form(&self) -> u8 {
         match self {
             Self::Truncate { form, .. }
+            | Self::Derive { form, .. }
+            | Self::Integrate { form, .. }
             | Self::Add { form, .. }
             | Self::Scale { form, .. }
             | Self::Mul { form, .. }
