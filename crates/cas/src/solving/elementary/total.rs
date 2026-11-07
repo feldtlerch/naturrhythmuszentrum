@@ -18,55 +18,62 @@ pub(crate) fn check(
     premises: &[CheckedApplication],
     budget: &mut Budget,
 ) -> Result<(), Fault> {
-    let mut pending = vector(1, budget)?;
-    pending.push(expression);
-    while let Some(id) = pending.pop() {
-        budget.work(1, AT)?;
-        let value = cas.state.expression(id)?;
-        match (&value.operator, &value.attachment) {
-            (
-                Operator::Rational(_)
-                | Operator::Free(_)
-                | Operator::Bound { .. }
-                | Operator::Neg
-                | Operator::Add
-                | Operator::Sub
-                | Operator::Mul,
-                None,
-            ) => {}
-            (Operator::IntegerPower(exponent), None) if *exponent > 0 => {}
-            (Operator::RootValue { .. }, Some(ExpressionAttachment::SelectedRoot(selection))) => {
-                existence(*selection, region, premises, budget)?;
-            }
-            (
-                Operator::ExactCoefficient,
-                Some(ExpressionAttachment::ExactCoefficient { value, map }),
-            ) => {
-                let SolveDraft::CoefficientMap(mapping) =
-                    crate::solving::graph::object(&cas.state, *map)?
-                else {
-                    return Err(invalid());
-                };
-                if mapping.region != *region {
-                    return Err(invalid());
+    crate::work_observation::observe!(budget, AT, {
+        let mut pending = vector(1, budget)?;
+        pending.push(expression);
+        while let Some(id) = pending.pop() {
+            budget.work(1, AT)?;
+            let value = cas.state.expression(id)?;
+            match (&value.operator, &value.attachment) {
+                (
+                    Operator::Rational(_)
+                    | Operator::Free(_)
+                    | Operator::Bound { .. }
+                    | Operator::Neg
+                    | Operator::Add
+                    | Operator::Sub
+                    | Operator::Mul,
+                    None,
+                ) => {}
+                (Operator::IntegerPower(exponent), None) if *exponent > 0 => {}
+                (
+                    Operator::RootValue { .. },
+                    Some(ExpressionAttachment::SelectedRoot(selection)),
+                ) => {
+                    existence(*selection, region, premises, budget)?;
                 }
-                crate::solving::coefficients::proof::identity_map(cas, mapping, premises, budget)?;
-                crate::solving::coefficients::proof::defined(
-                    cas,
-                    &cas.handle(*value),
-                    region,
-                    premises,
-                    budget,
-                )?;
+                (
+                    Operator::ExactCoefficient,
+                    Some(ExpressionAttachment::ExactCoefficient { value, map }),
+                ) => {
+                    let SolveDraft::CoefficientMap(mapping) =
+                        crate::solving::graph::object(&cas.state, *map)?
+                    else {
+                        return Err(invalid());
+                    };
+                    if mapping.region != *region {
+                        return Err(invalid());
+                    }
+                    crate::solving::coefficients::proof::identity_map(
+                        cas, mapping, premises, budget,
+                    )?;
+                    crate::solving::coefficients::proof::defined(
+                        cas,
+                        &cas.handle(*value),
+                        region,
+                        premises,
+                        budget,
+                    )?;
+                }
+                _ => {
+                    explicit(cas, id, region, premises, budget)?;
+                }
             }
-            _ => {
-                explicit(cas, id, region, premises, budget)?;
-            }
+            reserve(&mut pending, value.operands.len(), budget)?;
+            pending.extend(&value.operands);
         }
-        reserve(&mut pending, value.operands.len(), budget)?;
-        pending.extend(&value.operands);
-    }
-    Ok(())
+        Ok(())
+    })
 }
 
 /// Only an exact domain or definedness predicate can justify unsupported partial syntax.

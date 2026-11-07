@@ -131,65 +131,67 @@ impl Conditions {
         root: LogicalId,
         budget: &mut Budget,
     ) -> Result<(), Fault> {
-        let mut visited = BTreeSet::new();
-        let mut pending = vec![root];
-        while let Some(id) = pending.pop() {
-            budget.condition(
-                size(visited.len(), AT)?
-                    .checked_add(1)
-                    .ok_or_else(|| Fault::capacity(BudgetKind::ConditionSteps, AT))?,
-                AT,
-            )?;
-            if !visited.insert(id) {
-                continue;
-            }
-            let term = state.expression(id)?;
-            pending
-                .try_reserve(term.operands.len())
-                .map_err(|_| Fault::allocation(AT))?;
-            pending.extend(term.operands.iter().rev().copied());
-            let required = match &term.operator {
-                Operator::Rational(value) => {
-                    value.check(budget, AT)?;
-                    None
+        crate::work_observation::observe!(budget, AT, {
+            let mut visited = BTreeSet::new();
+            let mut pending = vec![root];
+            while let Some(id) = pending.pop() {
+                budget.condition(
+                    size(visited.len(), AT)?
+                        .checked_add(1)
+                        .ok_or_else(|| Fault::capacity(BudgetKind::ConditionSteps, AT))?,
+                    AT,
+                )?;
+                if !visited.insert(id) {
+                    continue;
                 }
-                Operator::IntegerPower(exponent) if *exponent <= 0 => Some(Obligation {
-                    kind: GuardKind::NonZero,
-                    term: *term
-                        .operands
-                        .first()
-                        .ok_or_else(|| Fault::invalid(InvalidCode::Rule, AT))?,
-                }),
-                Operator::Free(_)
-                | Operator::Bound { .. }
-                | Operator::Constant(_)
-                | Operator::Neg
-                | Operator::Add
-                | Operator::Sub
-                | Operator::Mul
-                | Operator::Matrix { .. }
-                | Operator::MatrixMultiply
-                | Operator::MatrixMap(crate::model::MatrixOperation::Determinant)
-                | Operator::Select(_)
-                | Operator::AffineReading(_)
-                | Operator::IntegerPower(_) => None,
-                Operator::Div => Some(Obligation {
-                    kind: GuardKind::NonZero,
-                    term: *term
-                        .operands
-                        .get(1)
-                        .ok_or_else(|| Fault::invalid(InvalidCode::Rule, AT))?,
-                }),
-                _ => Some(Obligation {
-                    kind: GuardKind::Defined,
-                    term: id,
-                }),
-            };
-            if let Some(required) = required {
-                self.require(state, context, required, budget)?;
+                let term = state.expression(id)?;
+                pending
+                    .try_reserve(term.operands.len())
+                    .map_err(|_| Fault::allocation(AT))?;
+                pending.extend(term.operands.iter().rev().copied());
+                let required = match &term.operator {
+                    Operator::Rational(value) => {
+                        value.check(budget, AT)?;
+                        None
+                    }
+                    Operator::IntegerPower(exponent) if *exponent <= 0 => Some(Obligation {
+                        kind: GuardKind::NonZero,
+                        term: *term
+                            .operands
+                            .first()
+                            .ok_or_else(|| Fault::invalid(InvalidCode::Rule, AT))?,
+                    }),
+                    Operator::Free(_)
+                    | Operator::Bound { .. }
+                    | Operator::Constant(_)
+                    | Operator::Neg
+                    | Operator::Add
+                    | Operator::Sub
+                    | Operator::Mul
+                    | Operator::Matrix { .. }
+                    | Operator::MatrixMultiply
+                    | Operator::MatrixMap(crate::model::MatrixOperation::Determinant)
+                    | Operator::Select(_)
+                    | Operator::AffineReading(_)
+                    | Operator::IntegerPower(_) => None,
+                    Operator::Div => Some(Obligation {
+                        kind: GuardKind::NonZero,
+                        term: *term
+                            .operands
+                            .get(1)
+                            .ok_or_else(|| Fault::invalid(InvalidCode::Rule, AT))?,
+                    }),
+                    _ => Some(Obligation {
+                        kind: GuardKind::Defined,
+                        term: id,
+                    }),
+                };
+                if let Some(required) = required {
+                    self.require(state, context, required, budget)?;
+                }
             }
-        }
-        Ok(())
+            Ok(())
+        })
     }
 
     /// Turn only an unknown fact into a residual; a refutation blocks the proof.

@@ -54,29 +54,31 @@ pub(crate) fn unknowns(
     source: &SolveProblemData<Handle>,
     budget: &mut Budget,
 ) -> Result<Vec<Value>, Fault> {
-    let coordinates = coordinates(evaluation.cas, &source.unknowns)?;
-    let environment = &evaluation
-        .cas
-        .state
-        .header(source.header.logical_id())?
-        .environment;
-    let mut result = vector(coordinates.coordinates.len(), budget)?;
-    for coordinate in &coordinates.coordinates {
-        let mut found = None;
-        for (index, declaration) in environment.declarations.iter().enumerate() {
-            budget.work(1, AT)?;
-            if declaration.key == coordinate.key {
-                found = Some(u32::try_from(index).map_err(|_| invalid())?);
-                break;
+    crate::work_observation::observe!(budget, AT, {
+        let coordinates = coordinates(evaluation.cas, &source.unknowns)?;
+        let environment = &evaluation
+            .cas
+            .state
+            .header(source.header.logical_id())?
+            .environment;
+        let mut result = vector(coordinates.coordinates.len(), budget)?;
+        for coordinate in &coordinates.coordinates {
+            let mut found = None;
+            for (index, declaration) in environment.declarations.iter().enumerate() {
+                budget.work(1, AT)?;
+                if declaration.key == coordinate.key {
+                    found = Some(u32::try_from(index).map_err(|_| invalid())?);
+                    break;
+                }
             }
+            result.push(Value::variable(
+                Variable::Slot(found.ok_or_else(invalid)?),
+                &evaluation.engine,
+                budget,
+            )?);
         }
-        result.push(Value::variable(
-            Variable::Slot(found.ok_or_else(invalid)?),
-            &evaluation.engine,
-            budget,
-        )?);
-    }
-    Ok(result)
+        Ok(result)
+    })
 }
 
 /// Substitute the complete source tuple simultaneously into one bound map body.

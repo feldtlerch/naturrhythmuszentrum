@@ -34,28 +34,30 @@ pub(crate) struct Evaluation<'a> {
 impl Evaluation<'_> {
     /// Independent declaration indices keep free parameters identical across lifted binder scopes.
     fn declaration(&self, id: LogicalId, key: &str, budget: &mut Budget) -> Result<Value, Fault> {
-        for (name, value) in self.free {
-            budget.work(1, AT)?;
-            if *name == key {
-                return value.copy(&self.engine, budget);
+        crate::work_observation::observe!(budget, AT, {
+            for (name, value) in self.free {
+                budget.work(1, AT)?;
+                if *name == key {
+                    return value.copy(&self.engine, budget);
+                }
             }
-        }
-        if let Some(value) = self.parameter(id, budget)? {
-            return Ok(value);
-        }
-        let expression = self.cas.state.expression(id)?;
-        let header = self.cas.state.header(expression.header)?;
-        for (index, declaration) in header.environment.declarations.iter().enumerate() {
-            budget.work(1, AT)?;
-            if declaration.key == key {
-                return Value::variable(
-                    Variable::Slot(u32::try_from(index).map_err(|_| invalid())?),
-                    &self.engine,
-                    budget,
-                );
+            if let Some(value) = self.parameter(id, budget)? {
+                return Ok(value);
             }
-        }
-        Err(invalid())
+            let expression = self.cas.state.expression(id)?;
+            let header = self.cas.state.header(expression.header)?;
+            for (index, declaration) in header.environment.declarations.iter().enumerate() {
+                budget.work(1, AT)?;
+                if declaration.key == key {
+                    return Value::variable(
+                        Variable::Slot(u32::try_from(index).map_err(|_| invalid())?),
+                        &self.engine,
+                        budget,
+                    );
+                }
+            }
+            Err(invalid())
+        })
     }
 
     /// Constants and root atoms never acquire a branch identity from their spelling.
@@ -98,32 +100,36 @@ impl Evaluation<'_> {
         map: LogicalId,
         budget: &mut Budget,
     ) -> Result<Value, Fault> {
-        let crate::solving::SolveDraft::CoefficientMap(mapping) =
-            crate::solving::graph::object(&self.cas.state, map)?
-        else {
-            return Err(invalid());
-        };
-        let mut interpreted = self.mapped(&self.cas.handle(value), mapping, budget)?;
-        reserve(&mut interpreted.maps, 1, budget)?;
-        budget.work(crate::graph::size(interpreted.maps.len(), AT)?.max(1), AT)?;
-        if !interpreted.maps.contains(&map) {
-            interpreted.maps.push(map);
-        }
-        Ok(interpreted)
+        crate::work_observation::observe!(budget, AT, {
+            let crate::solving::SolveDraft::CoefficientMap(mapping) =
+                crate::solving::graph::object(&self.cas.state, map)?
+            else {
+                return Err(invalid());
+            };
+            let mut interpreted = self.mapped(&self.cas.handle(value), mapping, budget)?;
+            reserve(&mut interpreted.maps, 1, budget)?;
+            budget.work(crate::graph::size(interpreted.maps.len(), AT)?.max(1), AT)?;
+            if !interpreted.maps.contains(&map) {
+                interpreted.maps.push(map);
+            }
+            Ok(interpreted)
+        })
     }
 
     /// A selected root is usable only with existence of that exact joint selection.
     pub(crate) fn existence(&self, selection: LogicalId, budget: &mut Budget) -> Result<(), Fault> {
-        for premise in self.premises {
-            budget.work(1, AT)?;
-            if let crate::proof_model::Statement::Solve(statement) = &premise.judgment.statement
-                && let crate::solving::SolveStatement::RootExistence(value) = statement.as_ref()
-                && (value.relation.logical_id(), &value.region) == (selection, self.region)
-            {
-                return Ok(());
+        crate::work_observation::observe!(budget, AT, {
+            for premise in self.premises {
+                budget.work(1, AT)?;
+                if let crate::proof_model::Statement::Solve(statement) = &premise.judgment.statement
+                    && let crate::solving::SolveStatement::RootExistence(value) = statement.as_ref()
+                    && (value.relation.logical_id(), &value.region) == (selection, self.region)
+                {
+                    return Ok(());
+                }
             }
-        }
-        Err(invalid())
+            Err(invalid())
+        })
     }
 
     /// Strict operations check the divisor before any algebraic cancellation.
@@ -162,64 +168,66 @@ impl Evaluation<'_> {
         checked: bool,
         budget: &mut Budget,
     ) -> Result<Value, Fault> {
-        if crate::solving::family::local(self.cas, id)? {
-            return crate::solving::family::evaluate::read(self, id, checked, budget);
-        }
-        let mut pending = vector(1, budget)?;
-        pending.push((id, false));
-        let mut values = vector(1, budget)?;
-        let region = self.cas.state.region(self.region.logical_id())?;
-        while let Some((current, ready)) = pending.pop() {
-            budget.work(1, AT)?;
-            if crate::solving::family::local(self.cas, current)? {
-                let result =
-                    crate::solving::family::evaluate::read(self, current, checked, budget)?;
-                reserve(&mut values, 1, budget)?;
-                values.push(result);
-                continue;
+        crate::work_observation::observe!(budget, AT, {
+            if crate::solving::family::local(self.cas, id)? {
+                return crate::solving::family::evaluate::read(self, id, checked, budget);
             }
-            let expression = self.cas.state.expression(current)?;
-            budget.check(BudgetKind::Depth, expression.depth, AT)?;
-            if expression.header != region.header || expression.space.is_some() {
+            let mut pending = vector(1, budget)?;
+            pending.push((id, false));
+            let mut values = vector(1, budget)?;
+            let region = self.cas.state.region(self.region.logical_id())?;
+            while let Some((current, ready)) = pending.pop() {
+                budget.work(1, AT)?;
+                if crate::solving::family::local(self.cas, current)? {
+                    let result =
+                        crate::solving::family::evaluate::read(self, current, checked, budget)?;
+                    reserve(&mut values, 1, budget)?;
+                    values.push(result);
+                    continue;
+                }
+                let expression = self.cas.state.expression(current)?;
+                budget.check(BudgetKind::Depth, expression.depth, AT)?;
+                if expression.header != region.header || expression.space.is_some() {
+                    return Err(invalid());
+                }
+                if !ready && !expression.operands.is_empty() {
+                    reserve(
+                        &mut pending,
+                        expression
+                            .operands
+                            .len()
+                            .checked_add(1)
+                            .ok_or_else(invalid)?,
+                        budget,
+                    )?;
+                    pending.push((current, true));
+                    pending.extend(
+                        expression
+                            .operands
+                            .iter()
+                            .rev()
+                            .map(|child| (*child, false)),
+                    );
+                } else {
+                    let start = values
+                        .len()
+                        .checked_sub(expression.operands.len())
+                        .ok_or_else(invalid)?;
+                    let result = self.operation(
+                        current,
+                        values.get(start..).ok_or_else(invalid)?,
+                        checked,
+                        budget,
+                    )?;
+                    values.truncate(start);
+                    reserve(&mut values, 1, budget)?;
+                    values.push(result);
+                }
+            }
+            if values.len() != 1 {
                 return Err(invalid());
             }
-            if !ready && !expression.operands.is_empty() {
-                reserve(
-                    &mut pending,
-                    expression
-                        .operands
-                        .len()
-                        .checked_add(1)
-                        .ok_or_else(invalid)?,
-                    budget,
-                )?;
-                pending.push((current, true));
-                pending.extend(
-                    expression
-                        .operands
-                        .iter()
-                        .rev()
-                        .map(|child| (*child, false)),
-                );
-            } else {
-                let start = values
-                    .len()
-                    .checked_sub(expression.operands.len())
-                    .ok_or_else(invalid)?;
-                let result = self.operation(
-                    current,
-                    values.get(start..).ok_or_else(invalid)?,
-                    checked,
-                    budget,
-                )?;
-                values.truncate(start);
-                reserve(&mut values, 1, budget)?;
-                values.push(result);
-            }
-        }
-        if values.len() != 1 {
-            return Err(invalid());
-        }
-        values.pop().ok_or_else(invalid)
+            values.pop().ok_or_else(invalid)
+        })
     }
 }

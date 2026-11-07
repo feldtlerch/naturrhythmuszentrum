@@ -77,71 +77,76 @@ pub(crate) fn check(
     premises: &[CheckedApplication],
     budget: &mut Budget,
 ) -> Result<(), Fault> {
-    if certificate.mode == RefinementMode::Presentation {
-        return super::presentation::check(cas, draft, certificate, premises, budget);
-    }
-    if certificate.target_kind != RefinementTargetKind::Selection || certificate.form.is_some() {
-        return Err(invalid());
-    }
-    #[cfg(test)]
-    let _attribution = crate::testing::work_trace::Scope::phase("existence");
-    let selected = super::selected::selection(cas, &certificate.target)?;
-    if !matches!(
-        selected.mode,
-        SelectionMode::Any | SelectionMode::Constrained
-    ) {
-        return Err(invalid());
-    }
-    budget.solving(
-        BudgetKind::SelectionSlots,
-        crate::graph::size(selected.relations.len(), super::proof::AT)?,
-        super::proof::AT,
-    )?;
-    let first = super::selected::relation(cas, selected.relations.first().ok_or_else(invalid)?)?;
-    let Statement::Solve(statement) = &draft.conclusion else {
-        return Err(invalid());
-    };
-    let valid = match (certificate.mode, statement.as_ref()) {
-        (RefinementMode::Existence, SolveStatement::RootExistence(value)) => {
-            (&value.relation, &value.region) == (&certificate.target, &first.region)
+    crate::work_observation::observe!(budget, crate::error::Location::new(""), {
+        if certificate.mode == RefinementMode::Presentation {
+            return super::presentation::check(cas, draft, certificate, premises, budget);
         }
-        (RefinementMode::Unique, SolveStatement::SelectionUnique(value)) => {
-            (&value.selection, &value.region) == (&certificate.target, &first.region)
+        if certificate.target_kind != RefinementTargetKind::Selection || certificate.form.is_some()
+        {
+            return Err(invalid());
         }
-        _ => false,
-    };
-    if !valid
-        || cas.state.context(cas.checked(&draft.context)?)?.admissible != first.region.logical_id()
-    {
-        return Err(invalid());
-    }
-    for slot in &certificate.compatibility {
-        premise(premises, *slot)?;
-    }
-    let stored = polynomial(&cas.state, &first.polynomial)?;
-    let evaluation = Evaluation {
-        exclusions: &[],
-        cas,
-        engine: Engine {
-            state: &cas.state,
-            domain: &stored.domain,
-        },
-        region: &first.region,
-        premises,
-        free: &[],
-        bound: &[],
-    };
-    if first.ambient == crate::model::Field::Complex {
-        let mut components = super::complex::Components::new(&evaluation, budget)?;
-        components.premises(&certificate.compatibility, budget)?;
-        components.witnesses(&certificate.witnesses, selected, budget)?;
-    } else {
-        witnesses(&evaluation, certificate, selected, budget)?;
-    }
-    if certificate.mode == RefinementMode::Unique {
-        #[cfg(test)]
-        let _uniqueness = crate::testing::work_trace::Scope::phase("exclusion.unique");
-        unique(&evaluation, selected, budget)?;
-    }
-    Ok(())
+        let _attribution = crate::work_observation::Scope::phase("existence");
+        crate::work_observation::observe!(budget, super::proof::AT, {
+            let selected = super::selected::selection(cas, &certificate.target)?;
+            if !matches!(
+                selected.mode,
+                SelectionMode::Any | SelectionMode::Constrained
+            ) {
+                return Err(invalid());
+            }
+            budget.solving(
+                BudgetKind::SelectionSlots,
+                crate::graph::size(selected.relations.len(), super::proof::AT)?,
+                super::proof::AT,
+            )?;
+            let first =
+                super::selected::relation(cas, selected.relations.first().ok_or_else(invalid)?)?;
+            let Statement::Solve(statement) = &draft.conclusion else {
+                return Err(invalid());
+            };
+            let valid = match (certificate.mode, statement.as_ref()) {
+                (RefinementMode::Existence, SolveStatement::RootExistence(value)) => {
+                    (&value.relation, &value.region) == (&certificate.target, &first.region)
+                }
+                (RefinementMode::Unique, SolveStatement::SelectionUnique(value)) => {
+                    (&value.selection, &value.region) == (&certificate.target, &first.region)
+                }
+                _ => false,
+            };
+            if !valid
+                || cas.state.context(cas.checked(&draft.context)?)?.admissible
+                    != first.region.logical_id()
+            {
+                return Err(invalid());
+            }
+            for slot in &certificate.compatibility {
+                premise(premises, *slot)?;
+            }
+            let stored = polynomial(&cas.state, &first.polynomial)?;
+            let evaluation = Evaluation {
+                exclusions: &[],
+                cas,
+                engine: Engine {
+                    state: &cas.state,
+                    domain: &stored.domain,
+                },
+                region: &first.region,
+                premises,
+                free: &[],
+                bound: &[],
+            };
+            if first.ambient == crate::model::Field::Complex {
+                let mut components = super::complex::Components::new(&evaluation, budget)?;
+                components.premises(&certificate.compatibility, budget)?;
+                components.witnesses(&certificate.witnesses, selected, budget)?;
+            } else {
+                witnesses(&evaluation, certificate, selected, budget)?;
+            }
+            if certificate.mode == RefinementMode::Unique {
+                let _uniqueness = crate::work_observation::Scope::phase("exclusion.unique");
+                unique(&evaluation, selected, budget)?;
+            }
+            Ok(())
+        })
+    })
 }

@@ -29,47 +29,49 @@ struct Parameters<'a> {
 impl Parameters<'_> {
     /// Constants and declared coordinates are total on this exact parameter frame.
     fn atom(&self, id: LogicalId, budget: &mut Budget) -> Result<Option<Polynomial>, Fault> {
-        let expression = self.state.expression(id)?;
-        let count = self.product.coordinates.len();
-        let scalar = match (&expression.operator, &expression.attachment) {
-            (Operator::Rational(value), None) => match self.ground {
-                Ground::Rational => Scalar::Rational(rational_copy(value, budget)?),
-                Ground::Gaussian => {
-                    Scalar::Gaussian(crate::solving::numeric::Gaussian::from_parts(
-                        value,
-                        &crate::number::Rational::zero(),
-                        budget,
-                    )?)
+        crate::work_observation::observe!(budget, AT, {
+            let expression = self.state.expression(id)?;
+            let count = self.product.coordinates.len();
+            let scalar = match (&expression.operator, &expression.attachment) {
+                (Operator::Rational(value), None) => match self.ground {
+                    Ground::Rational => Scalar::Rational(rational_copy(value, budget)?),
+                    Ground::Gaussian => {
+                        Scalar::Gaussian(crate::solving::numeric::Gaussian::from_parts(
+                            value,
+                            &crate::number::Rational::zero(),
+                            budget,
+                        )?)
+                    }
+                },
+                (Operator::Free(key), None) => {
+                    let mut powers = vector(count, budget)?;
+                    let mut found = false;
+                    for entry in &self.product.coordinates {
+                        budget.work(crate::graph::size(entry.key.len(), AT)?, AT)?;
+                        let matches = entry.key == *key;
+                        found |= matches;
+                        powers.push(u32::from(matches));
+                    }
+                    if !found {
+                        return Ok(None);
+                    }
+                    let mut terms = vector(1, budget)?;
+                    terms.push(Term {
+                        powers,
+                        coefficient: Scalar::constant(self.ground, true, budget)?,
+                    });
+                    return Ok(Some(Polynomial::new(count, self.ground, terms, budget)?));
                 }
-            },
-            (Operator::Free(key), None) => {
-                let mut powers = vector(count, budget)?;
-                let mut found = false;
-                for entry in &self.product.coordinates {
-                    budget.work(crate::graph::size(entry.key.len(), AT)?, AT)?;
-                    let matches = entry.key == *key;
-                    found |= matches;
-                    powers.push(u32::from(matches));
+                (
+                    Operator::ExactCoefficient,
+                    Some(ExpressionAttachment::ExactCoefficient { value, map }),
+                ) => {
+                    return self.literal(*value, *map, budget);
                 }
-                if !found {
-                    return Ok(None);
-                }
-                let mut terms = vector(1, budget)?;
-                terms.push(Term {
-                    powers,
-                    coefficient: Scalar::constant(self.ground, true, budget)?,
-                });
-                return Ok(Some(Polynomial::new(count, self.ground, terms, budget)?));
-            }
-            (
-                Operator::ExactCoefficient,
-                Some(ExpressionAttachment::ExactCoefficient { value, map }),
-            ) => {
-                return self.literal(*value, *map, budget);
-            }
-            _ => return Ok(None),
-        };
-        Ok(Some(Polynomial::constant(count, scalar, budget)?))
+                _ => return Ok(None),
+            };
+            Ok(Some(Polynomial::constant(count, scalar, budget)?))
+        })
     }
 
     /// Only a total polynomial literal is expanded; a parameter denominator is never erased.
@@ -152,56 +154,58 @@ impl Parameters<'_> {
         root: LogicalId,
         budget: &mut Budget,
     ) -> Result<Option<Polynomial>, Fault> {
-        let mut pending = vector(1, budget)?;
-        pending.push((root, false));
-        let mut values = vector(1, budget)?;
-        let region = self.state.region(self.region)?;
-        while let Some((id, ready)) = pending.pop() {
-            budget.work(1, AT)?;
-            let expression = self.state.expression(id)?;
-            budget.check(BudgetKind::Depth, expression.depth, AT)?;
-            if (expression.header, &expression.scope, expression.space)
-                != (self.product.header.logical_id(), &region.scope, None)
-            {
-                return Ok(None);
-            }
-            if !ready && !expression.operands.is_empty() {
-                reserve(
-                    &mut pending,
-                    expression
-                        .operands
-                        .len()
-                        .checked_add(1)
-                        .ok_or_else(invalid)?,
-                    budget,
-                )?;
-                pending.push((id, true));
-                pending.extend(
-                    expression
-                        .operands
-                        .iter()
-                        .rev()
-                        .map(|child| (*child, false)),
-                );
-            } else {
-                let start = values
-                    .len()
-                    .checked_sub(expression.operands.len())
-                    .ok_or_else(invalid)?;
-                let Some(value) =
-                    self.operation(id, values.get(start..).ok_or_else(invalid)?, budget)?
-                else {
+        crate::work_observation::observe!(budget, AT, {
+            let mut pending = vector(1, budget)?;
+            pending.push((root, false));
+            let mut values = vector(1, budget)?;
+            let region = self.state.region(self.region)?;
+            while let Some((id, ready)) = pending.pop() {
+                budget.work(1, AT)?;
+                let expression = self.state.expression(id)?;
+                budget.check(BudgetKind::Depth, expression.depth, AT)?;
+                if (expression.header, &expression.scope, expression.space)
+                    != (self.product.header.logical_id(), &region.scope, None)
+                {
                     return Ok(None);
-                };
-                values.truncate(start);
-                reserve(&mut values, 1, budget)?;
-                values.push(value);
+                }
+                if !ready && !expression.operands.is_empty() {
+                    reserve(
+                        &mut pending,
+                        expression
+                            .operands
+                            .len()
+                            .checked_add(1)
+                            .ok_or_else(invalid)?,
+                        budget,
+                    )?;
+                    pending.push((id, true));
+                    pending.extend(
+                        expression
+                            .operands
+                            .iter()
+                            .rev()
+                            .map(|child| (*child, false)),
+                    );
+                } else {
+                    let start = values
+                        .len()
+                        .checked_sub(expression.operands.len())
+                        .ok_or_else(invalid)?;
+                    let Some(value) =
+                        self.operation(id, values.get(start..).ok_or_else(invalid)?, budget)?
+                    else {
+                        return Ok(None);
+                    };
+                    values.truncate(start);
+                    reserve(&mut values, 1, budget)?;
+                    values.push(value);
+                }
             }
-        }
-        if values.len() != 1 {
-            return Err(invalid());
-        }
-        Ok(values.pop())
+            if values.len() != 1 {
+                return Err(invalid());
+            }
+            Ok(values.pop())
+        })
     }
 }
 

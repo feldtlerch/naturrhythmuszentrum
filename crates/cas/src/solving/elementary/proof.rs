@@ -73,42 +73,47 @@ pub(crate) fn conditions(
     premises: &[CheckedApplication],
     budget: &mut Budget,
 ) -> Result<(ScopedConditions, Vec<usize>), Fault> {
-    use crate::solving::coefficients::storage;
-    budget.solving(BudgetKind::SolveIdentities, 1, AT)?;
-    if !draft.substitutions.is_empty() {
-        return Err(storage::invalid());
-    }
-    let product = draft.rule
-        == crate::rule::Primitive::Solve(crate::solving::SolveSchema::ProductCompleteness);
-    let family = product
-        && cas
-            .state
-            .region(cas.state.context(cas.checked(&draft.context)?)?.admissible)?
-            .lies_over
-            .is_some();
-    let mut result = ScopedConditions::default();
-    let mut empty = storage::vector(0, budget)?;
-    for (index, premise) in premises.iter().enumerate() {
-        budget.work(1, storage::AT)?;
-        if premise.judgment.context != draft.context {
+    crate::work_observation::observe!(budget, AT, {
+        use crate::solving::coefficients::storage;
+        budget.solving(BudgetKind::SolveIdentities, 1, AT)?;
+        if !draft.substitutions.is_empty() {
             return Err(storage::invalid());
         }
-        crate::statement::merge(cas, &mut result, &premise.conditions, budget)?;
-        if super::exclusion::enabled()
-            && family
-            && matches!(
-                &premise.judgment.statement,
-                crate::proof_model::Statement::Empty { .. }
-                    | crate::proof_model::Statement::PredicateFact { .. }
-            )
-        {
-            #[cfg(test)]
-            let _attribution = crate::testing::work_trace::Scope::phase("exclusion.sign-leaves");
-            storage::reserve(&mut empty, 1, budget)?;
-            empty.push(index);
+        let product = draft.rule
+            == crate::rule::Primitive::Solve(crate::solving::SolveSchema::ProductCompleteness);
+        let family = product
+            && cas
+                .state
+                .region(cas.state.context(cas.checked(&draft.context)?)?.admissible)?
+                .lies_over
+                .is_some();
+        let mut result = ScopedConditions::default();
+        let mut empty = storage::vector(0, budget)?;
+        for (index, premise) in premises.iter().enumerate() {
+            crate::work_observation::observe!(budget, storage::AT, {
+                budget.work(1, storage::AT)?;
+                if premise.judgment.context != draft.context {
+                    return Err(storage::invalid());
+                }
+                crate::statement::merge(cas, &mut result, &premise.conditions, budget)?;
+                if super::exclusion::enabled()
+                    && family
+                    && matches!(
+                        &premise.judgment.statement,
+                        crate::proof_model::Statement::Empty { .. }
+                            | crate::proof_model::Statement::PredicateFact { .. }
+                    )
+                {
+                    let _attribution =
+                        crate::work_observation::Scope::phase("exclusion.sign-leaves");
+                    storage::reserve(&mut empty, 1, budget)?;
+                    empty.push(index);
+                }
+                Ok(())
+            })?;
         }
-    }
-    Ok((result, empty))
+        Ok((result, empty))
+    })
 }
 
 /// Require a coefficient region in the actual assertion context and original product.

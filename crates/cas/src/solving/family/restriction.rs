@@ -92,30 +92,33 @@ fn base_only(
     statement: &Statement,
     budget: &mut Budget,
 ) -> Result<(), Fault> {
-    let crate::solving::SolveDraft::SpaceFamily(shape) =
-        crate::solving::graph::object(&cas.state, family)?
-    else {
-        return Err(invalid());
-    };
-    let crate::solving::SolveDraft::ParameterBase(base) =
-        crate::solving::graph::object(&cas.state, shape.base.logical_id())?
-    else {
-        return Err(invalid());
-    };
-    let frame = crate::solving::graph::coordinates(&cas.state, base.coordinates.logical_id())?;
-    budget.work(
-        crate::graph::size(frame.coordinates.len(), AT)?.saturating_mul(budget.limits().name_bytes),
-        AT,
-    )?;
-    let keys = frame
-        .coordinates
-        .iter()
-        .map(|coordinate| coordinate.key.as_str())
-        .collect();
-    for object in crate::statement::objects(statement) {
-        crate::solving::graph::free_keys(&cas.state, object, &keys, true, budget)?;
-    }
-    Ok(())
+    crate::work_observation::observe!(budget, AT, {
+        let crate::solving::SolveDraft::SpaceFamily(shape) =
+            crate::solving::graph::object(&cas.state, family)?
+        else {
+            return Err(invalid());
+        };
+        let crate::solving::SolveDraft::ParameterBase(base) =
+            crate::solving::graph::object(&cas.state, shape.base.logical_id())?
+        else {
+            return Err(invalid());
+        };
+        let frame = crate::solving::graph::coordinates(&cas.state, base.coordinates.logical_id())?;
+        budget.work(
+            crate::graph::size(frame.coordinates.len(), AT)?
+                .saturating_mul(budget.limits().name_bytes),
+            AT,
+        )?;
+        let keys = frame
+            .coordinates
+            .iter()
+            .map(|coordinate| coordinate.key.as_str())
+            .collect();
+        for object in crate::statement::objects(statement) {
+            crate::solving::graph::free_keys(&cas.state, object, &keys, true, budget)?;
+        }
+        Ok(())
+    })
 }
 
 /// Family restriction recognizes existing pointwise Real existence and sign statements.
@@ -151,23 +154,27 @@ pub(crate) fn source(
     premises: &[CheckedApplication],
     budget: &mut Budget,
 ) -> Result<(), Fault> {
-    let family = region::family(cas, target.logical_id(), budget)?;
-    for premise in premises {
-        budget.work(1, AT)?;
-        if let Statement::Subset { subset, superset } = &premise.judgment.statement
-            && subset == target
-            && cas
-                .state
-                .region(superset.logical_id())?
-                .lies_over
-                .as_ref()
-                .is_some_and(|over| over.family == family && over.stratum == original.logical_id())
-            && region::lifted(cas, original.logical_id(), superset.logical_id(), budget)?
-        {
-            return Ok(());
+    crate::work_observation::observe!(budget, AT, {
+        let family = region::family(cas, target.logical_id(), budget)?;
+        for premise in premises {
+            budget.work(1, AT)?;
+            if let Statement::Subset { subset, superset } = &premise.judgment.statement
+                && subset == target
+                && cas
+                    .state
+                    .region(superset.logical_id())?
+                    .lies_over
+                    .as_ref()
+                    .is_some_and(|over| {
+                        over.family == family && over.stratum == original.logical_id()
+                    })
+                && region::lifted(cas, original.logical_id(), superset.logical_id(), budget)?
+            {
+                return Ok(());
+            }
         }
-    }
-    Err(invalid())
+        Err(invalid())
+    })
 }
 
 /// Same-region selected relations retain their old checks; family pullbacks require a Real original.

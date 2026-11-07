@@ -64,19 +64,21 @@ pub(crate) fn validate(
     value: &SolveDraft<Handle>,
     budget: &mut Budget,
 ) -> Result<(), Fault> {
-    budget.work(size(value.objects().len(), AT)?, AT)?;
-    match value {
-        SolveDraft::ScalarSpace(value) => super::registry::validate(value).map(|_| ()),
-        SolveDraft::SpacePlacement(value) => super::registry::placement(state, value),
-        SolveDraft::ScalarPiece(value) => super::incidence::validate(state, value),
-        SolveDraft::ParameterBase(value) => check_base(state, value, budget),
-        SolveDraft::SpaceFamily(value) => check_family(state, value),
-        SolveDraft::FamilyExpression(value) => check_expression(state, value, budget),
-        SolveDraft::FibrePiece(value) => check_piece(state, value),
-        SolveDraft::RealCell(value) => check_cell(state, value, budget),
-        SolveDraft::CoefficientEvaluation(value) => check_evaluation(state, value, budget),
-        _ => Err(invalid()),
-    }
+    crate::work_observation::observe!(budget, AT, {
+        budget.work(size(value.objects().len(), AT)?, AT)?;
+        match value {
+            SolveDraft::ScalarSpace(value) => super::registry::validate(value).map(|_| ()),
+            SolveDraft::SpacePlacement(value) => super::registry::placement(state, value),
+            SolveDraft::ScalarPiece(value) => super::incidence::validate(state, value),
+            SolveDraft::ParameterBase(value) => check_base(state, value, budget),
+            SolveDraft::SpaceFamily(value) => check_family(state, value),
+            SolveDraft::FamilyExpression(value) => check_expression(state, value, budget),
+            SolveDraft::FibrePiece(value) => check_piece(state, value),
+            SolveDraft::RealCell(value) => check_cell(state, value, budget),
+            SolveDraft::CoefficientEvaluation(value) => check_evaluation(state, value, budget),
+            _ => Err(invalid()),
+        }
+    })
 }
 
 /// Every base coordinate remains an original Real coefficient.
@@ -112,17 +114,19 @@ pub(super) fn base_dependencies(
     region: &Handle,
     budget: &mut Budget,
 ) -> Result<(), Fault> {
-    let coordinates = crate::solving::graph::coordinates(state, base.coordinates.logical_id())?;
-    budget.work(
-        size(coordinates.coordinates.len(), AT)?.saturating_mul(budget.limits().name_bytes),
-        AT,
-    )?;
-    let keys = coordinates
-        .coordinates
-        .iter()
-        .map(|coordinate| coordinate.key.as_str())
-        .collect();
-    crate::solving::graph::free_keys(state, region, &keys, true, budget)
+    crate::work_observation::observe!(budget, AT, {
+        let coordinates = crate::solving::graph::coordinates(state, base.coordinates.logical_id())?;
+        budget.work(
+            size(coordinates.coordinates.len(), AT)?.saturating_mul(budget.limits().name_bytes),
+            AT,
+        )?;
+        let keys = coordinates
+            .coordinates
+            .iter()
+            .map(|coordinate| coordinate.key.as_str())
+            .collect();
+        crate::solving::graph::free_keys(state, region, &keys, true, budget)
+    })
 }
 
 /// Family coordinates are disjoint original declarations in their exact local roles.
@@ -246,57 +250,59 @@ fn check_argument(
     argument: &FamilyArgument<Handle>,
     budget: &mut Budget,
 ) -> Result<(), Fault> {
-    if argument.role == FamilyArgumentRole::Family {
-        let SolveDraft::FamilyExpression(previous) = object(state, &argument.value)? else {
-            return Err(invalid());
+    crate::work_observation::observe!(budget, AT, {
+        if argument.role == FamilyArgumentRole::Family {
+            let SolveDraft::FamilyExpression(previous) = object(state, &argument.value)? else {
+                return Err(invalid());
+            };
+            if previous.family != value.family
+                || previous.region != value.region
+                || previous.scope != value.scope
+            {
+                return Err(invalid());
+            }
+            return Ok(());
+        }
+        let expression = state.expression(argument.value.logical_id())?;
+        let expected = if argument.role == FamilyArgumentRole::Base {
+            Field::Real
+        } else {
+            super::field(state, &shape.fibre_space)?
         };
-        if previous.family != value.family
-            || previous.region != value.region
-            || previous.scope != value.scope
+        let region = state.region(value.region.logical_id())?;
+        if expression.sort != Sort::Value(AtomicSort::Scalar(expected))
+            || expression.header != region.header
+            || expression.scope != value.scope
         {
             return Err(invalid());
         }
-        return Ok(());
-    }
-    let expression = state.expression(argument.value.logical_id())?;
-    let expected = if argument.role == FamilyArgumentRole::Base {
-        Field::Real
-    } else {
-        super::field(state, &shape.fibre_space)?
-    };
-    let region = state.region(value.region.logical_id())?;
-    if expression.sort != Sort::Value(AtomicSort::Scalar(expected))
-        || expression.header != region.header
-        || expression.scope != value.scope
-    {
-        return Err(invalid());
-    }
-    let original = base(state, &shape.base)?;
-    let frame = if argument.role == FamilyArgumentRole::Base {
-        &original.coordinates
-    } else {
-        &shape.coefficients
-    };
-    let frame = crate::solving::graph::coordinates(state, frame.logical_id())?;
-    budget.work(
-        size(frame.coordinates.len(), AT)?.saturating_mul(budget.limits().name_bytes),
-        AT,
-    )?;
-    let mut keys: std::collections::BTreeSet<_> = frame
-        .coordinates
-        .iter()
-        .map(|entry| entry.key.as_str())
-        .collect();
-    if argument.role == FamilyArgumentRole::Fibre {
-        let unknowns = crate::solving::graph::coordinates(state, shape.unknowns.logical_id())?;
+        let original = base(state, &shape.base)?;
+        let frame = if argument.role == FamilyArgumentRole::Base {
+            &original.coordinates
+        } else {
+            &shape.coefficients
+        };
+        let frame = crate::solving::graph::coordinates(state, frame.logical_id())?;
         budget.work(
-            size(unknowns.coordinates.len(), AT)?.saturating_mul(budget.limits().name_bytes),
+            size(frame.coordinates.len(), AT)?.saturating_mul(budget.limits().name_bytes),
             AT,
         )?;
-        keys.extend(unknowns.coordinates.iter().map(|entry| entry.key.as_str()));
-    }
-    crate::solving::graph::free_keys(state, &argument.value, &keys, true, budget)?;
-    Ok(())
+        let mut keys: std::collections::BTreeSet<_> = frame
+            .coordinates
+            .iter()
+            .map(|entry| entry.key.as_str())
+            .collect();
+        if argument.role == FamilyArgumentRole::Fibre {
+            let unknowns = crate::solving::graph::coordinates(state, shape.unknowns.logical_id())?;
+            budget.work(
+                size(unknowns.coordinates.len(), AT)?.saturating_mul(budget.limits().name_bytes),
+                AT,
+            )?;
+            keys.extend(unknowns.coordinates.iter().map(|entry| entry.key.as_str()));
+        }
+        crate::solving::graph::free_keys(state, &argument.value, &keys, true, budget)?;
+        Ok(())
+    })
 }
 
 /// Keep a proposed solution set attached to its exact family problem and stratum.

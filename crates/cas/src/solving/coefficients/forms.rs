@@ -35,33 +35,35 @@ pub(crate) struct Form {
 
 /// Compare formal exponent vectors, charging the complete key scan.
 fn compare(left: &Term, right: &Term, budget: &mut Budget) -> Result<Ordering, CoefficientFailure> {
-    budget.work(
-        add(size(left.powers.len(), AT)?, size(right.powers.len(), AT)?)?,
-        AT,
-    )?;
-    let degree = |term: &Term| {
-        term.powers.iter().try_fold(0_u64, |total, (_, exponent)| {
-            add(total, u64::from(*exponent))
-        })
-    };
-    let order = degree(left)?.cmp(&degree(right)?);
-    if order != Ordering::Equal {
-        return Ok(order);
-    }
-    let mut first = left.powers.iter().peekable();
-    let mut second = right.powers.iter().peekable();
-    while let (Some(a), Some(b)) = (first.peek(), second.peek()) {
-        match a.0.cmp(&b.0) {
-            Ordering::Less => return Ok(Ordering::Greater),
-            Ordering::Greater => return Ok(Ordering::Less),
-            Ordering::Equal if a.1 != b.1 => return Ok(a.1.cmp(&b.1)),
-            Ordering::Equal => {
-                let _first = first.next();
-                let _second = second.next();
+    crate::work_observation::observe!(budget, AT, {
+        budget.work(
+            add(size(left.powers.len(), AT)?, size(right.powers.len(), AT)?)?,
+            AT,
+        )?;
+        let degree = |term: &Term| {
+            term.powers.iter().try_fold(0_u64, |total, (_, exponent)| {
+                add(total, u64::from(*exponent))
+            })
+        };
+        let order = degree(left)?.cmp(&degree(right)?);
+        if order != Ordering::Equal {
+            return Ok(order);
+        }
+        let mut first = left.powers.iter().peekable();
+        let mut second = right.powers.iter().peekable();
+        while let (Some(a), Some(b)) = (first.peek(), second.peek()) {
+            match a.0.cmp(&b.0) {
+                Ordering::Less => return Ok(Ordering::Greater),
+                Ordering::Greater => return Ok(Ordering::Less),
+                Ordering::Equal if a.1 != b.1 => return Ok(a.1.cmp(&b.1)),
+                Ordering::Equal => {
+                    let _first = first.next();
+                    let _second = second.next();
+                }
             }
         }
-    }
-    Ok(first.len().cmp(&second.len()))
+        Ok(first.len().cmp(&second.len()))
+    })
 }
 
 impl Term {
@@ -80,28 +82,30 @@ impl Term {
         engine: &Engine<'_>,
         budget: &mut Budget,
     ) -> Result<Self, CoefficientFailure> {
-        let mut powers = super::storage::copied(&self.powers, budget)?;
-        super::storage::reserve(&mut powers, other.powers.len(), budget)?;
-        for (variable, exponent) in &other.powers {
-            budget.work(size(powers.len(), AT)?.max(1), AT)?;
-            match powers.binary_search_by_key(variable, |entry| entry.0) {
-                Ok(index) => {
-                    let entry = powers.get_mut(index).ok_or_else(invalid)?;
-                    entry.1 = entry.1.checked_add(*exponent).ok_or_else(|| {
-                        crate::error::Fault::capacity(BudgetKind::PolynomialDegree, AT)
-                    })?;
+        crate::work_observation::observe!(budget, AT, {
+            let mut powers = super::storage::copied(&self.powers, budget)?;
+            super::storage::reserve(&mut powers, other.powers.len(), budget)?;
+            for (variable, exponent) in &other.powers {
+                budget.work(size(powers.len(), AT)?.max(1), AT)?;
+                match powers.binary_search_by_key(variable, |entry| entry.0) {
+                    Ok(index) => {
+                        let entry = powers.get_mut(index).ok_or_else(invalid)?;
+                        entry.1 = entry.1.checked_add(*exponent).ok_or_else(|| {
+                            crate::error::Fault::capacity(BudgetKind::PolynomialDegree, AT)
+                        })?;
+                    }
+                    Err(index) => powers.insert(index, (*variable, *exponent)),
                 }
-                Err(index) => powers.insert(index, (*variable, *exponent)),
             }
-        }
-        let degree = powers.iter().try_fold(0_u64, |total, (_, exponent)| {
-            add(total, u64::from(*exponent))
-        })?;
-        budget.check(BudgetKind::PolynomialDegree, degree, AT)?;
-        budget.check(BudgetKind::PolynomialVariables, size(powers.len(), AT)?, AT)?;
-        Ok(Self {
-            powers,
-            coefficient: engine.mul(&self.coefficient, &other.coefficient, budget)?,
+            let degree = powers.iter().try_fold(0_u64, |total, (_, exponent)| {
+                add(total, u64::from(*exponent))
+            })?;
+            budget.check(BudgetKind::PolynomialDegree, degree, AT)?;
+            budget.check(BudgetKind::PolynomialVariables, size(powers.len(), AT)?, AT)?;
+            Ok(Self {
+                powers,
+                coefficient: engine.mul(&self.coefficient, &other.coefficient, budget)?,
+            })
         })
     }
 }
@@ -216,11 +220,22 @@ impl Form {
         engine: &Engine<'_>,
         budget: &mut Budget,
     ) -> Result<Self, CoefficientFailure> {
-        let pairs = product(size(self.terms.len(), AT)?, size(other.terms.len(), AT)?)?;
-        if matches!(
-            super::storage::domain(engine.state, engine.domain)?,
-            crate::solving::CoefficientDomainData::Fraction { .. }
-        ) {
+        crate::work_observation::observe!(budget, AT, {
+            let pairs = product(size(self.terms.len(), AT)?, size(other.terms.len(), AT)?)?;
+            if matches!(
+                super::storage::domain(engine.state, engine.domain)?,
+                crate::solving::CoefficientDomainData::Fraction { .. }
+            ) {
+                budget.work(pairs, AT)?;
+                if self.parameter_unit(engine, budget)? {
+                    return other.unit_product(engine, budget);
+                }
+                if other.parameter_unit(engine, budget)? {
+                    return self.unit_product(engine, budget);
+                }
+                return self.parameter_product(other, engine, budget);
+            }
+            budget.check(BudgetKind::PolynomialTerms, pairs, AT)?;
             budget.work(pairs, AT)?;
             if self.parameter_unit(engine, budget)? {
                 return other.unit_product(engine, budget);
@@ -228,28 +243,19 @@ impl Form {
             if other.parameter_unit(engine, budget)? {
                 return self.unit_product(engine, budget);
             }
-            return self.parameter_product(other, engine, budget);
-        }
-        budget.check(BudgetKind::PolynomialTerms, pairs, AT)?;
-        budget.work(pairs, AT)?;
-        if self.parameter_unit(engine, budget)? {
-            return other.unit_product(engine, budget);
-        }
-        if other.parameter_unit(engine, budget)? {
-            return self.unit_product(engine, budget);
-        }
-        let mut result = Self { terms: Vec::new() };
-        for left in &self.terms {
-            for right in &other.terms {
-                let term = left.mul(right, engine, budget)?;
-                let mut terms = vector(1, budget)?;
-                if !engine.formal_zero(&term.coefficient, budget)? {
-                    terms.push(term);
+            let mut result = Self { terms: Vec::new() };
+            for left in &self.terms {
+                for right in &other.terms {
+                    let term = left.mul(right, engine, budget)?;
+                    let mut terms = vector(1, budget)?;
+                    if !engine.formal_zero(&term.coefficient, budget)? {
+                        terms.push(term);
+                    }
+                    result = result.add(&Self { terms }, engine, budget)?;
                 }
-                result = result.add(&Self { terms }, engine, budget)?;
             }
-        }
-        Ok(result)
+            Ok(result)
+        })
     }
 
     /// A reused unit product still checks the product's current term, variable and degree bounds.
@@ -258,20 +264,22 @@ impl Form {
         engine: &Engine<'_>,
         budget: &mut Budget,
     ) -> Result<Self, CoefficientFailure> {
-        budget.check(BudgetKind::PolynomialTerms, size(self.terms.len(), AT)?, AT)?;
-        for term in &self.terms {
-            budget.work(size(term.powers.len(), AT)?.max(1), AT)?;
-            let degree = term.powers.iter().try_fold(0_u64, |total, (_, exponent)| {
-                add(total, u64::from(*exponent))
-            })?;
-            budget.check(BudgetKind::PolynomialDegree, degree, AT)?;
-            budget.check(
-                BudgetKind::PolynomialVariables,
-                size(term.powers.len(), AT)?,
-                AT,
-            )?;
-        }
-        self.copy(engine, budget)
+        crate::work_observation::observe!(budget, AT, {
+            budget.check(BudgetKind::PolynomialTerms, size(self.terms.len(), AT)?, AT)?;
+            for term in &self.terms {
+                budget.work(size(term.powers.len(), AT)?.max(1), AT)?;
+                let degree = term.powers.iter().try_fold(0_u64, |total, (_, exponent)| {
+                    add(total, u64::from(*exponent))
+                })?;
+                budget.check(BudgetKind::PolynomialDegree, degree, AT)?;
+                budget.check(
+                    BudgetKind::PolynomialVariables,
+                    size(term.powers.len(), AT)?,
+                    AT,
+                )?;
+            }
+            self.copy(engine, budget)
+        })
     }
 
     /// Recognize only a literal parameter-field unit, optionally embedded in one exact quotient parent.
@@ -280,51 +288,53 @@ impl Form {
         engine: &Engine<'_>,
         budget: &mut Budget,
     ) -> Result<bool, CoefficientFailure> {
-        let [term] = self.terms.as_slice() else {
-            return Ok(false);
-        };
-        if !term.powers.is_empty() {
-            return Ok(false);
-        }
-        let mut coefficient = &term.coefficient;
-        let mut domain = engine.domain;
-        if let crate::solving::CoefficientDomainData::Quotient { level } =
-            super::storage::domain(engine.state, domain)?
-        {
-            let crate::solving::SolveDraft::ExtensionLevel(level) =
-                crate::solving::graph::object(engine.state, level.logical_id())?
-            else {
-                return Err(invalid().into());
-            };
-            domain = &level.parent;
-            let super::model::Value::Tower(entries) = &coefficient.value else {
+        crate::work_observation::observe!(budget, AT, {
+            let [term] = self.terms.as_slice() else {
                 return Ok(false);
             };
-            let [entry] = entries.as_slice() else {
+            if !term.powers.is_empty() {
                 return Ok(false);
-            };
-            if coefficient.domain != *engine.domain {
+            }
+            let mut coefficient = &term.coefficient;
+            let mut domain = engine.domain;
+            if let crate::solving::CoefficientDomainData::Quotient { level } =
+                super::storage::domain(engine.state, domain)?
+            {
+                let crate::solving::SolveDraft::ExtensionLevel(level) =
+                    crate::solving::graph::object(engine.state, level.logical_id())?
+                else {
+                    return Err(invalid().into());
+                };
+                domain = &level.parent;
+                let super::model::Value::Tower(entries) = &coefficient.value else {
+                    return Ok(false);
+                };
+                let [entry] = entries.as_slice() else {
+                    return Ok(false);
+                };
+                if coefficient.domain != *engine.domain {
+                    return Err(invalid().into());
+                }
+                coefficient = entry;
+            }
+            if !matches!(
+                super::storage::domain(engine.state, domain)?,
+                crate::solving::CoefficientDomainData::Fraction { .. }
+            ) {
+                return Ok(false);
+            }
+            budget.work(1, AT)?;
+            if coefficient.domain != *domain {
                 return Err(invalid().into());
             }
-            coefficient = entry;
-        }
-        if !matches!(
-            super::storage::domain(engine.state, domain)?,
-            crate::solving::CoefficientDomainData::Fraction { .. }
-        ) {
-            return Ok(false);
-        }
-        budget.work(1, AT)?;
-        if coefficient.domain != *domain {
-            return Err(invalid().into());
-        }
-        let super::model::Value::Fraction(value) = &coefficient.value else {
-            return Ok(false);
-        };
-        value
-            .numerator
-            .equals(&value.denominator, budget)
-            .map_err(Into::into)
+            let super::model::Value::Fraction(value) = &coefficient.value else {
+                return Ok(false);
+            };
+            value
+                .numerator
+                .equals(&value.denominator, budget)
+                .map_err(Into::into)
+        })
     }
 
     /// Insert an owned term without recopying every unrelated accumulated coefficient.
@@ -334,38 +344,43 @@ impl Form {
         engine: &Engine<'_>,
         budget: &mut Budget,
     ) -> Result<(), CoefficientFailure> {
-        if engine.formal_zero(&term.coefficient, budget)? {
-            return Ok(());
-        }
-        let mut first = 0;
-        let mut last = self.terms.len();
-        while first < last {
-            let middle = first.midpoint(last);
-            match compare(&self.terms[middle], &term, budget)? {
-                Ordering::Greater => first = middle + 1,
-                Ordering::Less => last = middle,
-                Ordering::Equal => {
-                    let coefficient =
-                        engine.add(&self.terms[middle].coefficient, &term.coefficient, budget)?;
-                    if engine.formal_zero(&coefficient, budget)? {
-                        budget.work(size(self.terms.len() - middle, AT)?, AT)?;
-                        self.terms.remove(middle);
-                    } else {
-                        self.terms[middle].coefficient = coefficient;
+        crate::work_observation::observe!(budget, AT, {
+            if engine.formal_zero(&term.coefficient, budget)? {
+                return Ok(());
+            }
+            let mut first = 0;
+            let mut last = self.terms.len();
+            while first < last {
+                let middle = first.midpoint(last);
+                match compare(&self.terms[middle], &term, budget)? {
+                    Ordering::Greater => first = middle + 1,
+                    Ordering::Less => last = middle,
+                    Ordering::Equal => {
+                        let coefficient = engine.add(
+                            &self.terms[middle].coefficient,
+                            &term.coefficient,
+                            budget,
+                        )?;
+                        if engine.formal_zero(&coefficient, budget)? {
+                            budget.work(size(self.terms.len() - middle, AT)?, AT)?;
+                            self.terms.remove(middle);
+                        } else {
+                            self.terms[middle].coefficient = coefficient;
+                        }
+                        return Ok(());
                     }
-                    return Ok(());
                 }
             }
-        }
-        budget.check(
-            BudgetKind::PolynomialTerms,
-            add(size(self.terms.len(), AT)?, 1)?,
-            AT,
-        )?;
-        super::storage::reserve(&mut self.terms, 1, budget)?;
-        budget.work(size(self.terms.len() - first, AT)?, AT)?;
-        self.terms.insert(first, term);
-        Ok(())
+            budget.check(
+                BudgetKind::PolynomialTerms,
+                add(size(self.terms.len(), AT)?, 1)?,
+                AT,
+            )?;
+            super::storage::reserve(&mut self.terms, 1, budget)?;
+            budget.work(size(self.terms.len() - first, AT)?, AT)?;
+            self.terms.insert(first, term);
+            Ok(())
+        })
     }
 
     /// Merge owned parameter-field terms while preserving every unrelated accumulated coefficient.

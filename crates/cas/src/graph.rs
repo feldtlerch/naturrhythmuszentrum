@@ -1210,24 +1210,26 @@ impl Cas {
     ) -> Result<T, Fault> {
         // Only the fixed vertex-kind counter inventory is copied at a checkpoint.
         let at = Location::new("proof transaction");
-        budget.work(256, at)?;
-        let bytes = size(self.state.next.len(), at)?
-            .checked_mul(64)
-            .ok_or_else(|| Fault::capacity(BudgetKind::StagedPayloadBytes, at))?;
-        let previous = budget.reserve_temporary(bytes, at)?;
-        let checkpoint = self.state.begin();
-        let result = crate::decision_kernel::cache::attempt(self, budget, f);
-        self.state.finish(checkpoint, result.is_ok());
-        if result.is_err() {
-            self.memo_epoch = self.memo_epoch.saturating_add(1);
-            self.receipt_records
-                .get_mut()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .clear();
-            budget.checked_records.forget(&self.memo_owner);
-        }
-        budget.restore_limits(previous);
-        result
+        crate::work_observation::observe!(budget, at, {
+            budget.work(256, at)?;
+            let bytes = size(self.state.next.len(), at)?
+                .checked_mul(64)
+                .ok_or_else(|| Fault::capacity(BudgetKind::StagedPayloadBytes, at))?;
+            let previous = budget.reserve_temporary(bytes, at)?;
+            let checkpoint = self.state.begin();
+            let result = crate::decision_kernel::cache::attempt(self, budget, f);
+            self.state.finish(checkpoint, result.is_ok());
+            if result.is_err() {
+                self.memo_epoch = self.memo_epoch.saturating_add(1);
+                self.receipt_records
+                    .get_mut()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .clear();
+                budget.checked_records.forget(&self.memo_owner);
+            }
+            budget.restore_limits(previous);
+            result
+        })
     }
 
     /// Temporarily separate the store identity from its state, restoring it on every result.
@@ -1359,55 +1361,57 @@ impl Cas {
             return Ok(Vec::new());
         }
         let at = Location::new("transaction");
-        for draft in drafts {
-            if let Draft::SeriesObject(value) = draft {
-                value.preflight(budget)?;
+        crate::work_observation::observe!(budget, at, {
+            for draft in drafts {
+                if let Draft::SeriesObject(value) = draft {
+                    value.preflight(budget)?;
+                }
+                if let Draft::Solve(value) = draft {
+                    crate::solving::graph::preflight(value, budget)?;
+                }
             }
-            if let Draft::Solve(value) = draft {
-                crate::solving::graph::preflight(value, budget)?;
+            let payload = crate::validation::draft_payload(drafts, budget)?;
+            let pending = payload.bytes;
+            let reserved = size(self.state.next.len(), at)?
+                .checked_mul(64)
+                .and_then(|n| n.checked_add(pending))
+                .ok_or_else(|| Fault::capacity(BudgetKind::StagedPayloadBytes, at))?;
+            let peak = self
+                .state
+                .payload
+                .checked_add(reserved)
+                .ok_or_else(|| Fault::capacity(BudgetKind::StagedPayloadBytes, at))?;
+            for (kind, needed) in [
+                (BudgetKind::StagedPayloadBytes, peak),
+                (
+                    BudgetKind::StagedVertices,
+                    size(self.state.graph.node_count(), at)?,
+                ),
+                (
+                    BudgetKind::StagedEdges,
+                    size(self.state.graph.edge_count(), at)?,
+                ),
+            ] {
+                storage_check(&self.limits, budget, kind, needed, at)?;
             }
-        }
-        let payload = crate::validation::draft_payload(drafts, budget)?;
-        let pending = payload.bytes;
-        let reserved = size(self.state.next.len(), at)?
-            .checked_mul(64)
-            .and_then(|n| n.checked_add(pending))
-            .ok_or_else(|| Fault::capacity(BudgetKind::StagedPayloadBytes, at))?;
-        let peak = self
-            .state
-            .payload
-            .checked_add(reserved)
-            .ok_or_else(|| Fault::capacity(BudgetKind::StagedPayloadBytes, at))?;
-        for (kind, needed) in [
-            (BudgetKind::StagedPayloadBytes, peak),
-            (
-                BudgetKind::StagedVertices,
-                size(self.state.graph.node_count(), at)?,
-            ),
-            (
-                BudgetKind::StagedEdges,
-                size(self.state.graph.edge_count(), at)?,
-            ),
-        ] {
-            storage_check(&self.limits, budget, kind, needed, at)?;
-        }
-        budget.work(payload.work, at)?;
-        // The fixed vertex-kind inventory bounds checkpoint counter copying.
-        budget.work(256, at)?;
-        let mut staged = std::mem::replace(&mut self.state, State::new());
-        let checkpoint = staged.begin();
-        let result = self.admit_staged(&mut staged, drafts, reserved, budget);
-        staged.finish(checkpoint, result.is_ok());
-        if result.is_err() {
-            self.memo_epoch = self.memo_epoch.saturating_add(1);
-            self.receipt_records
-                .get_mut()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .clear();
-            budget.checked_records.forget(&self.memo_owner);
-        }
-        self.state = staged;
-        result
+            budget.work(payload.work, at)?;
+            // The fixed vertex-kind inventory bounds checkpoint counter copying.
+            budget.work(256, at)?;
+            let mut staged = std::mem::replace(&mut self.state, State::new());
+            let checkpoint = staged.begin();
+            let result = self.admit_staged(&mut staged, drafts, reserved, budget);
+            staged.finish(checkpoint, result.is_ok());
+            if result.is_err() {
+                self.memo_epoch = self.memo_epoch.saturating_add(1);
+                self.receipt_records
+                    .get_mut()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .clear();
+                budget.checked_records.forget(&self.memo_owner);
+            }
+            self.state = staged;
+            result
+        })
     }
 
     /// Resolve a batch before exposing any handles; every mutation is journaled.
@@ -1419,21 +1423,23 @@ impl Cas {
         budget: &mut Budget,
     ) -> Result<Vec<Handle>, Fault> {
         let at = Location::new("transaction");
-        let mut resolved = Vec::new();
-        resolved
-            .try_reserve_exact(drafts.len())
-            .map_err(|_| Fault::allocation(at))?;
-        for draft in drafts {
-            budget.work(1, at)?;
-            let id = self.admit_one(state, draft, &resolved, pending, budget)?;
-            resolved.push(id);
-        }
-        let mut handles = Vec::new();
-        handles
-            .try_reserve_exact(resolved.len())
-            .map_err(|_| Fault::allocation(at))?;
-        handles.extend(resolved.iter().map(|id| self.handle(*id)));
-        Ok(handles)
+        crate::work_observation::observe!(budget, at, {
+            let mut resolved = Vec::new();
+            resolved
+                .try_reserve_exact(drafts.len())
+                .map_err(|_| Fault::allocation(at))?;
+            for draft in drafts {
+                budget.work(1, at)?;
+                let id = self.admit_one(state, draft, &resolved, pending, budget)?;
+                resolved.push(id);
+            }
+            let mut handles = Vec::new();
+            handles
+                .try_reserve_exact(resolved.len())
+                .map_err(|_| Fault::allocation(at))?;
+            handles.extend(resolved.iter().map(|id| self.handle(*id)));
+            Ok(handles)
+        })
     }
 
     /// Append generated closed syntax inside a private producer transaction.
@@ -1512,15 +1518,17 @@ impl Cas {
         budget: &mut Budget,
     ) -> Result<Vec<LogicalId>, Fault> {
         let at = Location::new("draft references");
-        budget.work(size(references.len(), at)?, at)?;
-        let mut result = Vec::new();
-        result
-            .try_reserve_exact(references.len())
-            .map_err(|_| Fault::allocation(at))?;
-        for reference in references {
-            result.push(self.resolve(state, reference, locals)?);
-        }
-        Ok(result)
+        crate::work_observation::observe!(budget, at, {
+            budget.work(size(references.len(), at)?, at)?;
+            let mut result = Vec::new();
+            result
+                .try_reserve_exact(references.len())
+                .map_err(|_| Fault::allocation(at))?;
+            for reference in references {
+                result.push(self.resolve(state, reference, locals)?);
+            }
+            Ok(result)
+        })
     }
 
     /// Dispatch one already bounded draft into the private candidate state.
@@ -2048,10 +2056,12 @@ pub(crate) fn vertex_payload(
 
 /// Charge the key bytes and one map operation, rather than every retained entry.
 fn lookup_work(bytes: usize, budget: &mut Budget, at: Location) -> Result<(), Fault> {
-    let charge = size(bytes, at)?
-        .checked_add(1)
-        .ok_or_else(|| Fault::capacity(BudgetKind::Work, at))?;
-    budget.work(charge, at)
+    crate::work_observation::observe!(budget, at, {
+        let charge = size(bytes, at)?
+            .checked_add(1)
+            .ok_or_else(|| Fault::capacity(BudgetKind::Work, at))?;
+        budget.work(charge, at)
+    })
 }
 
 /// Convert a host collection length without truncation.

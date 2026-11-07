@@ -19,36 +19,38 @@ impl Components<'_, '_> {
         slot: u32,
         budget: &mut Budget,
     ) -> Result<Parts, Fault> {
-        self.evaluation.existence(selected, budget)?;
-        let selection = super::super::selected::selection(
-            self.evaluation.cas,
-            &self.evaluation.cas.handle(selected),
-        )?;
-        let relation = super::super::selected::relation(
-            self.evaluation.cas,
-            selection
-                .relations
-                .get(usize::try_from(slot).map_err(|_| invalid())?)
-                .ok_or_else(invalid)?,
-        )?;
-        if relation.region != *self.evaluation.region {
-            crate::solving::family::restriction::relation_region(
-                self.evaluation,
-                relation,
-                budget,
+        crate::work_observation::observe!(budget, AT, {
+            self.evaluation.existence(selected, budget)?;
+            let selection = super::super::selected::selection(
+                self.evaluation.cas,
+                &self.evaluation.cas.handle(selected),
             )?;
-        }
-        budget.work(crate::graph::size(self.selections.len(), AT)?.max(1), AT)?;
-        if !self.selections.contains(&selected) {
-            reserve(&mut self.selections, 1, budget)?;
-            self.selections.push(selected);
-            self.selection(selected, selection, budget)?;
-        }
-        self.atom(
-            Atom::Root(selected, slot),
-            relation.ambient != Field::Complex,
-            budget,
-        )
+            let relation = super::super::selected::relation(
+                self.evaluation.cas,
+                selection
+                    .relations
+                    .get(usize::try_from(slot).map_err(|_| invalid())?)
+                    .ok_or_else(invalid)?,
+            )?;
+            if relation.region != *self.evaluation.region {
+                crate::solving::family::restriction::relation_region(
+                    self.evaluation,
+                    relation,
+                    budget,
+                )?;
+            }
+            budget.work(crate::graph::size(self.selections.len(), AT)?.max(1), AT)?;
+            if !self.selections.contains(&selected) {
+                reserve(&mut self.selections, 1, budget)?;
+                self.selections.push(selected);
+                self.selection(selected, selection, budget)?;
+            }
+            self.atom(
+                Atom::Root(selected, slot),
+                relation.ambient != Field::Complex,
+                budget,
+            )
+        })
     }
 
     /// Conjugation and product predicates share the same ordered component tuple.
@@ -58,35 +60,37 @@ impl Components<'_, '_> {
         selection: &crate::solving::RootSelectionData<Handle>,
         budget: &mut Budget,
     ) -> Result<(), Fault> {
-        budget.solving(
-            BudgetKind::SelectionSlots,
-            crate::graph::size(selection.relations.len(), AT)?,
-            AT,
-        )?;
-        let mut roots = vector(selection.relations.len(), budget)?;
-        for (index, handle) in selection.relations.iter().enumerate() {
-            let relation = super::super::selected::relation(self.evaluation.cas, handle)?;
-            if relation.region != *self.evaluation.region {
-                crate::solving::family::restriction::relation_region(
-                    self.evaluation,
-                    relation,
-                    budget,
-                )?;
+        crate::work_observation::observe!(budget, AT, {
+            budget.solving(
+                BudgetKind::SelectionSlots,
+                crate::graph::size(selection.relations.len(), AT)?,
+                AT,
+            )?;
+            let mut roots = vector(selection.relations.len(), budget)?;
+            for (index, handle) in selection.relations.iter().enumerate() {
+                let relation = super::super::selected::relation(self.evaluation.cas, handle)?;
+                if relation.region != *self.evaluation.region {
+                    crate::solving::family::restriction::relation_region(
+                        self.evaluation,
+                        relation,
+                        budget,
+                    )?;
+                }
+                let key = Atom::Root(selected, u32::try_from(index).map_err(|_| invalid())?);
+                let mut root = self.atom(key, relation.ambient != Field::Complex, budget)?;
+                if relation.ambient == Field::Complex {
+                    self.quadratic(key, relation, &mut root, budget)?;
+                }
+                roots.push(root);
             }
-            let key = Atom::Root(selected, u32::try_from(index).map_err(|_| invalid())?);
-            let mut root = self.atom(key, relation.ambient != Field::Complex, budget)?;
-            if relation.ambient == Field::Complex {
-                self.quadratic(key, relation, &mut root, budget)?;
+            self.record_predicate(selection.predicate.logical_id(), &roots, budget)?;
+            for (root, handle) in roots.iter().zip(&selection.relations) {
+                let relation = super::super::selected::relation(self.evaluation.cas, handle)?;
+                let equation = self.root_equation(root, relation, budget)?;
+                self.equation(&equation, budget)?;
             }
-            roots.push(root);
-        }
-        self.record_predicate(selection.predicate.logical_id(), &roots, budget)?;
-        for (root, handle) in roots.iter().zip(&selection.relations) {
-            let relation = super::super::selected::relation(self.evaluation.cas, handle)?;
-            let equation = self.root_equation(root, relation, budget)?;
-            self.equation(&equation, budget)?;
-        }
-        Ok(())
+            Ok(())
+        })
     }
 
     /// Every mapped coefficient participates in the exact selected polynomial equation.
@@ -236,44 +240,46 @@ pub(crate) fn scalar(
     value: &crate::solving::coefficients::model::Element,
     budget: &mut Budget,
 ) -> Result<Option<Rational>, Fault> {
-    use crate::solving::coefficients::model::Value as Coefficient;
-    use crate::solving::coefficients::scalar::Scalar;
-    let mut current = value;
-    loop {
-        budget.work(1, AT)?;
-        match &current.value {
-            Coefficient::Scalar(Scalar::Rational(value)) => {
-                return Ok(Some(crate::solving::coefficients::scalar::rational_copy(
-                    value, budget,
-                )?));
+    crate::work_observation::observe!(budget, AT, {
+        use crate::solving::coefficients::model::Value as Coefficient;
+        use crate::solving::coefficients::scalar::Scalar;
+        let mut current = value;
+        loop {
+            budget.work(1, AT)?;
+            match &current.value {
+                Coefficient::Scalar(Scalar::Rational(value)) => {
+                    return Ok(Some(crate::solving::coefficients::scalar::rational_copy(
+                        value, budget,
+                    )?));
+                }
+                Coefficient::Scalar(Scalar::Gaussian(value)) => {
+                    return if value.imaginary(budget)?.is_zero() {
+                        Ok(Some(value.real(budget)?))
+                    } else {
+                        Ok(None)
+                    };
+                }
+                Coefficient::Tower(coefficients) if coefficients.is_empty() => {
+                    return Ok(Some(Rational::zero()));
+                }
+                Coefficient::Tower(coefficients) if coefficients.len() == 1 => {
+                    current = coefficients.first().ok_or_else(invalid)?;
+                }
+                Coefficient::Fraction(fraction) => {
+                    return match (
+                        fraction.numerator.scalar(budget)?,
+                        fraction.denominator.scalar(budget)?,
+                    ) {
+                        (Some(Scalar::Rational(top)), Some(Scalar::Rational(bottom))) => {
+                            Ok(Some(top.div(&bottom, budget)?))
+                        }
+                        _ => Ok(None),
+                    };
+                }
+                _ => return Ok(None),
             }
-            Coefficient::Scalar(Scalar::Gaussian(value)) => {
-                return if value.imaginary(budget)?.is_zero() {
-                    Ok(Some(value.real(budget)?))
-                } else {
-                    Ok(None)
-                };
-            }
-            Coefficient::Tower(coefficients) if coefficients.is_empty() => {
-                return Ok(Some(Rational::zero()));
-            }
-            Coefficient::Tower(coefficients) if coefficients.len() == 1 => {
-                current = coefficients.first().ok_or_else(invalid)?;
-            }
-            Coefficient::Fraction(fraction) => {
-                return match (
-                    fraction.numerator.scalar(budget)?,
-                    fraction.denominator.scalar(budget)?,
-                ) {
-                    (Some(Scalar::Rational(top)), Some(Scalar::Rational(bottom))) => {
-                        Ok(Some(top.div(&bottom, budget)?))
-                    }
-                    _ => Ok(None),
-                };
-            }
-            _ => return Ok(None),
         }
-    }
+    })
 }
 
 /// A polynomial's sign is manifest only when it is a rational constant.
@@ -314,40 +320,42 @@ impl Components<'_, '_> {
         selection: &crate::solving::RootSelectionData<Handle>,
         budget: &mut Budget,
     ) -> Result<(), Fault> {
-        if witnesses.len() != selection.relations.len() {
-            return Err(invalid());
-        }
-        let mut values = vector(witnesses.len(), budget)?;
-        for (witness, handle) in witnesses.iter().zip(&selection.relations) {
-            let value = self.expression(witness.logical_id(), &[], budget)?;
-            let relation = super::super::selected::relation(self.evaluation.cas, handle)?;
-            let expression = self.evaluation.cas.state.expression(witness.logical_id())?;
-            let expected = crate::model::Sort::Value(crate::model::AtomicSort::Scalar(
-                relation.ambient.clone(),
-            ));
-            let real_root = expression.sort
-                == crate::model::Sort::Value(crate::model::AtomicSort::Scalar(Field::Real))
-                && relation.ambient == Field::Complex
-                && matches!(
-                    (&expression.operator, &expression.attachment),
-                    (
-                        crate::model::Operator::RootValue { .. },
-                        Some(crate::graph::ExpressionAttachment::SelectedRoot(_))
-                    )
-                );
-            budget.work(crate::graph::size(expression.scope.len(), AT)?.max(1), AT)?;
-            if expression.sort != expected
-                && (!real_root
-                    || (expression.header, &expression.scope)
-                        != (relation.header.logical_id(), &relation.scope))
-            {
+        crate::work_observation::observe!(budget, AT, {
+            if witnesses.len() != selection.relations.len() {
                 return Err(invalid());
             }
-            let equation = self.root_equation(&value, relation, budget)?;
-            self.zero(&equation.real, budget)?;
-            self.zero(&equation.imaginary, budget)?;
-            values.push(value);
-        }
-        self.verify_predicate(selection.predicate.logical_id(), &values, budget)
+            let mut values = vector(witnesses.len(), budget)?;
+            for (witness, handle) in witnesses.iter().zip(&selection.relations) {
+                let value = self.expression(witness.logical_id(), &[], budget)?;
+                let relation = super::super::selected::relation(self.evaluation.cas, handle)?;
+                let expression = self.evaluation.cas.state.expression(witness.logical_id())?;
+                let expected = crate::model::Sort::Value(crate::model::AtomicSort::Scalar(
+                    relation.ambient.clone(),
+                ));
+                let real_root = expression.sort
+                    == crate::model::Sort::Value(crate::model::AtomicSort::Scalar(Field::Real))
+                    && relation.ambient == Field::Complex
+                    && matches!(
+                        (&expression.operator, &expression.attachment),
+                        (
+                            crate::model::Operator::RootValue { .. },
+                            Some(crate::graph::ExpressionAttachment::SelectedRoot(_))
+                        )
+                    );
+                budget.work(crate::graph::size(expression.scope.len(), AT)?.max(1), AT)?;
+                if expression.sort != expected
+                    && (!real_root
+                        || (expression.header, &expression.scope)
+                            != (relation.header.logical_id(), &relation.scope))
+                {
+                    return Err(invalid());
+                }
+                let equation = self.root_equation(&value, relation, budget)?;
+                self.zero(&equation.real, budget)?;
+                self.zero(&equation.imaginary, budget)?;
+                values.push(value);
+            }
+            self.verify_predicate(selection.predicate.logical_id(), &values, budget)
+        })
     }
 }

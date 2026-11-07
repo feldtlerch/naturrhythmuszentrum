@@ -121,43 +121,45 @@ pub(crate) fn placement_operands(
     body: &super::FamilyExpressionData<crate::graph::Handle>,
     budget: &mut Budget,
 ) -> Result<Vec<(LogicalId, LogicalId)>, Fault> {
-    let mut pending = Vec::new();
-    let mut expanded = std::collections::BTreeSet::new();
-    let mut associated = std::collections::BTreeSet::new();
-    let mut result = Vec::new();
-    push_arguments(state, &mut pending, body, 1, budget)?;
-    while let Some((role, value, ambient, depth)) = pending.pop() {
-        budget.work(
-            crate::graph::size(
-                expanded
-                    .len()
-                    .saturating_add(associated.len())
-                    .saturating_add(1),
+    crate::work_observation::observe!(budget, super::admission::AT, {
+        let mut pending = Vec::new();
+        let mut expanded = std::collections::BTreeSet::new();
+        let mut associated = std::collections::BTreeSet::new();
+        let mut result = Vec::new();
+        push_arguments(state, &mut pending, body, 1, budget)?;
+        while let Some((role, value, ambient, depth)) = pending.pop() {
+            budget.work(
+                crate::graph::size(
+                    expanded
+                        .len()
+                        .saturating_add(associated.len())
+                        .saturating_add(1),
+                    super::admission::AT,
+                )?,
                 super::admission::AT,
-            )?,
-            super::admission::AT,
-        )?;
-        let required = (value.logical_id(), ambient);
-        if operand_ambient(state, required.0)? != ambient && associated.insert(required) {
-            result
-                .try_reserve(1)
-                .map_err(|_| Fault::allocation(super::admission::AT))?;
-            result.push(required);
-        }
-        if role == FamilyArgumentRole::Family && expanded.insert(value.logical_id()) {
-            let SolveDraft::FamilyExpression(previous) = object(state, &value)? else {
-                return Err(invalid());
-            };
-            push_arguments(
-                state,
-                &mut pending,
-                previous,
-                depth.saturating_add(1),
-                budget,
             )?;
+            let required = (value.logical_id(), ambient);
+            if operand_ambient(state, required.0)? != ambient && associated.insert(required) {
+                result
+                    .try_reserve(1)
+                    .map_err(|_| Fault::allocation(super::admission::AT))?;
+                result.push(required);
+            }
+            if role == FamilyArgumentRole::Family && expanded.insert(value.logical_id()) {
+                let SolveDraft::FamilyExpression(previous) = object(state, &value)? else {
+                    return Err(invalid());
+                };
+                push_arguments(
+                    state,
+                    &mut pending,
+                    previous,
+                    depth.saturating_add(1),
+                    budget,
+                )?;
+            }
         }
-    }
-    Ok(result)
+        Ok(result)
+    })
 }
 
 /// Prepay all retained pending arguments before copying their handles.
@@ -168,27 +170,29 @@ fn push_arguments(
     depth: u64,
     budget: &mut Budget,
 ) -> Result<(), Fault> {
-    let shape = super::admission::family(state, &body.family)?;
-    let ambient = shape.fibre_space.logical_id();
-    let count = crate::graph::size(
-        pending.len().saturating_add(body.arguments.len()),
-        super::admission::AT,
-    )?;
-    budget.check(BudgetKind::Depth, depth, super::admission::AT)?;
-    budget.check(
-        BudgetKind::StagedPayloadBytes,
-        count.saturating_mul(128),
-        super::admission::AT,
-    )?;
-    budget.work(count, super::admission::AT)?;
-    pending
-        .try_reserve(body.arguments.len())
-        .map_err(|_| Fault::allocation(super::admission::AT))?;
-    pending.extend(
-        body.arguments
-            .iter()
-            .rev()
-            .map(|argument| (argument.role, argument.value.clone(), ambient, depth)),
-    );
-    Ok(())
+    crate::work_observation::observe!(budget, super::admission::AT, {
+        let shape = super::admission::family(state, &body.family)?;
+        let ambient = shape.fibre_space.logical_id();
+        let count = crate::graph::size(
+            pending.len().saturating_add(body.arguments.len()),
+            super::admission::AT,
+        )?;
+        budget.check(BudgetKind::Depth, depth, super::admission::AT)?;
+        budget.check(
+            BudgetKind::StagedPayloadBytes,
+            count.saturating_mul(128),
+            super::admission::AT,
+        )?;
+        budget.work(count, super::admission::AT)?;
+        pending
+            .try_reserve(body.arguments.len())
+            .map_err(|_| Fault::allocation(super::admission::AT))?;
+        pending.extend(
+            body.arguments
+                .iter()
+                .rev()
+                .map(|argument| (argument.role, argument.value.clone(), ambient, depth)),
+        );
+        Ok(())
+    })
 }

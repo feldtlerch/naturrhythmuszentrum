@@ -85,82 +85,84 @@ pub(crate) fn canonical(
     budget: &mut Budget,
 ) -> Result<Vec<u8>, Fault> {
     let at = Location::new("context hypotheses");
-    let mut all = BTreeMap::new();
-    let mut records = Vec::new();
-    records
-        .try_reserve_exact(hypotheses.len())
-        .map_err(|_| Fault::allocation(at))?;
-    let mut total_bytes = 0_u64;
-    for (name, id) in hypotheses {
-        let Vertex::Condition(value) = state.node(*id)? else {
-            return Err(Fault::invalid(InvalidCode::Reference, at));
-        };
-        let mut pending = vec![condition(value)];
-        let mut atoms = BTreeSet::new();
-        while let Some(value) = pending.pop() {
-            budget.condition(1, at)?;
-            if value.scope != scope {
-                return Err(Fault::invalid(InvalidCode::Scope, at));
-            }
-            if value.kind == Some(&PredicateKind::And) {
-                pending
-                    .try_reserve(value.arguments.len())
-                    .map_err(|_| Fault::allocation(at))?;
-                for argument in value.arguments.iter().rev() {
-                    pending.push(expression(state, argument)?);
-                }
-                continue;
-            }
-            if literal_false(state, &value)? {
-                return Err(Fault::invalid(InvalidCode::Context, at));
-            }
-            let negative = value.kind == Some(&PredicateKind::Not);
-            let key = if negative {
-                let argument = value
-                    .arguments
-                    .first()
-                    .ok_or_else(|| Fault::invalid(InvalidCode::Sort, at))?;
-                atom(&expression(state, argument)?, budget)?
-            } else {
-                atom(&value, budget)?
+    crate::work_observation::observe!(budget, at, {
+        let mut all = BTreeMap::new();
+        let mut records = Vec::new();
+        records
+            .try_reserve_exact(hypotheses.len())
+            .map_err(|_| Fault::allocation(at))?;
+        let mut total_bytes = 0_u64;
+        for (name, id) in hypotheses {
+            let Vertex::Condition(value) = state.node(*id)? else {
+                return Err(Fault::invalid(InvalidCode::Reference, at));
             };
-            let bytes = size(key.len(), at)?;
-            total_bytes = total_bytes
-                .checked_add(bytes)
-                .ok_or_else(|| Fault::capacity(BudgetKind::PayloadBytes, at))?;
-            budget.check(BudgetKind::PayloadBytes, total_bytes, at)?;
-            let work = size(all.len(), at)?
-                .checked_add(1)
-                .and_then(|count| count.checked_mul(bytes))
-                .and_then(|amount| amount.checked_mul(8))
-                .ok_or_else(|| Fault::capacity(BudgetKind::Work, at))?;
-            budget.condition(work, at)?;
-            if all.get(&key).is_some_and(|previous| *previous != negative) {
-                return Err(Fault::invalid(InvalidCode::Context, at));
-            }
-            if !all.contains_key(&key) {
-                let next = size(all.len(), at)?
+            let mut pending = vec![condition(value)];
+            let mut atoms = BTreeSet::new();
+            while let Some(value) = pending.pop() {
+                budget.condition(1, at)?;
+                if value.scope != scope {
+                    return Err(Fault::invalid(InvalidCode::Scope, at));
+                }
+                if value.kind == Some(&PredicateKind::And) {
+                    pending
+                        .try_reserve(value.arguments.len())
+                        .map_err(|_| Fault::allocation(at))?;
+                    for argument in value.arguments.iter().rev() {
+                        pending.push(expression(state, argument)?);
+                    }
+                    continue;
+                }
+                if literal_false(state, &value)? {
+                    return Err(Fault::invalid(InvalidCode::Context, at));
+                }
+                let negative = value.kind == Some(&PredicateKind::Not);
+                let key = if negative {
+                    let argument = value
+                        .arguments
+                        .first()
+                        .ok_or_else(|| Fault::invalid(InvalidCode::Sort, at))?;
+                    atom(&expression(state, argument)?, budget)?
+                } else {
+                    atom(&value, budget)?
+                };
+                let bytes = size(key.len(), at)?;
+                total_bytes = total_bytes
+                    .checked_add(bytes)
+                    .ok_or_else(|| Fault::capacity(BudgetKind::PayloadBytes, at))?;
+                budget.check(BudgetKind::PayloadBytes, total_bytes, at)?;
+                let work = size(all.len(), at)?
                     .checked_add(1)
-                    .ok_or_else(|| Fault::capacity(BudgetKind::ConditionAtoms, at))?;
-                budget.check(BudgetKind::ConditionAtoms, next, at)?;
+                    .and_then(|count| count.checked_mul(bytes))
+                    .and_then(|amount| amount.checked_mul(8))
+                    .ok_or_else(|| Fault::capacity(BudgetKind::Work, at))?;
+                budget.condition(work, at)?;
+                if all.get(&key).is_some_and(|previous| *previous != negative) {
+                    return Err(Fault::invalid(InvalidCode::Context, at));
+                }
+                if !all.contains_key(&key) {
+                    let next = size(all.len(), at)?
+                        .checked_add(1)
+                        .ok_or_else(|| Fault::capacity(BudgetKind::ConditionAtoms, at))?;
+                    budget.check(BudgetKind::ConditionAtoms, next, at)?;
+                }
+                all.insert(key.clone(), negative);
+                atoms.insert((key, negative));
             }
-            all.insert(key.clone(), negative);
-            atoms.insert((key, negative));
+            records.push((name, atoms));
         }
-        records.push((name, atoms));
-    }
-    let mut out = Encoder::new(budget, at);
-    out.count(records.len())?;
-    for (name, atoms) in records {
-        out.name(name)?;
-        out.count(atoms.len())?;
-        for (key, negative) in atoms {
-            out.byte(u8::from(negative))?;
-            out.count(key.len())?;
-            out.raw(&key)?;
+        let mut out = Encoder::new(budget, at);
+        out.count(records.len())?;
+        for (name, atoms) in records {
+            out.name(name)?;
+            out.count(atoms.len())?;
+            for (key, negative) in atoms {
+                out.byte(u8::from(negative))?;
+                out.count(key.len())?;
+                out.raw(&key)?;
+            }
         }
-    }
-    Ok(out.finish())
+        Ok(out.finish())
+    })
 }
 
 /// Preserve the closed-context precondition at legacy proof, service and scalar-projection boundaries.

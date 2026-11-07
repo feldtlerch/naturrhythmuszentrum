@@ -269,74 +269,75 @@ pub(crate) fn decode(
     reader: &mut Reader<'_, '_>,
     records: &[Decoded],
 ) -> Result<Handle, Fault> {
-    #[cfg(test)]
-    let _attribution = crate::testing::work_trace::Scope::phase("syntax admission");
-    let previous = reader.budget.usage();
-    let value = match tag {
-        0 => header(cas, reader, records)?,
-        2 => {
-            if reader.byte()? != 0 {
-                return Err(invalid());
+    let _attribution = crate::work_observation::Scope::phase("syntax admission");
+    crate::work_observation::observe!(reader.budget, AT, {
+        let previous = reader.budget.usage();
+        let value = match tag {
+            0 => header(cas, reader, records)?,
+            2 => {
+                if reader.byte()? != 0 {
+                    return Err(invalid());
+                }
+                let header = reference(reader, records)?;
+                let coordinate = reader.name()?;
+                let field = reader.field()?;
+                let domain = reference(reader, records)?;
+                let test_family = reader.name()?;
+                admit(
+                    cas,
+                    Draft::Space(SpaceDraft {
+                        header,
+                        domain,
+                        coordinate,
+                        field,
+                        test_family,
+                    }),
+                    reader,
+                )?
             }
-            let header = reference(reader, records)?;
-            let coordinate = reader.name()?;
-            let field = reader.field()?;
-            let domain = reference(reader, records)?;
-            let test_family = reader.name()?;
-            admit(
-                cas,
-                Draft::Space(SpaceDraft {
-                    header,
-                    domain,
-                    coordinate,
-                    field,
-                    test_family,
-                }),
-                reader,
-            )?
-        }
-        8 | 37 => context(cas, tag == 37, reader, records)?,
-        38 => {
-            if layer != Layer::Logic || space.is_some() {
-                return Err(invalid());
+            8 | 37 => context(cas, tag == 37, reader, records)?,
+            38 => {
+                if layer != Layer::Logic || space.is_some() {
+                    return Err(invalid());
+                }
+                series_object(cas, reader, records)?
             }
-            series_object(cas, reader, records)?
-        }
-        13..=36 => {
-            if layer != Layer::Logic || space.is_some() {
-                return Err(invalid());
+            13..=36 => {
+                if layer != Layer::Logic || space.is_some() {
+                    return Err(invalid());
+                }
+                crate::solving::wire::decode_object(cas, tag, reader, records)?
             }
-            crate::solving::wire::decode_object(cas, tag, reader, records)?
+            _ => syntax(cas, tag, space, reader, records)?,
+        };
+        if tag == 1 && reader.budget.usage().region_nodes == previous.region_nodes {
+            reader
+                .budget
+                .specialized(BudgetKind::RegionNodes, 1, true, AT)?;
         }
-        _ => syntax(cas, tag, space, reader, records)?,
-    };
-    if tag == 1 && reader.budget.usage().region_nodes == previous.region_nodes {
-        reader
-            .budget
-            .specialized(BudgetKind::RegionNodes, 1, true, AT)?;
-    }
-    if tag == 5 && reader.budget.usage().boundary_nodes == previous.boundary_nodes {
-        reader
-            .budget
-            .specialized(BudgetKind::BoundaryNodes, 1, true, AT)?;
-    }
-    if matches!(tag, 8 | 37)
-        && cas.state.context(cas.checked(&value)?)?.parent.is_some()
-        && reader.budget.usage().local_contexts == previous.local_contexts
-    {
-        reader
-            .budget
-            .specialized(BudgetKind::LocalContexts, 1, true, AT)?;
-    }
-    let (expected_layer, expected_space) = match cas.state.node(cas.checked(&value)?)? {
-        Vertex::Expression(value) => (value.layer, value.space.map(|id| cas.handle(id))),
-        Vertex::CaseArm(_) | Vertex::SourceForm(_) => (Layer::Pointwise, None),
-        _ => (Layer::Logic, None),
-    };
-    if layer != expected_layer || space != expected_space.as_ref() {
-        return Err(invalid());
-    }
-    Ok(value)
+        if tag == 5 && reader.budget.usage().boundary_nodes == previous.boundary_nodes {
+            reader
+                .budget
+                .specialized(BudgetKind::BoundaryNodes, 1, true, AT)?;
+        }
+        if matches!(tag, 8 | 37)
+            && cas.state.context(cas.checked(&value)?)?.parent.is_some()
+            && reader.budget.usage().local_contexts == previous.local_contexts
+        {
+            reader
+                .budget
+                .specialized(BudgetKind::LocalContexts, 1, true, AT)?;
+        }
+        let (expected_layer, expected_space) = match cas.state.node(cas.checked(&value)?)? {
+            Vertex::Expression(value) => (value.layer, value.space.map(|id| cas.handle(id))),
+            Vertex::CaseArm(_) | Vertex::SourceForm(_) => (Layer::Pointwise, None),
+            _ => (Layer::Logic, None),
+        };
+        if layer != expected_layer || space != expected_space.as_ref() {
+            return Err(invalid());
+        }
+        Ok(value)
+    })
 }
 
 /// Bound the positive coefficient vector before allocation and ordinary object admission.

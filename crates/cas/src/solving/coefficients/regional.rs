@@ -37,16 +37,18 @@ pub(crate) fn contained(
     target: LogicalId,
     budget: &mut Budget,
 ) -> Result<bool, Fault> {
-    let mut pending = vector(1, budget)?;
-    pending.push(region);
-    while let Some(id) = pending.pop() {
-        budget.work(1, AT)?;
-        if id == target {
-            return Ok(true);
+    crate::work_observation::observe!(budget, AT, {
+        let mut pending = vector(1, budget)?;
+        pending.push(region);
+        while let Some(id) = pending.pop() {
+            budget.work(1, AT)?;
+            if id == target {
+                return Ok(true);
+            }
+            bases(&state.region(id)?.expression, &mut pending, budget)?;
         }
-        bases(&state.region(id)?.expression, &mut pending, budget)?;
-    }
-    Ok(false)
+        Ok(false)
+    })
 }
 
 /// Equality recognizes exact zero; true positivity and explicit nonzero supply nonvanishing.
@@ -106,31 +108,34 @@ fn at_source(
     visitor: &mut impl FnMut(Polynomial, bool, &mut Budget) -> Result<bool, Fault>,
     budget: &mut Budget,
 ) -> Result<bool, Fault> {
-    let mut pending = vector(1, budget)?;
-    pending.push(region.logical_id());
-    let frame = state.region(region.logical_id())?;
-    while let Some(id) = pending.pop() {
-        budget.work(1, AT)?;
-        let current = state.region(id)?;
-        if (current.header, &current.scope, &current.ambient)
-            != (frame.header, &frame.scope, &frame.ambient)
-        {
-            return Err(invalid());
+    crate::work_observation::observe!(budget, AT, {
+        let mut pending = vector(1, budget)?;
+        pending.push(region.logical_id());
+        let frame = state.region(region.logical_id())?;
+        while let Some(id) = pending.pop() {
+            budget.work(1, AT)?;
+            let current = state.region(id)?;
+            if (current.header, &current.scope, &current.ambient)
+                != (frame.header, &frame.scope, &frame.ambient)
+            {
+                return Err(invalid());
+            }
+            let guarded = match &current.expression {
+                RegionExpr::GuardTrue { predicate, .. } => Some((*predicate, true)),
+                RegionExpr::GuardFalse { predicate, .. } => Some((*predicate, false)),
+                _ => None,
+            };
+            if let Some((predicate, truth)) = guarded
+                && let Some((value, when_true)) =
+                    guard(state, source, id, predicate, truth, budget)?
+                && visitor(value, when_true == truth, budget)?
+            {
+                return Ok(true);
+            }
+            bases(&current.expression, &mut pending, budget)?;
         }
-        let guarded = match &current.expression {
-            RegionExpr::GuardTrue { predicate, .. } => Some((*predicate, true)),
-            RegionExpr::GuardFalse { predicate, .. } => Some((*predicate, false)),
-            _ => None,
-        };
-        if let Some((predicate, truth)) = guarded
-            && let Some((value, when_true)) = guard(state, source, id, predicate, truth, budget)?
-            && visitor(value, when_true == truth, budget)?
-        {
-            return Ok(true);
-        }
-        bases(&current.expression, &mut pending, budget)?;
-    }
-    Ok(false)
+        Ok(false)
+    })
 }
 
 /// Independently recompute a regional fact, including canonical parent-field inclusions.
@@ -141,22 +146,24 @@ fn visit(
     mut visitor: impl FnMut(Polynomial, bool, &mut Budget) -> Result<bool, Fault>,
     budget: &mut Budget,
 ) -> Result<bool, Fault> {
-    let mut current = source;
-    loop {
-        budget.work(1, AT)?;
-        if at_source(state, current, region, &mut visitor, budget)? {
-            return Ok(true);
+    crate::work_observation::observe!(budget, AT, {
+        let mut current = source;
+        loop {
+            budget.work(1, AT)?;
+            if at_source(state, current, region, &mut visitor, budget)? {
+                return Ok(true);
+            }
+            let CoefficientDomainData::Quotient { level } = domain(state, current)? else {
+                return Ok(false);
+            };
+            let SolveDraft::ExtensionLevel(extension) =
+                crate::solving::graph::object(state, level.logical_id())?
+            else {
+                return Err(invalid());
+            };
+            current = &extension.parent;
         }
-        let CoefficientDomainData::Quotient { level } = domain(state, current)? else {
-            return Ok(false);
-        };
-        let SolveDraft::ExtensionLevel(extension) =
-            crate::solving::graph::object(state, level.logical_id())?
-        else {
-            return Err(invalid());
-        };
-        current = &extension.parent;
-    }
+    })
 }
 
 /// A checked zero guard also annihilates its exact polynomial multiples; nonzero facts stay exact.

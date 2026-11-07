@@ -184,12 +184,14 @@ impl Cas {
         pending: u64,
         budget: &mut Budget,
     ) -> Result<LogicalId, Fault> {
-        let vertex = Vertex::Region(region);
-        let (_, key) = vertex_key(&vertex, state, budget)?;
-        if state.interned(&key, budget)?.is_none() {
-            budget.specialized(BudgetKind::RegionNodes, 1, true, AT)?;
-        }
-        self.insert(state, vertex, edges, pending, budget)
+        crate::work_observation::observe!(budget, AT, {
+            let vertex = Vertex::Region(region);
+            let (_, key) = vertex_key(&vertex, state, budget)?;
+            if state.interned(&key, budget)?.is_none() {
+                budget.specialized(BudgetKind::RegionNodes, 1, true, AT)?;
+            }
+            self.insert(state, vertex, edges, pending, budget)
+        })
     }
 
     /// Admit a declared real test space without granting analytic premises.
@@ -442,16 +444,18 @@ impl Cas {
         budget: &mut Budget,
     ) -> Result<Vec<LogicalId>, Fault> {
         let at = Location::new("native case admission");
-        let mut arms = self.resolve_all(state, &draft.arms, locals, budget)?;
-        budget.work(
-            size(arms.len(), at)?
-                .checked_mul(size(arms.len(), at)?)
-                .ok_or_else(|| Fault::capacity(BudgetKind::Work, at))?,
-            at,
-        )?;
-        arms.sort_unstable();
-        arms.dedup();
-        Ok(arms)
+        crate::work_observation::observe!(budget, at, {
+            let mut arms = self.resolve_all(state, &draft.arms, locals, budget)?;
+            budget.work(
+                size(arms.len(), at)?
+                    .checked_mul(size(arms.len(), at)?)
+                    .ok_or_else(|| Fault::capacity(BudgetKind::Work, at))?,
+                at,
+            )?;
+            arms.sort_unstable();
+            arms.dedup();
+            Ok(arms)
+        })
     }
 
     /// Admit only well-scoped native arm syntax; totality and overlap remain proof obligations.
@@ -464,101 +468,104 @@ impl Cas {
         budget: &mut Budget,
     ) -> Result<LogicalId, Fault> {
         let at = Location::new("native case admission");
-        budget.specialized(BudgetKind::CaseArms, size(draft.arms.len(), at)?, false, at)?;
-        let header = self.resolve(state, &draft.header, locals)?;
-        state.header(header)?;
-        crate::validation::scope_limit(&draft.scope, budget)?;
-        let domain = self.resolve(state, &draft.domain, locals)?;
-        let region = state.region(domain)?;
-        region_context(state, domain, header, &draft.scope, &region.ambient, budget)?;
-        let arms = self.case_arms(state, draft, locals, budget)?;
-        if arms.is_empty() {
-            return Err(Fault::invalid(InvalidCode::Sort, at));
-        }
-        let sort = draft.sort.clone();
-        let (domain_depth, domain_size) = crate::descriptor::measure(state, domain, budget)?;
-        let mut depth = domain_depth
-            .checked_add(1)
-            .ok_or_else(|| Fault::capacity(BudgetKind::Depth, at))?;
-        let mut unfolded = domain_size
-            .checked_add(1)
-            .ok_or_else(|| Fault::capacity(BudgetKind::PeakExpressionSize, at))?;
-        let mut edges = vec![(header, Edge::InHeader), (domain, Edge::CaseDomain)];
-        edges
-            .try_reserve(arms.len())
-            .map_err(|_| Fault::allocation(at))?;
-        for (position, arm) in arms.iter().enumerate() {
-            let value = state.arm(*arm)?;
-            if value.sort != sort {
-                return Err(Fault::invalid(InvalidCode::SymbolSortMismatch, at));
-            }
-            if value.scope != draft.scope
-                || !crate::header::embeds(state, value.header, header, budget)?
-            {
+        crate::work_observation::observe!(budget, at, {
+            budget.specialized(BudgetKind::CaseArms, size(draft.arms.len(), at)?, false, at)?;
+            let header = self.resolve(state, &draft.header, locals)?;
+            state.header(header)?;
+            crate::validation::scope_limit(&draft.scope, budget)?;
+            let domain = self.resolve(state, &draft.domain, locals)?;
+            let region = state.region(domain)?;
+            region_context(state, domain, header, &draft.scope, &region.ambient, budget)?;
+            let arms = self.case_arms(state, draft, locals, budget)?;
+            if arms.is_empty() {
                 return Err(Fault::invalid(InvalidCode::Sort, at));
             }
-            region_context(
-                state,
-                value.region,
-                header,
-                &draft.scope,
-                &region.ambient,
-                budget,
-            )?;
-            let (arm_depth, arm_size) = crate::descriptor::measure(state, *arm, budget)?;
-            depth = depth.max(
-                arm_depth
-                    .checked_add(1)
-                    .ok_or_else(|| Fault::capacity(BudgetKind::Depth, at))?,
-            );
-            unfolded = unfolded
-                .checked_add(arm_size)
+            let sort = draft.sort.clone();
+            let (domain_depth, domain_size) = crate::descriptor::measure(state, domain, budget)?;
+            let mut depth = domain_depth
+                .checked_add(1)
+                .ok_or_else(|| Fault::capacity(BudgetKind::Depth, at))?;
+            let mut unfolded = domain_size
+                .checked_add(1)
                 .ok_or_else(|| Fault::capacity(BudgetKind::PeakExpressionSize, at))?;
-            edges.push((
-                *arm,
-                Edge::CaseMember(
-                    u32::try_from(position).map_err(|_| Fault::capacity(BudgetKind::Edges, at))?,
-                ),
-            ));
-        }
-        budget.check(BudgetKind::Depth, depth, at)?;
-        budget.check(BudgetKind::PeakExpressionSize, unfolded, at)?;
-        let ambient = crate::solving::sorts::ambient(state, header, &sort)?;
-        case_ambient_edge(&mut edges, ambient);
-        self.insert(
-            state,
-            Vertex::Expression(crate::graph::Expression {
-                supported_enclosure: false,
-                enclosure_roots: false,
-                enclosure_exp: crate::enclosure::AnalyticShape::default(),
-                enclosure_saturation: 0,
-                enclosure_derivative: 0,
-                enclosure_clamp: crate::enclosure::ClampShape::Smooth,
-                enclosure_power: crate::enclosure::PowerShape {
-                    present: false,
-                    slots: 1,
-                },
-                enclosure_logs: false,
-                enclosure_log_bound: None,
-                ambient,
-                attachment: None,
-                header,
-                scope: draft.scope.clone(),
-                sort,
-                operator: crate::model::Operator::Cases,
-                binding: None,
-                operands: Vec::new(),
-                layer: crate::domain_model::Layer::Pointwise,
-                space: None,
-                domain: Some(domain),
-                arms,
-                depth,
-                unfolded,
-            }),
-            &edges,
-            pending,
-            budget,
-        )
+            let mut edges = vec![(header, Edge::InHeader), (domain, Edge::CaseDomain)];
+            edges
+                .try_reserve(arms.len())
+                .map_err(|_| Fault::allocation(at))?;
+            for (position, arm) in arms.iter().enumerate() {
+                let value = state.arm(*arm)?;
+                if value.sort != sort {
+                    return Err(Fault::invalid(InvalidCode::SymbolSortMismatch, at));
+                }
+                if value.scope != draft.scope
+                    || !crate::header::embeds(state, value.header, header, budget)?
+                {
+                    return Err(Fault::invalid(InvalidCode::Sort, at));
+                }
+                region_context(
+                    state,
+                    value.region,
+                    header,
+                    &draft.scope,
+                    &region.ambient,
+                    budget,
+                )?;
+                let (arm_depth, arm_size) = crate::descriptor::measure(state, *arm, budget)?;
+                depth = depth.max(
+                    arm_depth
+                        .checked_add(1)
+                        .ok_or_else(|| Fault::capacity(BudgetKind::Depth, at))?,
+                );
+                unfolded = unfolded
+                    .checked_add(arm_size)
+                    .ok_or_else(|| Fault::capacity(BudgetKind::PeakExpressionSize, at))?;
+                edges.push((
+                    *arm,
+                    Edge::CaseMember(
+                        u32::try_from(position)
+                            .map_err(|_| Fault::capacity(BudgetKind::Edges, at))?,
+                    ),
+                ));
+            }
+            budget.check(BudgetKind::Depth, depth, at)?;
+            budget.check(BudgetKind::PeakExpressionSize, unfolded, at)?;
+            let ambient = crate::solving::sorts::ambient(state, header, &sort)?;
+            case_ambient_edge(&mut edges, ambient);
+            self.insert(
+                state,
+                Vertex::Expression(crate::graph::Expression {
+                    supported_enclosure: false,
+                    enclosure_roots: false,
+                    enclosure_exp: crate::enclosure::AnalyticShape::default(),
+                    enclosure_saturation: 0,
+                    enclosure_derivative: 0,
+                    enclosure_clamp: crate::enclosure::ClampShape::Smooth,
+                    enclosure_power: crate::enclosure::PowerShape {
+                        present: false,
+                        slots: 1,
+                    },
+                    enclosure_logs: false,
+                    enclosure_log_bound: None,
+                    ambient,
+                    attachment: None,
+                    header,
+                    scope: draft.scope.clone(),
+                    sort,
+                    operator: crate::model::Operator::Cases,
+                    binding: None,
+                    operands: Vec::new(),
+                    layer: crate::domain_model::Layer::Pointwise,
+                    space: None,
+                    domain: Some(domain),
+                    arms,
+                    depth,
+                    unfolded,
+                }),
+                &edges,
+                pending,
+                budget,
+            )
+        })
     }
 }
 

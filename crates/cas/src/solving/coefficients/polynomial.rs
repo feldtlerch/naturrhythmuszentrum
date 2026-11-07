@@ -69,8 +69,10 @@ fn preflight(count: usize, variables: usize, ground: Ground, budget: &Budget) ->
 
 /// Charge every inspected exponent position, with decreasing total-degree/lex order.
 fn compare(left: &Term, right: &Term, budget: &mut Budget) -> Result<Ordering, Fault> {
-    budget.work(product(size(left.powers.len(), AT)?.max(1), 3)?, AT)?;
-    Ok((right.degree()?, &right.powers).cmp(&(left.degree()?, &left.powers)))
+    crate::work_observation::observe!(budget, AT, {
+        budget.work(product(size(left.powers.len(), AT)?.max(1), 3)?, AT)?;
+        Ok((right.degree()?, &right.powers).cmp(&(left.degree()?, &left.powers)))
+    })
 }
 
 /// One deterministic merge pass; no library sort hides allocation or comparisons.
@@ -109,23 +111,25 @@ fn merge_pass(terms: &[Term], width: usize, budget: &mut Budget) -> Result<Vec<T
 
 /// Merge adjacent equal monomials without estimating space from final cancellation.
 fn collect(terms: Vec<Term>, budget: &mut Budget) -> Result<Vec<Term>, Fault> {
-    let mut result: Vec<Term> = vector(terms.len(), budget)?;
-    for term in terms {
-        if let Some(last) = result.last_mut() {
-            budget.work(size(term.powers.len(), AT)?.max(1), AT)?;
-            if last.powers == term.powers {
-                last.coefficient = last.coefficient.add(&term.coefficient, budget)?;
-                if last.coefficient.zero(budget)? {
-                    let _removed = result.pop();
+    crate::work_observation::observe!(budget, AT, {
+        let mut result: Vec<Term> = vector(terms.len(), budget)?;
+        for term in terms {
+            if let Some(last) = result.last_mut() {
+                budget.work(size(term.powers.len(), AT)?.max(1), AT)?;
+                if last.powers == term.powers {
+                    last.coefficient = last.coefficient.add(&term.coefficient, budget)?;
+                    if last.coefficient.zero(budget)? {
+                        let _removed = result.pop();
+                    }
+                    continue;
                 }
-                continue;
+            }
+            if !term.coefficient.zero(budget)? {
+                result.push(term);
             }
         }
-        if !term.coefficient.zero(budget)? {
-            result.push(term);
-        }
-    }
-    Ok(result)
+        Ok(result)
+    })
 }
 
 impl Polynomial {
@@ -136,26 +140,28 @@ impl Polynomial {
         mut terms: Vec<Term>,
         budget: &mut Budget,
     ) -> Result<Self, Fault> {
-        begin(budget)?;
-        preflight(terms.len(), variables, ground, budget)?;
-        for term in &terms {
-            budget.work(size(variables, AT)?.max(1), AT)?;
-            if term.powers.len() != variables || term.coefficient.ground() != ground {
-                return Err(invalid());
+        crate::work_observation::observe!(budget, AT, {
+            begin(budget)?;
+            preflight(terms.len(), variables, ground, budget)?;
+            for term in &terms {
+                budget.work(size(variables, AT)?.max(1), AT)?;
+                if term.powers.len() != variables || term.coefficient.ground() != ground {
+                    return Err(invalid());
+                }
+                budget.check(BudgetKind::PolynomialDegree, term.degree()?, AT)?;
             }
-            budget.check(BudgetKind::PolynomialDegree, term.degree()?, AT)?;
-        }
-        let mut width = 1_usize;
-        while width < terms.len() {
-            terms = merge_pass(&terms, width, budget)?;
-            width = width
-                .checked_mul(2)
-                .ok_or_else(|| Fault::capacity(BudgetKind::PolynomialTerms, AT))?;
-        }
-        Ok(Self {
-            variables,
-            ground,
-            terms: collect(terms, budget)?,
+            let mut width = 1_usize;
+            while width < terms.len() {
+                terms = merge_pass(&terms, width, budget)?;
+                width = width
+                    .checked_mul(2)
+                    .ok_or_else(|| Fault::capacity(BudgetKind::PolynomialTerms, AT))?;
+            }
+            Ok(Self {
+                variables,
+                ground,
+                terms: collect(terms, budget)?,
+            })
         })
     }
 
@@ -217,24 +223,28 @@ impl Polynomial {
 
     /// Canonical graded order puts the total degree in the first term.
     pub(crate) fn total_degree(&self, budget: &mut Budget) -> Result<Option<u64>, Fault> {
-        begin(budget)?;
-        budget.work(size(self.variables, AT)?.max(1), AT)?;
-        self.terms.first().map(Term::degree).transpose()
+        crate::work_observation::observe!(budget, AT, {
+            begin(budget)?;
+            budget.work(size(self.variables, AT)?.max(1), AT)?;
+            self.terms.first().map(Term::degree).transpose()
+        })
     }
 
     /// Recognize ground constants, including zero.
     pub(crate) fn scalar(&self, budget: &mut Budget) -> Result<Option<Scalar>, Fault> {
-        begin(budget)?;
-        if self.terms.is_empty() {
-            return Ok(Some(Scalar::constant(self.ground, false, budget)?));
-        }
-        if let [term] = self.terms.as_slice() {
-            budget.work(size(self.variables, AT)?, AT)?;
-            if term.powers.iter().all(|power| *power == 0) {
-                return Ok(Some(term.coefficient.copy(budget)?));
+        crate::work_observation::observe!(budget, AT, {
+            begin(budget)?;
+            if self.terms.is_empty() {
+                return Ok(Some(Scalar::constant(self.ground, false, budget)?));
             }
-        }
-        Ok(None)
+            if let [term] = self.terms.as_slice() {
+                budget.work(size(self.variables, AT)?, AT)?;
+                if term.powers.iter().all(|power| *power == 0) {
+                    return Ok(Some(term.coefficient.copy(budget)?));
+                }
+            }
+            Ok(None)
+        })
     }
 
     /// Equality scans every retained coefficient and exponent with charge.

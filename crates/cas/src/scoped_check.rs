@@ -22,35 +22,37 @@ const fn invalid() -> Fault {
 
 /// Check backward references and complete root reachability before any publication.
 fn preflight(cas: &Cas, steps: &[ApplicationDraft], budget: &mut Budget) -> Result<(), Fault> {
-    budget.check(BudgetKind::ProofNodes, size(steps.len(), AT)?, AT)?;
-    let root = steps.len().checked_sub(1).ok_or_else(invalid)?;
-    let mut reached = BTreeSet::new();
-    let mut pending = vec![root];
-    while let Some(index) = pending.pop() {
-        budget.work(size(steps.len(), AT)?, AT)?;
-        if !reached.insert(index) {
-            continue;
-        }
-        let step = steps.get(index).ok_or_else(invalid)?;
-        if !step.rule.specification().available {
-            return Err(Fault::invalid(InvalidCode::UnsupportedFragment, AT));
-        }
-        crate::proof_view::measure(cas, step, budget)?;
-        pending
-            .try_reserve(step.premises.len())
-            .map_err(|_| Fault::allocation(AT))?;
-        for previous in &step.premises {
-            let previous = usize::try_from(*previous).map_err(|_| invalid())?;
-            if previous >= index {
-                return Err(invalid());
+    crate::work_observation::observe!(budget, AT, {
+        budget.check(BudgetKind::ProofNodes, size(steps.len(), AT)?, AT)?;
+        let root = steps.len().checked_sub(1).ok_or_else(invalid)?;
+        let mut reached = BTreeSet::new();
+        let mut pending = vec![root];
+        while let Some(index) = pending.pop() {
+            budget.work(size(steps.len(), AT)?, AT)?;
+            if !reached.insert(index) {
+                continue;
             }
-            pending.push(previous);
+            let step = steps.get(index).ok_or_else(invalid)?;
+            if !step.rule.specification().available {
+                return Err(Fault::invalid(InvalidCode::UnsupportedFragment, AT));
+            }
+            crate::proof_view::measure(cas, step, budget)?;
+            pending
+                .try_reserve(step.premises.len())
+                .map_err(|_| Fault::allocation(AT))?;
+            for previous in &step.premises {
+                let previous = usize::try_from(*previous).map_err(|_| invalid())?;
+                if previous >= index {
+                    return Err(invalid());
+                }
+                pending.push(previous);
+            }
         }
-    }
-    if reached.len() != steps.len() {
-        return Err(invalid());
-    }
-    Ok(())
+        if reached.len() != steps.len() {
+            return Err(invalid());
+        }
+        Ok(())
+    })
 }
 
 /// Own the complete premise inventory until the checked step has been published.
@@ -260,52 +262,53 @@ pub(crate) fn check_application(
     premises: &[CheckedApplication],
     budget: &mut Budget,
 ) -> Result<CheckedApplication, Fault> {
-    #[cfg(test)]
-    let _attribution = crate::testing::work_trace::Scope::rule(draft.rule.specification().key);
-    crate::proof_view::measure(cas, draft, budget)?;
-    crate::solving::coefficients::scope::check(cas, draft, premises, budget)?;
-    let (mut conditions, scalar_view) = rule_conditions(cas, draft, premises, budget)?;
-    conditions.requirements = crate::statement::union(cas, &conditions.requirements, budget)?;
-    conditions.residuals = crate::statement::union(cas, &conditions.residuals, budget)?;
-    crate::statement::canonical_hypotheses(cas, &mut conditions.hypotheses, budget)?;
-    for hypothesis in &conditions.hypotheses {
-        if !crate::context_check::ancestor(
-            cas,
-            cas.checked(&hypothesis.context)?,
-            cas.checked(&draft.context)?,
-            budget,
-        )? {
-            return Err(invalid());
+    let _attribution = crate::work_observation::Scope::rule(|| draft.rule.specification().key);
+    crate::work_observation::observe!(budget, crate::error::Location::new(""), {
+        crate::proof_view::measure(cas, draft, budget)?;
+        crate::solving::coefficients::scope::check(cas, draft, premises, budget)?;
+        let (mut conditions, scalar_view) = rule_conditions(cas, draft, premises, budget)?;
+        conditions.requirements = crate::statement::union(cas, &conditions.requirements, budget)?;
+        conditions.residuals = crate::statement::union(cas, &conditions.residuals, budget)?;
+        crate::statement::canonical_hypotheses(cas, &mut conditions.hypotheses, budget)?;
+        for hypothesis in &conditions.hypotheses {
+            if !crate::context_check::ancestor(
+                cas,
+                cas.checked(&hypothesis.context)?,
+                cas.checked(&draft.context)?,
+                budget,
+            )? {
+                return Err(invalid());
+            }
         }
-    }
-    let mut depth = 1_u64;
-    for premise in premises {
-        depth = depth.max(
-            premise
-                .depth
-                .checked_add(1)
-                .ok_or_else(|| Fault::capacity(BudgetKind::Depth, AT))?,
-        );
-    }
-    budget.check(BudgetKind::Depth, depth, AT)?;
-    let layer = crate::statement::layer(&draft.conclusion);
-    let judgment = Judgment {
-        context: draft.context.clone(),
-        layer,
-        space: crate::statement::space(&draft.conclusion),
-        statement: draft.conclusion.clone(),
-        residuals: conditions.residuals.clone(),
-    };
-    crate::proof_view::validate_judgment(cas, &judgment, budget)?;
-    Ok(CheckedApplication {
-        scalar: scalar_view,
-        rule: draft.rule,
-        judgment,
-        premises: Vec::new(),
-        substitutions: draft.substitutions.clone(),
-        certificate: draft.certificate.clone(),
-        conditions,
-        depth,
+        let mut depth = 1_u64;
+        for premise in premises {
+            depth = depth.max(
+                premise
+                    .depth
+                    .checked_add(1)
+                    .ok_or_else(|| Fault::capacity(BudgetKind::Depth, AT))?,
+            );
+        }
+        budget.check(BudgetKind::Depth, depth, AT)?;
+        let layer = crate::statement::layer(&draft.conclusion);
+        let judgment = Judgment {
+            context: draft.context.clone(),
+            layer,
+            space: crate::statement::space(&draft.conclusion),
+            statement: draft.conclusion.clone(),
+            residuals: conditions.residuals.clone(),
+        };
+        crate::proof_view::validate_judgment(cas, &judgment, budget)?;
+        Ok(CheckedApplication {
+            scalar: scalar_view,
+            rule: draft.rule,
+            judgment,
+            premises: Vec::new(),
+            substitutions: draft.substitutions.clone(),
+            certificate: draft.certificate.clone(),
+            conditions,
+            depth,
+        })
     })
 }
 
@@ -315,15 +318,16 @@ fn local_judgment_equal(
     actual: &Judgment,
     budget: &mut Budget,
 ) -> Result<bool, Fault> {
-    #[cfg(test)]
-    let _phase = crate::testing::work_trace::Scope::phase("overhead.judgment-comparison");
-    let length = {
-        let mut out = crate::encoding::Encoder::new(budget, AT);
-        crate::statement::judgment(expected, &mut out)?;
-        size(out.finish().len(), AT)?
-    };
-    budget.work(length, AT)?;
-    Ok(expected == actual)
+    let _phase = crate::work_observation::Scope::phase("overhead.judgment-comparison");
+    crate::work_observation::observe!(budget, AT, {
+        let length = {
+            let mut out = crate::encoding::Encoder::new(budget, AT);
+            crate::statement::judgment(expected, &mut out)?;
+            size(out.finish().len(), AT)?
+        };
+        budget.work(length, AT)?;
+        Ok(expected == actual)
+    })
 }
 
 impl Cas {

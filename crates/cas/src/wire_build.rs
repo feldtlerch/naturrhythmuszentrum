@@ -228,79 +228,81 @@ fn ready(
     rule_index: Option<u32>,
     budget: &mut Budget,
 ) -> Result<Option<Vec<u8>>, Fault> {
-    let mut indices = Vec::new();
-    indices
-        .try_reserve_exact(record.references.len())
-        .map_err(|_| Fault::allocation(AT))?;
-    for (_, entity) in &record.references {
-        let id = key(cas, entity, budget)?;
-        let Some(value) = assigned.get(&id) else {
-            return Ok(None);
-        };
-        indices.push(value);
-    }
-    let space = if let Some(space) = &record.space {
-        let Some(value) = assigned.get(&key(cas, space, budget)?) else {
-            return Ok(None);
-        };
-        Some(value.0)
-    } else {
-        None
-    };
-    budget.work(size(record.payload.len(), AT)?, AT)?;
-    let mut payload = Vec::new();
-    payload
-        .try_reserve_exact(record.payload.len())
-        .map_err(|_| Fault::allocation(AT))?;
-    payload.extend_from_slice(&record.payload);
-    if let Some(index) = rule_index {
-        payload
-            .get_mut(..4)
-            .ok_or_else(invalid)?
-            .copy_from_slice(&index.to_le_bytes());
-    }
-    for positions in &record.sets {
-        let mut values = Vec::new();
-        values
-            .try_reserve_exact(positions.len())
+    crate::work_observation::observe!(budget, AT, {
+        let mut indices = Vec::new();
+        indices
+            .try_reserve_exact(record.references.len())
             .map_err(|_| Fault::allocation(AT))?;
-        for position in positions {
-            values.push(*indices.get(*position).ok_or_else(invalid)?);
+        for (_, entity) in &record.references {
+            let id = key(cas, entity, budget)?;
+            let Some(value) = assigned.get(&id) else {
+                return Ok(None);
+            };
+            indices.push(value);
         }
-        budget.work(
-            size(values.len(), AT)?
-                .checked_mul(size(payload.len(), AT)?)
-                .ok_or_else(invalid)?,
-            AT,
-        )?;
-        values.sort_by(|left, right| left.1.cmp(&right.1));
-        for (position, value) in positions.iter().zip(values) {
-            *indices.get_mut(*position).ok_or_else(invalid)? = value;
-        }
-    }
-    for ((offset, _), (index, _)) in record.references.iter().zip(indices) {
-        let end = offset.checked_add(4).ok_or_else(invalid)?;
+        let space = if let Some(space) = &record.space {
+            let Some(value) = assigned.get(&key(cas, space, budget)?) else {
+                return Ok(None);
+            };
+            Some(value.0)
+        } else {
+            None
+        };
+        budget.work(size(record.payload.len(), AT)?, AT)?;
+        let mut payload = Vec::new();
         payload
-            .get_mut(*offset..end)
-            .ok_or_else(invalid)?
-            .copy_from_slice(&index.to_le_bytes());
-    }
-    reorder_rows(cas, record, assigned, &mut payload, budget)?;
-    let mut out = Encoder::witness(budget, AT);
-    out.byte(record.tag)?;
-    let length = payload
-        .len()
-        .checked_add(if space.is_some() { 10 } else { 6 })
-        .ok_or_else(invalid)?;
-    out.count(length)?;
-    crate::wire::index(1, &mut out)?;
-    out.byte(record.layer.tag())?;
-    out.byte(u8::from(space.is_some()))?;
-    if let Some(space) = space {
-        crate::wire::index(space, &mut out)?;
-    }
-    out.raw(&payload)?;
-    Ok(Some(out.finish()))
+            .try_reserve_exact(record.payload.len())
+            .map_err(|_| Fault::allocation(AT))?;
+        payload.extend_from_slice(&record.payload);
+        if let Some(index) = rule_index {
+            payload
+                .get_mut(..4)
+                .ok_or_else(invalid)?
+                .copy_from_slice(&index.to_le_bytes());
+        }
+        for positions in &record.sets {
+            let mut values = Vec::new();
+            values
+                .try_reserve_exact(positions.len())
+                .map_err(|_| Fault::allocation(AT))?;
+            for position in positions {
+                values.push(*indices.get(*position).ok_or_else(invalid)?);
+            }
+            budget.work(
+                size(values.len(), AT)?
+                    .checked_mul(size(payload.len(), AT)?)
+                    .ok_or_else(invalid)?,
+                AT,
+            )?;
+            values.sort_by(|left, right| left.1.cmp(&right.1));
+            for (position, value) in positions.iter().zip(values) {
+                *indices.get_mut(*position).ok_or_else(invalid)? = value;
+            }
+        }
+        for ((offset, _), (index, _)) in record.references.iter().zip(indices) {
+            let end = offset.checked_add(4).ok_or_else(invalid)?;
+            payload
+                .get_mut(*offset..end)
+                .ok_or_else(invalid)?
+                .copy_from_slice(&index.to_le_bytes());
+        }
+        reorder_rows(cas, record, assigned, &mut payload, budget)?;
+        let mut out = Encoder::witness(budget, AT);
+        out.byte(record.tag)?;
+        let length = payload
+            .len()
+            .checked_add(if space.is_some() { 10 } else { 6 })
+            .ok_or_else(invalid)?;
+        out.count(length)?;
+        crate::wire::index(1, &mut out)?;
+        out.byte(record.layer.tag())?;
+        out.byte(u8::from(space.is_some()))?;
+        if let Some(space) = space {
+            crate::wire::index(space, &mut out)?;
+        }
+        out.raw(&payload)?;
+        Ok(Some(out.finish()))
+    })
 }
 
 /// Encoded records, root index and the exact set of referenced primitive schemas.
@@ -355,55 +357,58 @@ fn take_ready(
     assigned: &Assignments,
     budget: &mut Budget,
 ) -> Result<(Vec<Key>, Vec<u8>), Fault> {
-    let mut least: Option<&Vec<u8>> = None;
-    let mut keys = Vec::new();
-    for (id, record) in records.iter_mut() {
-        budget.work(1, AT)?;
-        if record.canonical.is_none() {
-            record.canonical = ready(cas, &record.source, assigned, record.rule_index, budget)?;
+    crate::work_observation::observe!(budget, AT, {
+        let mut least: Option<&Vec<u8>> = None;
+        let mut keys = Vec::new();
+        for (id, record) in records.iter_mut() {
+            budget.work(1, AT)?;
+            if record.canonical.is_none() {
+                record.canonical = ready(cas, &record.source, assigned, record.rule_index, budget)?;
+            }
+            let Some(candidate) = &record.canonical else {
+                continue;
+            };
+            if least.is_some_and(|previous| candidate > previous) {
+                continue;
+            }
+            if least.is_none_or(|previous| candidate < previous) {
+                least = Some(candidate);
+                keys.clear();
+            }
+            keys.try_reserve(1).map_err(|_| Fault::allocation(AT))?;
+            keys.push(id.clone());
         }
-        let Some(candidate) = &record.canonical else {
-            continue;
-        };
-        if least.is_some_and(|previous| candidate > previous) {
-            continue;
+        let mut descriptor = None;
+        for id in &keys {
+            let record = records.remove(id).ok_or_else(invalid)?;
+            if descriptor.is_none() {
+                descriptor = record.canonical;
+            }
         }
-        if least.is_none_or(|previous| candidate < previous) {
-            least = Some(candidate);
-            keys.clear();
-        }
-        keys.try_reserve(1).map_err(|_| Fault::allocation(AT))?;
-        keys.push(id.clone());
-    }
-    let mut descriptor = None;
-    for id in &keys {
-        let record = records.remove(id).ok_or_else(invalid)?;
-        if descriptor.is_none() {
-            descriptor = record.canonical;
-        }
-    }
-    Ok((keys, descriptor.ok_or_else(invalid)?))
+        Ok((keys, descriptor.ok_or_else(invalid)?))
+    })
 }
 
 /// Encode a theorem DAG with a sorted manifest; table-local framing patches primitive indices.
 pub(crate) fn encode(cas: &Cas, proof: LogicalId, budget: &mut Budget) -> Result<Vec<u8>, Fault> {
-    #[cfg(test)]
-    let _attribution = crate::testing::work_trace::Scope::phase("witness encoding");
-    let application = crate::proof_view::application(cas, proof, budget)?;
-    let root = if matches!(
-        application.judgment.statement,
-        crate::proof_model::Statement::Series(_)
-    ) {
-        Entity::Object(proof)
-    } else {
-        Entity::conclusion(
-            Some(proof),
-            application.judgment,
-            application.conditions.hypotheses,
-        )
-    };
-    let (records, root, rules) = table(cas, root, budget)?;
-    envelope(records, root, &rules, crate::wire::MAGIC, budget)
+    let _attribution = crate::work_observation::Scope::phase("witness encoding");
+    crate::work_observation::observe!(budget, crate::error::Location::new(""), {
+        let application = crate::proof_view::application(cas, proof, budget)?;
+        let root = if matches!(
+            application.judgment.statement,
+            crate::proof_model::Statement::Series(_)
+        ) {
+            Entity::Object(proof)
+        } else {
+            Entity::conclusion(
+                Some(proof),
+                application.judgment,
+                application.conditions.hypotheses,
+            )
+        };
+        let (records, root, rules) = table(cas, root, budget)?;
+        envelope(records, root, &rules, crate::wire::MAGIC, budget)
+    })
 }
 
 /// A portable theorem comparison includes precisely its complete context and residual tuple set.
@@ -412,11 +417,12 @@ pub(crate) fn judgment_key(
     judgment: &Judgment,
     budget: &mut Budget,
 ) -> Result<Vec<u8>, Fault> {
-    #[cfg(test)]
-    let _attribution = crate::testing::work_trace::Scope::phase("judgment comparison");
-    let root = Entity::conclusion(None, judgment.clone(), Vec::new());
-    let (records, root, rules) = table(cas, root, budget)?;
-    envelope(records, root, &rules, b"NRZJDG04", budget)
+    let _attribution = crate::work_observation::Scope::phase("judgment comparison");
+    crate::work_observation::observe!(budget, crate::error::Location::new(""), {
+        let root = Entity::conclusion(None, judgment.clone(), Vec::new());
+        let (records, root, rules) = table(cas, root, budget)?;
+        envelope(records, root, &rules, b"NRZJDG04", budget)
+    })
 }
 
 /// Build a complete portable syntax key without exposing allocation-dependent logical identifiers.

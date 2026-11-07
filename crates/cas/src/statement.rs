@@ -128,20 +128,22 @@ pub(crate) fn canonical_hypotheses(
     values: &mut Vec<HypothesisRef>,
     budget: &mut Budget,
 ) -> Result<(), Fault> {
-    let count = size(values.len(), AT)?;
-    budget.check(BudgetKind::ConditionAtoms, count, AT)?;
-    budget.condition(
-        count
-            .checked_mul(count)
-            .ok_or_else(|| Fault::capacity(BudgetKind::ConditionSteps, AT))?,
-        AT,
-    )?;
-    for value in values.iter() {
-        cas.state.context(cas.checked(&value.context)?)?;
-    }
-    values.sort_by_key(|value| (value.context.logical_id(), value.slot));
-    values.dedup();
-    Ok(())
+    crate::work_observation::observe!(budget, AT, {
+        let count = size(values.len(), AT)?;
+        budget.check(BudgetKind::ConditionAtoms, count, AT)?;
+        budget.condition(
+            count
+                .checked_mul(count)
+                .ok_or_else(|| Fault::capacity(BudgetKind::ConditionSteps, AT))?,
+            AT,
+        )?;
+        for value in values.iter() {
+            cas.state.context(cas.checked(&value.context)?)?;
+        }
+        values.sort_by_key(|value| (value.context.logical_id(), value.slot));
+        values.dedup();
+        Ok(())
+    })
 }
 
 /// Encode complete local judgment identity, including canonical residuals.

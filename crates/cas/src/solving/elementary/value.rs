@@ -25,18 +25,20 @@ impl Value {
         other: &Self,
         budget: &mut Budget,
     ) -> Result<Vec<crate::graph::LogicalId>, Fault> {
-        let mut result = crate::solving::coefficients::storage::copied(&self.maps, budget)?;
-        for map in &other.maps {
-            budget.work(
-                crate::graph::size(result.len(), super::proof::AT)?.max(1),
-                super::proof::AT,
-            )?;
-            if !result.contains(map) {
-                crate::solving::coefficients::storage::reserve(&mut result, 1, budget)?;
-                result.push(*map);
+        crate::work_observation::observe!(budget, super::proof::AT, {
+            let mut result = crate::solving::coefficients::storage::copied(&self.maps, budget)?;
+            for map in &other.maps {
+                budget.work(
+                    crate::graph::size(result.len(), super::proof::AT)?.max(1),
+                    super::proof::AT,
+                )?;
+                if !result.contains(map) {
+                    crate::solving::coefficients::storage::reserve(&mut result, 1, budget)?;
+                    result.push(*map);
+                }
             }
-        }
-        Ok(result)
+            Ok(result)
+        })
     }
 
     /// Embed an exact polynomial as a total rational expression.
@@ -143,75 +145,77 @@ impl Value {
         engine: &Engine<'_>,
         budget: &mut Budget,
     ) -> Result<Option<Self>, Fault> {
-        use crate::solving::coefficients::{
-            forms::Term,
-            storage::{copied, vector},
-        };
-        let ([first], [second]) = (
-            self.denominator.terms.as_slice(),
-            other.denominator.terms.as_slice(),
-        ) else {
-            return Ok(None);
-        };
-        let mut left = copied(&first.powers, budget)?;
-        let mut right = copied(&second.powers, budget)?;
-        let mut common = false;
-        for (variable, exponent) in &mut left {
+        crate::work_observation::observe!(budget, super::proof::AT, {
+            use crate::solving::coefficients::{
+                forms::Term,
+                storage::{copied, vector},
+            };
+            let ([first], [second]) = (
+                self.denominator.terms.as_slice(),
+                other.denominator.terms.as_slice(),
+            ) else {
+                return Ok(None);
+            };
+            let mut left = copied(&first.powers, budget)?;
+            let mut right = copied(&second.powers, budget)?;
+            let mut common = false;
+            for (variable, exponent) in &mut left {
+                budget.work(
+                    crate::graph::size(right.len(), super::proof::AT)?.max(1),
+                    super::proof::AT,
+                )?;
+                if let Ok(index) = right.binary_search_by_key(variable, |entry| entry.0) {
+                    let shared = (*exponent).min(right[index].1);
+                    *exponent -= shared;
+                    right[index].1 -= shared;
+                    common |= shared > 0;
+                }
+            }
+            if !common {
+                return Ok(None);
+            }
             budget.work(
-                crate::graph::size(right.len(), super::proof::AT)?.max(1),
+                crate::solving::coefficients::storage::add(
+                    crate::graph::size(left.len(), super::proof::AT)?,
+                    crate::graph::size(right.len(), super::proof::AT)?,
+                )?,
                 super::proof::AT,
             )?;
-            if let Ok(index) = right.binary_search_by_key(variable, |entry| entry.0) {
-                let shared = (*exponent).min(right[index].1);
-                *exponent -= shared;
-                right[index].1 -= shared;
-                common |= shared > 0;
-            }
-        }
-        if !common {
-            return Ok(None);
-        }
-        budget.work(
-            crate::solving::coefficients::storage::add(
-                crate::graph::size(left.len(), super::proof::AT)?,
-                crate::graph::size(right.len(), super::proof::AT)?,
-            )?,
-            super::proof::AT,
-        )?;
-        left.retain(|entry| entry.1 != 0);
-        right.retain(|entry| entry.1 != 0);
-        let mut left_terms = vector(1, budget)?;
-        left_terms.push(Term {
-            powers: left,
-            coefficient: engine
-                .copy(&first.coefficient, budget)
-                .map_err(|e| fault(&e))?,
-        });
-        let mut right_terms = vector(1, budget)?;
-        right_terms.push(Term {
-            powers: right,
-            coefficient: engine
-                .copy(&second.coefficient, budget)
-                .map_err(|e| fault(&e))?,
-        });
-        let first_reduced = Form { terms: left_terms };
-        let second_reduced = Form { terms: right_terms };
-        let left = self
-            .numerator
-            .mul(&second_reduced, engine, budget)
-            .map_err(|e| fault(&e))?;
-        let right = other
-            .numerator
-            .mul(&first_reduced, engine, budget)
-            .map_err(|e| fault(&e))?;
-        Ok(Some(Self {
-            maps: self.combined_maps(other, budget)?,
-            numerator: left.add(&right, engine, budget).map_err(|e| fault(&e))?,
-            denominator: self
-                .denominator
+            left.retain(|entry| entry.1 != 0);
+            right.retain(|entry| entry.1 != 0);
+            let mut left_terms = vector(1, budget)?;
+            left_terms.push(Term {
+                powers: left,
+                coefficient: engine
+                    .copy(&first.coefficient, budget)
+                    .map_err(|e| fault(&e))?,
+            });
+            let mut right_terms = vector(1, budget)?;
+            right_terms.push(Term {
+                powers: right,
+                coefficient: engine
+                    .copy(&second.coefficient, budget)
+                    .map_err(|e| fault(&e))?,
+            });
+            let first_reduced = Form { terms: left_terms };
+            let second_reduced = Form { terms: right_terms };
+            let left = self
+                .numerator
                 .mul(&second_reduced, engine, budget)
-                .map_err(|e| fault(&e))?,
-        }))
+                .map_err(|e| fault(&e))?;
+            let right = other
+                .numerator
+                .mul(&first_reduced, engine, budget)
+                .map_err(|e| fault(&e))?;
+            Ok(Some(Self {
+                maps: self.combined_maps(other, budget)?,
+                numerator: left.add(&right, engine, budget).map_err(|e| fault(&e))?,
+                denominator: self
+                    .denominator
+                    .mul(&second_reduced, engine, budget)
+                    .map_err(|e| fault(&e))?,
+            }))
+        })
     }
 
     /// Exact subtraction, with no semantic cancellation of holes.

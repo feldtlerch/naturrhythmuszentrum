@@ -54,16 +54,19 @@ fn arguments<'a>(
     earlier: &'a [RealSignStep],
     budget: &mut Budget,
 ) -> Result<Vec<&'a RealSignStep>, Fault> {
-    let mut result = crate::solving::coefficients::storage::vector(step.arguments.len(), budget)?;
-    for index in &step.arguments {
-        budget.work(1, AT)?;
-        result.push(
-            earlier
-                .get(usize::try_from(*index).map_err(|_| invalid())?)
-                .ok_or_else(invalid)?,
-        );
-    }
-    Ok(result)
+    crate::work_observation::observe!(budget, AT, {
+        let mut result =
+            crate::solving::coefficients::storage::vector(step.arguments.len(), budget)?;
+        for index in &step.arguments {
+            budget.work(1, AT)?;
+            result.push(
+                earlier
+                    .get(usize::try_from(*index).map_err(|_| invalid())?)
+                    .ok_or_else(invalid)?,
+            );
+        }
+        Ok(result)
+    })
 }
 
 /// Replay every node, including unused nodes, before comparing the exact requested conclusion.
@@ -74,64 +77,66 @@ pub(super) fn check(
     premises: &[CheckedApplication],
     budget: &mut Budget,
 ) -> Result<(), Fault> {
-    super::region(cas, &draft.context, &certificate.region)?;
-    super::closure::check(
-        cas,
-        certificate.steps.iter().map(|step| &step.subject),
-        None,
-        budget,
-    )?;
-    budget.check(
-        BudgetKind::ConditionSteps,
-        crate::graph::size(certificate.steps.len(), AT)?,
-        AT,
-    )?;
-    for (index, step) in certificate.steps.iter().enumerate() {
-        budget.solving(BudgetKind::IsolationSteps, 1, AT)?;
-        let earlier = certificate.steps.get(..index).ok_or_else(invalid)?;
-        let arguments = arguments(step, earlier, budget)?;
-        super::sign_rules::check(cas, &certificate.region, step, &arguments, premises, budget)?;
-    }
-    let root = certificate
-        .steps
-        .get(usize::try_from(certificate.root).map_err(|_| invalid())?)
-        .ok_or_else(invalid)?;
-    if root.subject != certificate.subject {
-        return Err(invalid());
-    }
-    match &draft.conclusion {
-        Statement::Solve(statement) => {
-            let SolveStatement::RealSign(claim) = statement.as_ref() else {
-                return Err(invalid());
-            };
-            if claim.subject != certificate.subject || claim.region != certificate.region {
-                return Err(invalid());
+    crate::work_observation::observe!(budget, AT, {
+        super::region(cas, &draft.context, &certificate.region)?;
+        super::closure::check(
+            cas,
+            certificate.steps.iter().map(|step| &step.subject),
+            None,
+            budget,
+        )?;
+        budget.check(
+            BudgetKind::ConditionSteps,
+            crate::graph::size(certificate.steps.len(), AT)?,
+            AT,
+        )?;
+        for (index, step) in certificate.steps.iter().enumerate() {
+            budget.solving(BudgetKind::IsolationSteps, 1, AT)?;
+            let earlier = certificate.steps.get(..index).ok_or_else(invalid)?;
+            let arguments = arguments(step, earlier, budget)?;
+            super::sign_rules::check(cas, &certificate.region, step, &arguments, premises, budget)?;
+        }
+        let root = certificate
+            .steps
+            .get(usize::try_from(certificate.root).map_err(|_| invalid())?)
+            .ok_or_else(invalid)?;
+        if root.subject != certificate.subject {
+            return Err(invalid());
+        }
+        match &draft.conclusion {
+            Statement::Solve(statement) => {
+                let SolveStatement::RealSign(claim) = statement.as_ref() else {
+                    return Err(invalid());
+                };
+                if claim.subject != certificate.subject || claim.region != certificate.region {
+                    return Err(invalid());
+                }
+                entails(mask(root.conclusion), claim.conclusion)
             }
-            entails(mask(root.conclusion), claim.conclusion)
-        }
-        Statement::Equality {
-            left,
-            right,
-            domain,
-            domain_contract: crate::proof_model::DomainContract::DefinedAndEqual,
-        } if *domain == certificate.region && root.conclusion == RealSignConclusion::Zero => {
-            let difference = cas.state.expression(root.subject.logical_id())?;
-            if difference.operator != crate::model::Operator::Sub
-                || difference.operands != [left.logical_id(), right.logical_id()]
-            {
-                return Err(invalid());
+            Statement::Equality {
+                left,
+                right,
+                domain,
+                domain_contract: crate::proof_model::DomainContract::DefinedAndEqual,
+            } if *domain == certificate.region && root.conclusion == RealSignConclusion::Zero => {
+                let difference = cas.state.expression(root.subject.logical_id())?;
+                if difference.operator != crate::model::Operator::Sub
+                    || difference.operands != [left.logical_id(), right.logical_id()]
+                {
+                    return Err(invalid());
+                }
+                Ok(())
             }
-            Ok(())
+            Statement::PredicateFact { predicate, region } if *region == certificate.region => {
+                super::sign_evidence::predicate(
+                    cas,
+                    predicate,
+                    &root.subject,
+                    mask(root.conclusion),
+                    budget,
+                )
+            }
+            _ => Err(invalid()),
         }
-        Statement::PredicateFact { predicate, region } if *region == certificate.region => {
-            super::sign_evidence::predicate(
-                cas,
-                predicate,
-                &root.subject,
-                mask(root.conclusion),
-                budget,
-            )
-        }
-        _ => Err(invalid()),
-    }
+    })
 }

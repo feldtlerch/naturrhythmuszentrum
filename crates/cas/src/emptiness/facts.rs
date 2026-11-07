@@ -18,30 +18,32 @@ pub(super) fn contained(
     ancestor: &Handle,
     budget: &mut Budget,
 ) -> Result<bool, Fault> {
-    let mut pending = crate::solving::coefficients::storage::vector(1, budget)?;
-    pending.push(cas.checked(region)?);
-    let target = cas.checked(ancestor)?;
-    while let Some(id) = pending.pop() {
-        budget.work(1, AT)?;
-        if id == target {
-            return Ok(true);
-        }
-        match &cas.state.region(id)?.expression {
-            RegionExpr::GuardTrue { base, .. }
-            | RegionExpr::GuardFalse { base, .. }
-            | RegionExpr::Difference { base, .. } => pending.push(*base),
-            RegionExpr::Meet(members) => {
-                crate::solving::coefficients::storage::reserve(
-                    &mut pending,
-                    members.len(),
-                    budget,
-                )?;
-                pending.extend(members);
+    crate::work_observation::observe!(budget, AT, {
+        let mut pending = crate::solving::coefficients::storage::vector(1, budget)?;
+        pending.push(cas.checked(region)?);
+        let target = cas.checked(ancestor)?;
+        while let Some(id) = pending.pop() {
+            budget.work(1, AT)?;
+            if id == target {
+                return Ok(true);
             }
-            _ => {}
+            match &cas.state.region(id)?.expression {
+                RegionExpr::GuardTrue { base, .. }
+                | RegionExpr::GuardFalse { base, .. }
+                | RegionExpr::Difference { base, .. } => pending.push(*base),
+                RegionExpr::Meet(members) => {
+                    crate::solving::coefficients::storage::reserve(
+                        &mut pending,
+                        members.len(),
+                        budget,
+                    )?;
+                    pending.extend(members);
+                }
+                _ => {}
+            }
         }
-    }
-    Ok(false)
+        Ok(false)
+    })
 }
 
 /// Literal zero never licenses cancellation of an undefined expression.
@@ -123,49 +125,51 @@ pub(crate) fn nonzero(
     premises: &[CheckedApplication],
     budget: &mut Budget,
 ) -> Result<(), Fault> {
-    budget.work(1, AT)?;
-    match fact {
-        EmptyFact::Guard(ancestor) => {
-            if !contained(cas, region, ancestor, budget)? {
-                return Err(invalid());
-            }
-            let RegionExpr::GuardTrue {
-                predicate: guard, ..
-            } = &cas.state.region(cas.checked(ancestor)?)?.expression
-            else {
-                return Err(invalid());
-            };
-            predicate(cas, *guard, subject)
-        }
-        EmptyFact::Premise(slot) => match &premise(premises, *slot)?.judgment.statement {
-            Statement::PredicateFact {
-                region: domain,
-                predicate: guard,
-            } => {
-                if !contained(cas, region, domain, budget)? {
+    crate::work_observation::observe!(budget, AT, {
+        budget.work(1, AT)?;
+        match fact {
+            EmptyFact::Guard(ancestor) => {
+                if !contained(cas, region, ancestor, budget)? {
                     return Err(invalid());
                 }
-                predicate(cas, cas.checked(guard)?, subject)
-            }
-            Statement::Solve(statement) => {
-                let SolveStatement::RealSign(sign) = statement.as_ref() else {
+                let RegionExpr::GuardTrue {
+                    predicate: guard, ..
+                } = &cas.state.region(cas.checked(ancestor)?)?.expression
+                else {
                     return Err(invalid());
                 };
-                let strict = matches!(
-                    sign.conclusion,
-                    RealSignConclusion::Positive
-                        | RealSignConclusion::Negative
-                        | RealSignConclusion::NonZero
-                );
-                if sign.subject != *subject
-                    || !strict
-                    || !contained(cas, region, &sign.region, budget)?
-                {
-                    return Err(invalid());
-                }
-                Ok(())
+                predicate(cas, *guard, subject)
             }
-            _ => Err(invalid()),
-        },
-    }
+            EmptyFact::Premise(slot) => match &premise(premises, *slot)?.judgment.statement {
+                Statement::PredicateFact {
+                    region: domain,
+                    predicate: guard,
+                } => {
+                    if !contained(cas, region, domain, budget)? {
+                        return Err(invalid());
+                    }
+                    predicate(cas, cas.checked(guard)?, subject)
+                }
+                Statement::Solve(statement) => {
+                    let SolveStatement::RealSign(sign) = statement.as_ref() else {
+                        return Err(invalid());
+                    };
+                    let strict = matches!(
+                        sign.conclusion,
+                        RealSignConclusion::Positive
+                            | RealSignConclusion::Negative
+                            | RealSignConclusion::NonZero
+                    );
+                    if sign.subject != *subject
+                        || !strict
+                        || !contained(cas, region, &sign.region, budget)?
+                    {
+                        return Err(invalid());
+                    }
+                    Ok(())
+                }
+                _ => Err(invalid()),
+            },
+        }
+    })
 }

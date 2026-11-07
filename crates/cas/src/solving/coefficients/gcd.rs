@@ -101,18 +101,20 @@ fn monomial_quotient(
     divisor: &Term,
     budget: &mut Budget,
 ) -> Result<Option<Polynomial>, Fault> {
-    if let Some(maximum) = dividend.total_degree(budget)? {
-        budget.check(BudgetKind::PolynomialDegree, maximum, AT)?;
-    }
-    let mut terms = vector(dividend.terms.len(), budget)?;
-    for current in &dividend.terms {
-        budget.solving(BudgetKind::GcdSteps, 1, AT)?;
-        let Some(term) = quotient_term(current, divisor, budget)? else {
-            return Ok(None);
-        };
-        terms.push(term);
-    }
-    Polynomial::new(dividend.variables, dividend.ground, terms, budget).map(Some)
+    crate::work_observation::observe!(budget, AT, {
+        if let Some(maximum) = dividend.total_degree(budget)? {
+            budget.check(BudgetKind::PolynomialDegree, maximum, AT)?;
+        }
+        let mut terms = vector(dividend.terms.len(), budget)?;
+        for current in &dividend.terms {
+            budget.solving(BudgetKind::GcdSteps, 1, AT)?;
+            let Some(term) = quotient_term(current, divisor, budget)? else {
+                return Ok(None);
+            };
+            terms.push(term);
+        }
+        Polynomial::new(dividend.variables, dividend.ground, terms, budget).map(Some)
+    })
 }
 
 /// Exact polynomial division; a nonzero remainder is an ordinary failed divisibility check.
@@ -348,29 +350,31 @@ fn monomial(
     right: &Polynomial,
     budget: &mut Budget,
 ) -> Result<Option<Polynomial>, Fault> {
-    let (single, other) = match (left.terms.as_slice(), right.terms.as_slice()) {
-        ([term], _) => (term, right),
-        (_, [term]) => (term, left),
-        _ => return Ok(None),
-    };
-    let mut powers = super::storage::copied(&single.powers, budget)?;
-    for term in &other.terms {
-        for (minimum, exponent) in powers.iter_mut().zip(&term.powers) {
-            budget.work(1, AT)?;
-            *minimum = (*minimum).min(*exponent);
+    crate::work_observation::observe!(budget, AT, {
+        let (single, other) = match (left.terms.as_slice(), right.terms.as_slice()) {
+            ([term], _) => (term, right),
+            (_, [term]) => (term, left),
+            _ => return Ok(None),
+        };
+        let mut powers = super::storage::copied(&single.powers, budget)?;
+        for term in &other.terms {
+            for (minimum, exponent) in powers.iter_mut().zip(&term.powers) {
+                budget.work(1, AT)?;
+                *minimum = (*minimum).min(*exponent);
+            }
         }
-    }
-    let mut terms = vector(1, budget)?;
-    terms.push(Term {
-        powers,
-        coefficient: Scalar::constant(left.ground, true, budget)?,
-    });
-    Ok(Some(Polynomial::new(
-        left.variables,
-        left.ground,
-        terms,
-        budget,
-    )?))
+        let mut terms = vector(1, budget)?;
+        terms.push(Term {
+            powers,
+            coefficient: Scalar::constant(left.ground, true, budget)?,
+        });
+        Ok(Some(Polynomial::new(
+            left.variables,
+            left.ground,
+            terms,
+            budget,
+        )?))
+    })
 }
 
 /// If one operand omits a variable, its gcd with the other is the gcd with all coefficients in that variable.

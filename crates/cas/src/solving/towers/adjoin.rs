@@ -56,19 +56,21 @@ fn selection<'a>(
     certificate: &CertificateRootAdjunction,
     budget: &mut Budget,
 ) -> Result<Option<&'a RootSelectionData<Handle>>, Fault> {
-    let Some(handle) = &certificate.selection else {
-        return Ok(None);
-    };
-    budget.solving(BudgetKind::SelectionSlots, 1, AT)?;
-    let SolveDraft::RootSelection(value) =
-        crate::solving::graph::object(&cas.state, cas.checked(handle)?)?
-    else {
-        return Err(invalid());
-    };
-    if value.relations.as_slice() != std::slice::from_ref(&certificate.relation) {
-        return Err(invalid());
-    }
-    Ok(Some(value))
+    crate::work_observation::observe!(budget, AT, {
+        let Some(handle) = &certificate.selection else {
+            return Ok(None);
+        };
+        budget.solving(BudgetKind::SelectionSlots, 1, AT)?;
+        let SolveDraft::RootSelection(value) =
+            crate::solving::graph::object(&cas.state, cas.checked(handle)?)?
+        else {
+            return Err(invalid());
+        };
+        if value.relations.as_slice() != std::slice::from_ref(&certificate.relation) {
+            return Err(invalid());
+        }
+        Ok(Some(value))
+    })
 }
 
 /// Ordinary FTA and primitive-unity existence do not discharge a bare constraint or principal convention.
@@ -183,38 +185,40 @@ pub(crate) fn check(
     premises: &[CheckedApplication],
     budget: &mut Budget,
 ) -> Result<(), Fault> {
-    budget.work(1, AT)?;
-    let SolveDraft::RootRelation(relation) =
-        crate::solving::graph::object(&cas.state, cas.checked(&certificate.relation)?)?
-    else {
-        return Err(invalid());
-    };
-    let Statement::Solve(statement) = &draft.conclusion else {
-        return Err(invalid());
-    };
-    let SolveStatement::RootExistence(existence) = statement.as_ref() else {
-        return Err(invalid());
-    };
-    let target = certificate
-        .selection
-        .as_ref()
-        .unwrap_or(&certificate.relation);
-    if existence.relation != *target
-        || existence.region != relation.region
-        || cas.state.context(cas.checked(&draft.context)?)?.admissible
-            != relation.region.logical_id()
-    {
-        return Err(invalid());
-    }
-    leading(cas, relation, certificate.leading_unit, premises, budget)?;
-    let map = crate::solving::coefficients::proof::mapping(
-        cas,
-        &relation.map,
-        &draft.context,
-        &relation.region,
-        budget,
-    )?;
-    crate::solving::coefficients::proof::identity_map(cas, map, premises, budget)?;
-    let selected = selection(cas, certificate, budget)?;
-    theorem(cas, certificate, relation, selected, premises, budget)
+    crate::work_observation::observe!(budget, AT, {
+        budget.work(1, AT)?;
+        let SolveDraft::RootRelation(relation) =
+            crate::solving::graph::object(&cas.state, cas.checked(&certificate.relation)?)?
+        else {
+            return Err(invalid());
+        };
+        let Statement::Solve(statement) = &draft.conclusion else {
+            return Err(invalid());
+        };
+        let SolveStatement::RootExistence(existence) = statement.as_ref() else {
+            return Err(invalid());
+        };
+        let target = certificate
+            .selection
+            .as_ref()
+            .unwrap_or(&certificate.relation);
+        if existence.relation != *target
+            || existence.region != relation.region
+            || cas.state.context(cas.checked(&draft.context)?)?.admissible
+                != relation.region.logical_id()
+        {
+            return Err(invalid());
+        }
+        leading(cas, relation, certificate.leading_unit, premises, budget)?;
+        let map = crate::solving::coefficients::proof::mapping(
+            cas,
+            &relation.map,
+            &draft.context,
+            &relation.region,
+            budget,
+        )?;
+        crate::solving::coefficients::proof::identity_map(cas, map, premises, budget)?;
+        let selected = selection(cas, certificate, budget)?;
+        theorem(cas, certificate, relation, selected, premises, budget)
+    })
 }

@@ -274,40 +274,44 @@ pub(crate) fn check(
     premises: &[CheckedApplication],
     budget: &mut Budget,
 ) -> Result<(), Fault> {
-    budget.work(1, AT)?;
-    let frame = cas.state.context(cas.checked(&draft.context)?)?;
-    if frame.admissible != cas.checked(&certificate.region)? {
-        return Err(invalid());
-    }
-    for handle in [&certificate.element, &certificate.modulus, &certificate.gcd]
-        .into_iter()
-        .chain(&certificate.quotients)
-        .chain(&certificate.bezout)
-    {
-        defined(cas, handle, &certificate.region, premises, budget)?;
-    }
-    let element = subject(cas, &certificate.element, &certificate.modulus, budget)?;
-    let modulus =
-        Dense::read(&cas.state, &certificate.modulus, budget).map_err(|error| fault(&error))?;
-    let divisor =
-        Dense::read(&cas.state, &certificate.gcd, budget).map_err(|error| fault(&error))?;
-    identities(cas, certificate, &element, &modulus, &divisor, budget)?;
-    match &draft.conclusion {
-        Statement::Solve(statement) if matches!(statement.as_ref(), SolveStatement::Unit(_)) => {
-            let SolveStatement::Unit(claim) = statement.as_ref() else {
-                return Err(invalid());
-            };
-            defined(cas, &claim.inverse, &certificate.region, premises, budget)?;
-            unit(cas, draft, certificate, &divisor, budget)
+    crate::work_observation::observe!(budget, AT, {
+        budget.work(1, AT)?;
+        let frame = cas.state.context(cas.checked(&draft.context)?)?;
+        if frame.admissible != cas.checked(&certificate.region)? {
+            return Err(invalid());
         }
-        _ => zero(
-            cas,
-            draft,
-            certificate,
-            &modulus,
-            &divisor,
-            premises,
-            budget,
-        ),
-    }
+        for handle in [&certificate.element, &certificate.modulus, &certificate.gcd]
+            .into_iter()
+            .chain(&certificate.quotients)
+            .chain(&certificate.bezout)
+        {
+            defined(cas, handle, &certificate.region, premises, budget)?;
+        }
+        let element = subject(cas, &certificate.element, &certificate.modulus, budget)?;
+        let modulus =
+            Dense::read(&cas.state, &certificate.modulus, budget).map_err(|error| fault(&error))?;
+        let divisor =
+            Dense::read(&cas.state, &certificate.gcd, budget).map_err(|error| fault(&error))?;
+        identities(cas, certificate, &element, &modulus, &divisor, budget)?;
+        match &draft.conclusion {
+            Statement::Solve(statement)
+                if matches!(statement.as_ref(), SolveStatement::Unit(_)) =>
+            {
+                let SolveStatement::Unit(claim) = statement.as_ref() else {
+                    return Err(invalid());
+                };
+                defined(cas, &claim.inverse, &certificate.region, premises, budget)?;
+                unit(cas, draft, certificate, &divisor, budget)
+            }
+            _ => zero(
+                cas,
+                draft,
+                certificate,
+                &modulus,
+                &divisor,
+                premises,
+                budget,
+            ),
+        }
+    })
 }

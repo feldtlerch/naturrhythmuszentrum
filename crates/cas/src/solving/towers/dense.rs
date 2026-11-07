@@ -180,41 +180,43 @@ impl Dense {
         state: &State,
         budget: &mut Budget,
     ) -> Result<Self, CoefficientFailure> {
-        begin(budget)?;
-        if self.domain != other.domain {
-            return Err(invalid().into());
-        }
-        let engine = Engine {
-            state,
-            domain: &self.domain,
-        };
-        if self.coefficients.is_empty() || other.coefficients.is_empty() {
-            return Self::zero(&engine, budget);
-        }
-        let count = add(
-            size(self.coefficients.len(), AT)?,
-            size(other.coefficients.len(), AT)?,
-        )?
-        .checked_sub(1)
-        .ok_or_else(invalid)?;
-        budget.work(
-            product(
+        crate::work_observation::observe!(budget, AT, {
+            begin(budget)?;
+            if self.domain != other.domain {
+                return Err(invalid().into());
+            }
+            let engine = Engine {
+                state,
+                domain: &self.domain,
+            };
+            if self.coefficients.is_empty() || other.coefficients.is_empty() {
+                return Self::zero(&engine, budget);
+            }
+            let count = add(
                 size(self.coefficients.len(), AT)?,
                 size(other.coefficients.len(), AT)?,
-            )?,
-            AT,
-        )?;
-        let mut coefficients = zero_vector(&engine, count, budget)?;
-        for (left_index, left) in self.coefficients.iter().enumerate() {
-            for (right_index, right) in other.coefficients.iter().enumerate() {
-                let index = left_index
-                    .checked_add(right_index)
-                    .ok_or_else(|| Fault::capacity(BudgetKind::PolynomialDegree, AT))?;
-                let output = coefficients.get_mut(index).ok_or_else(invalid)?;
-                *output = engine.add(output, &engine.mul(left, right, budget)?, budget)?;
+            )?
+            .checked_sub(1)
+            .ok_or_else(invalid)?;
+            budget.work(
+                product(
+                    size(self.coefficients.len(), AT)?,
+                    size(other.coefficients.len(), AT)?,
+                )?,
+                AT,
+            )?;
+            let mut coefficients = zero_vector(&engine, count, budget)?;
+            for (left_index, left) in self.coefficients.iter().enumerate() {
+                for (right_index, right) in other.coefficients.iter().enumerate() {
+                    let index = left_index
+                        .checked_add(right_index)
+                        .ok_or_else(|| Fault::capacity(BudgetKind::PolynomialDegree, AT))?;
+                    let output = coefficients.get_mut(index).ok_or_else(invalid)?;
+                    *output = engine.add(output, &engine.mul(left, right, budget)?, budget)?;
+                }
             }
-        }
-        Self::new(&engine, coefficients, budget)
+            Self::new(&engine, coefficients, budget)
+        })
     }
 
     /// Multiply by one parent coefficient and shift without hidden coefficient division.

@@ -64,25 +64,31 @@ impl<'a> Encoder<'a> {
 
     /// Append already encoded bytes after checking length and work.
     pub(crate) fn raw(&mut self, bytes: &[u8]) -> Result<(), Fault> {
-        let next = self
-            .bytes
-            .len()
-            .checked_add(bytes.len())
-            .ok_or_else(|| Fault::capacity(BudgetKind::PayloadBytes, self.at))?;
-        let size =
-            u64::try_from(next).map_err(|_| Fault::capacity(BudgetKind::PayloadBytes, self.at))?;
-        self.budget.check(self.limit, size, self.at)?;
-        self.budget
-            .check(BudgetKind::StagedPayloadBytes, size, self.at)?;
-        self.budget.work(
-            u64::try_from(bytes.len()).map_err(|_| Fault::capacity(BudgetKind::Work, self.at))?,
-            self.at,
-        )?;
-        self.bytes
-            .try_reserve(bytes.len())
-            .map_err(|_| Fault::allocation(self.at))?;
-        self.bytes.extend_from_slice(bytes);
-        Ok(())
+        let at = self.at;
+        let encoder = self;
+        crate::work_observation::observe!(encoder.budget, at, {
+            let next = encoder
+                .bytes
+                .len()
+                .checked_add(bytes.len())
+                .ok_or_else(|| Fault::capacity(BudgetKind::PayloadBytes, at))?;
+            let size =
+                u64::try_from(next).map_err(|_| Fault::capacity(BudgetKind::PayloadBytes, at))?;
+            encoder.budget.check(encoder.limit, size, at)?;
+            encoder
+                .budget
+                .check(BudgetKind::StagedPayloadBytes, size, at)?;
+            encoder.budget.work(
+                u64::try_from(bytes.len()).map_err(|_| Fault::capacity(BudgetKind::Work, at))?,
+                at,
+            )?;
+            encoder
+                .bytes
+                .try_reserve(bytes.len())
+                .map_err(|_| Fault::allocation(at))?;
+            encoder.bytes.extend_from_slice(bytes);
+            Ok(())
+        })
     }
 
     /// Append one fixed tag.

@@ -56,9 +56,11 @@ pub(crate) fn record(
     budget: &mut Budget,
 ) -> Result<Arc<Record>, Fault> {
     if !budget.witness_records.enabled {
-        let value = Arc::new(crate::wire_records::describe(cas, entity, budget)?);
-        budget.work(footprint(&value)?, Location::new("typed witness DAG"))?;
-        return Ok(value);
+        return crate::work_observation::observe!(budget, Location::new("typed witness DAG"), {
+            let value = Arc::new(crate::wire_records::describe(cas, entity, budget)?);
+            budget.work(footprint(&value)?, Location::new("typed witness DAG"))?;
+            Ok(value)
+        });
     }
     let comparisons = size(budget.witness_records.entries.len(), AT)?.bit_width();
     budget.work(key_bytes(key)?.saturating_mul(u64::from(comparisons)), AT)?;

@@ -148,28 +148,31 @@ impl Cas {
         locals: &[LogicalId],
         budget: &mut Budget,
     ) -> Result<Vec<(String, LogicalId)>, Fault> {
-        budget.check(BudgetKind::ConditionAtoms, size(drafts.len(), AT)?, AT)?;
-        let mut result = Vec::new();
-        result
-            .try_reserve_exact(drafts.len())
-            .map_err(|_| Fault::allocation(AT))?;
-        let mut names = BTreeSet::new();
-        for draft in drafts {
-            budget.condition(size(draft.key.len(), AT)?, AT)?;
-            if draft.key.is_empty() || !names.insert(draft.key.clone()) {
-                return Err(Fault::invalid(InvalidCode::Context, AT));
+        crate::work_observation::observe!(budget, AT, {
+            budget.check(BudgetKind::ConditionAtoms, size(drafts.len(), AT)?, AT)?;
+            let mut result = Vec::new();
+            result
+                .try_reserve_exact(drafts.len())
+                .map_err(|_| Fault::allocation(AT))?;
+            let mut names = BTreeSet::new();
+            for draft in drafts {
+                budget.condition(size(draft.key.len(), AT)?, AT)?;
+                if draft.key.is_empty() || !names.insert(draft.key.clone()) {
+                    return Err(Fault::invalid(InvalidCode::Context, AT));
+                }
+                let id = self.resolve(state, &draft.condition, locals)?;
+                let Vertex::Condition(value) = state.node(id)? else {
+                    return Err(Fault::invalid(InvalidCode::Reference, AT));
+                };
+                if value.scope != *scope
+                    || !crate::header::embeds(state, value.header, header, budget)?
+                {
+                    return Err(Fault::invalid(InvalidCode::Scope, AT));
+                }
+                result.push((draft.key.clone(), id));
             }
-            let id = self.resolve(state, &draft.condition, locals)?;
-            let Vertex::Condition(value) = state.node(id)? else {
-                return Err(Fault::invalid(InvalidCode::Reference, AT));
-            };
-            if value.scope != *scope || !crate::header::embeds(state, value.header, header, budget)?
-            {
-                return Err(Fault::invalid(InvalidCode::Scope, AT));
-            }
-            result.push((draft.key.clone(), id));
-        }
-        Ok(result)
+            Ok(result)
+        })
     }
 
     /// Retain the exact meet and reject recognized contradictions along the ancestry.

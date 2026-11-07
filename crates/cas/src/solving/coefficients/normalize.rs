@@ -155,49 +155,51 @@ impl Interpretation<'_> {
 
     /// Explicit postfix traversal keeps depth, storage and every visited expression bounded.
     fn expression(&self, handle: &Handle, budget: &mut Budget) -> Result<Form, CoefficientFailure> {
-        let mut pending = vector(1, budget)?;
-        pending.push((self.cas.checked(handle)?, false));
-        let mut values: Vec<Form> = vector(1, budget)?;
-        let region = self.cas.state.region(self.region.logical_id())?;
-        while let Some((id, ready)) = pending.pop() {
-            budget.work(1, AT)?;
-            let expression = self.cas.state.expression(id)?;
-            budget.check(BudgetKind::Depth, expression.depth, AT)?;
-            if expression.header != region.header
-                || expression.scope != region.scope
-                || expression.space.is_some()
-            {
+        crate::work_observation::observe!(budget, AT, {
+            let mut pending = vector(1, budget)?;
+            pending.push((self.cas.checked(handle)?, false));
+            let mut values: Vec<Form> = vector(1, budget)?;
+            let region = self.cas.state.region(self.region.logical_id())?;
+            while let Some((id, ready)) = pending.pop() {
+                budget.work(1, AT)?;
+                let expression = self.cas.state.expression(id)?;
+                budget.check(BudgetKind::Depth, expression.depth, AT)?;
+                if expression.header != region.header
+                    || expression.scope != region.scope
+                    || expression.space.is_some()
+                {
+                    return Err(invalid().into());
+                }
+                if !ready && !expression.operands.is_empty() {
+                    let additional = expression.operands.len().checked_add(1).ok_or_else(|| {
+                        crate::error::Fault::capacity(BudgetKind::StagedPayloadBytes, AT)
+                    })?;
+                    super::storage::reserve(&mut pending, additional, budget)?;
+                    pending.push((id, true));
+                    pending.extend(
+                        expression
+                            .operands
+                            .iter()
+                            .rev()
+                            .map(|child| (*child, false)),
+                    );
+                } else {
+                    let start = values
+                        .len()
+                        .checked_sub(expression.operands.len())
+                        .ok_or_else(invalid)?;
+                    let result =
+                        self.operation(id, values.get(start..).ok_or_else(invalid)?, budget)?;
+                    values.truncate(start);
+                    super::storage::reserve(&mut values, 1, budget)?;
+                    values.push(result);
+                }
+            }
+            if values.len() != 1 {
                 return Err(invalid().into());
             }
-            if !ready && !expression.operands.is_empty() {
-                let additional = expression.operands.len().checked_add(1).ok_or_else(|| {
-                    crate::error::Fault::capacity(BudgetKind::StagedPayloadBytes, AT)
-                })?;
-                super::storage::reserve(&mut pending, additional, budget)?;
-                pending.push((id, true));
-                pending.extend(
-                    expression
-                        .operands
-                        .iter()
-                        .rev()
-                        .map(|child| (*child, false)),
-                );
-            } else {
-                let start = values
-                    .len()
-                    .checked_sub(expression.operands.len())
-                    .ok_or_else(invalid)?;
-                let result =
-                    self.operation(id, values.get(start..).ok_or_else(invalid)?, budget)?;
-                values.truncate(start);
-                super::storage::reserve(&mut values, 1, budget)?;
-                values.push(result);
-            }
-        }
-        if values.len() != 1 {
-            return Err(invalid().into());
-        }
-        values.pop().ok_or_else(|| invalid().into())
+            values.pop().ok_or_else(|| invalid().into())
+        })
     }
 
     /// Interpret a coefficient, sparse polynomial or exactly parsed scalar polynomial expression.
@@ -206,18 +208,20 @@ impl Interpretation<'_> {
         handle: &Handle,
         budget: &mut Budget,
     ) -> Result<Form, CoefficientFailure> {
-        budget.work(1, AT)?;
-        let id = self.cas.checked(handle)?;
-        if id.kind == crate::graph::VertexKind::Expression {
-            return self.expression(handle, budget);
-        }
-        match crate::solving::graph::object(&self.cas.state, id)? {
-            SolveDraft::CoefficientValue(_) => {
-                super::proof::defined(self.cas, handle, self.region, self.premises, budget)?;
-                Form::constant(self.coefficient(handle, budget)?, &self.engine, budget)
+        crate::work_observation::observe!(budget, AT, {
+            budget.work(1, AT)?;
+            let id = self.cas.checked(handle)?;
+            if id.kind == crate::graph::VertexKind::Expression {
+                return self.expression(handle, budget);
             }
-            SolveDraft::Polynomial(_) => self.polynomial(handle, budget),
-            _ => Err(invalid().into()),
-        }
+            match crate::solving::graph::object(&self.cas.state, id)? {
+                SolveDraft::CoefficientValue(_) => {
+                    super::proof::defined(self.cas, handle, self.region, self.premises, budget)?;
+                    Form::constant(self.coefficient(handle, budget)?, &self.engine, budget)
+                }
+                SolveDraft::Polynomial(_) => self.polynomial(handle, budget),
+                _ => Err(invalid().into()),
+            }
+        })
     }
 }

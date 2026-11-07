@@ -141,24 +141,26 @@ fn at_source(
     result: &mut super::nonzero::Factors,
     budget: &mut Budget,
 ) -> Result<(), Fault> {
-    budget.work(1, AT)?;
-    match statement {
-        Statement::Solve(statement) => {
-            if let SolveStatement::Unit(unit) = statement.as_ref()
-                && (&unit.domain, &unit.region) == (source, region)
-            {
-                fraction_factors(state, source, unit.value.logical_id(), result, budget)?;
+    crate::work_observation::observe!(budget, AT, {
+        budget.work(1, AT)?;
+        match statement {
+            Statement::Solve(statement) => {
+                if let SolveStatement::Unit(unit) = statement.as_ref()
+                    && (&unit.domain, &unit.region) == (source, region)
+                {
+                    fraction_factors(state, source, unit.value.logical_id(), result, budget)?;
+                }
             }
+            Statement::PredicateFact {
+                region: actual,
+                predicate,
+            } if actual == region => {
+                predicate_factors(state, source, region, predicate, result, budget)?;
+            }
+            _ => {}
         }
-        Statement::PredicateFact {
-            region: actual,
-            predicate,
-        } if actual == region => {
-            predicate_factors(state, source, region, predicate, result, budget)?;
-        }
-        _ => {}
-    }
-    Ok(())
+        Ok(())
+    })
 }
 
 /// Parameter meaning survives only canonical tower-parent inclusions.

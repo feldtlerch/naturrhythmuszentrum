@@ -62,6 +62,11 @@ mod error;
 )]
 mod exact_constant;
 mod formal_register;
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "boundary helpers are shared by private CAS operations"
+)]
+mod work_observation;
 
 #[expect(
     clippy::redundant_pub_crate,

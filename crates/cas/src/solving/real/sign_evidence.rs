@@ -61,11 +61,13 @@ pub(super) fn predicate(
     actual: u8,
     budget: &mut Budget,
 ) -> Result<(), Fault> {
-    budget.work(1, AT)?;
-    if actual & !predicate_mask(cas, cas.checked(predicate)?, subject)? != 0 {
-        return Err(invalid());
-    }
-    Ok(())
+    crate::work_observation::observe!(budget, AT, {
+        budget.work(1, AT)?;
+        if actual & !predicate_mask(cas, cas.checked(predicate)?, subject)? != 0 {
+            return Err(invalid());
+        }
+        Ok(())
+    })
 }
 
 /// Read the same stratum only; a supplied sibling fact never qualifies.
@@ -95,35 +97,37 @@ fn local(
     claimed: RealSignConclusion,
     budget: &mut Budget,
 ) -> Result<(), Fault> {
-    let mut pending = vector(1, budget)?;
-    pending.push(region.logical_id());
-    while let Some(id) = pending.pop() {
-        budget.work(1, AT)?;
-        match &cas.state.region(id)?.expression {
-            RegionExpr::GuardTrue { base, predicate }
-            | RegionExpr::GuardFalse { base, predicate } => {
-                if let Ok(mut possible) = predicate_mask(cas, *predicate, subject) {
-                    if matches!(
-                        cas.state.region(id)?.expression,
-                        RegionExpr::GuardFalse { .. }
-                    ) {
-                        possible ^= 7;
+    crate::work_observation::observe!(budget, AT, {
+        let mut pending = vector(1, budget)?;
+        pending.push(region.logical_id());
+        while let Some(id) = pending.pop() {
+            budget.work(1, AT)?;
+            match &cas.state.region(id)?.expression {
+                RegionExpr::GuardTrue { base, predicate }
+                | RegionExpr::GuardFalse { base, predicate } => {
+                    if let Ok(mut possible) = predicate_mask(cas, *predicate, subject) {
+                        if matches!(
+                            cas.state.region(id)?.expression,
+                            RegionExpr::GuardFalse { .. }
+                        ) {
+                            possible ^= 7;
+                        }
+                        if entails(possible, claimed).is_ok() {
+                            return Ok(());
+                        }
                     }
-                    if entails(possible, claimed).is_ok() {
-                        return Ok(());
-                    }
+                    reserve(&mut pending, 1, budget)?;
+                    pending.push(*base);
                 }
-                reserve(&mut pending, 1, budget)?;
-                pending.push(*base);
+                RegionExpr::Meet(members) => {
+                    reserve(&mut pending, members.len(), budget)?;
+                    pending.extend(members);
+                }
+                _ => {}
             }
-            RegionExpr::Meet(members) => {
-                reserve(&mut pending, members.len(), budget)?;
-                pending.extend(members);
-            }
-            _ => {}
         }
-    }
-    Err(invalid())
+        Err(invalid())
+    })
 }
 
 /// Hypotheses retain totality, exact region and explicit provenance through inherited conditions.

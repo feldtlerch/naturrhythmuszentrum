@@ -15,41 +15,43 @@ pub(crate) fn read(
     checked: bool,
     budget: &mut Budget,
 ) -> Result<Value, Fault> {
-    if let Some(value) = body(evaluation.cas, root)? {
-        if region::family(evaluation.cas, evaluation.region.logical_id(), budget)?
-            != value.family.logical_id()
-            || !region::subset(
-                evaluation.cas,
-                evaluation.region.logical_id(),
-                value.region.logical_id(),
-                budget,
-            )?
-        {
+    crate::work_observation::observe!(budget, AT, {
+        if let Some(value) = body(evaluation.cas, root)? {
+            if region::family(evaluation.cas, evaluation.region.logical_id(), budget)?
+                != value.family.logical_id()
+                || !region::subset(
+                    evaluation.cas,
+                    evaluation.region.logical_id(),
+                    value.region.logical_id(),
+                    budget,
+                )?
+            {
+                return Err(invalid());
+            }
+            region::projection(evaluation.cas, &value.region, evaluation.premises, budget)?;
+            let mut values =
+                crate::solving::coefficients::storage::vector(value.arguments.len(), budget)?;
+            for argument in &value.arguments {
+                budget.work(1, AT)?;
+                values.push(evaluation.expression(argument.value.logical_id(), checked, budget)?);
+            }
+            return operation(evaluation, &value.operator, &values, checked, budget);
+        }
+        let expression = evaluation.cas.state.expression(root)?;
+        let [id] = expression.arms.as_slice() else {
+            return Err(invalid());
+        };
+        let arm = evaluation.cas.state.arm(*id)?;
+        if !region::subset(
+            evaluation.cas,
+            evaluation.region.logical_id(),
+            arm.region,
+            budget,
+        )? {
             return Err(invalid());
         }
-        region::projection(evaluation.cas, &value.region, evaluation.premises, budget)?;
-        let mut values =
-            crate::solving::coefficients::storage::vector(value.arguments.len(), budget)?;
-        for argument in &value.arguments {
-            budget.work(1, AT)?;
-            values.push(evaluation.expression(argument.value.logical_id(), checked, budget)?);
-        }
-        return operation(evaluation, &value.operator, &values, checked, budget);
-    }
-    let expression = evaluation.cas.state.expression(root)?;
-    let [id] = expression.arms.as_slice() else {
-        return Err(invalid());
-    };
-    let arm = evaluation.cas.state.arm(*id)?;
-    if !region::subset(
-        evaluation.cas,
-        evaluation.region.logical_id(),
-        arm.region,
-        budget,
-    )? {
-        return Err(invalid());
-    }
-    read(evaluation, arm.value, checked, budget)
+        read(evaluation, arm.value, checked, budget)
+    })
 }
 
 /// Scalar addition and multiplication are exactly the component agreements of the registered edge.

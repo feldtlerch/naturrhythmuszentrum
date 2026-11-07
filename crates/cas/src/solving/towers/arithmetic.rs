@@ -94,41 +94,44 @@ pub(crate) fn remainder(
     engine: &Engine<'_>,
     budget: &mut Budget,
 ) -> Result<Dense, CoefficientFailure> {
-    let degree = modulus
-        .coefficients
-        .len()
-        .checked_sub(1)
-        .ok_or_else(invalid)?;
-    if degree == 0 || value.domain != modulus.domain {
-        return Err(invalid().into());
-    }
-    let parent = Engine {
-        state: engine.state,
-        domain: &modulus.domain,
-    };
-    let unit = parent.constant(true, budget)?;
-    let leading = modulus.coefficients.last().ok_or_else(invalid)?;
-    if !parent.formal_equal(leading, &unit, budget)? {
-        return Err(invalid().into());
-    }
-    while value.coefficients.len() > degree {
-        budget.solving(BudgetKind::TowerReductions, 1, AT)?;
-        let before = value.coefficients.len();
-        let shift = before
-            .checked_sub(modulus.coefficients.len())
+    crate::work_observation::observe!(budget, AT, {
+        let degree = modulus
+            .coefficients
+            .len()
+            .checked_sub(1)
             .ok_or_else(invalid)?;
-        let coefficient = parent.copy(value.coefficients.last().ok_or_else(invalid)?, budget)?;
-        value = value.sum(
-            &modulus.scaled(&coefficient, shift, engine.state, budget)?,
-            true,
-            engine.state,
-            budget,
-        )?;
-        if value.coefficients.len() >= before {
+        if degree == 0 || value.domain != modulus.domain {
             return Err(invalid().into());
         }
-    }
-    Ok(value)
+        let parent = Engine {
+            state: engine.state,
+            domain: &modulus.domain,
+        };
+        let unit = parent.constant(true, budget)?;
+        let leading = modulus.coefficients.last().ok_or_else(invalid)?;
+        if !parent.formal_equal(leading, &unit, budget)? {
+            return Err(invalid().into());
+        }
+        while value.coefficients.len() > degree {
+            budget.solving(BudgetKind::TowerReductions, 1, AT)?;
+            let before = value.coefficients.len();
+            let shift = before
+                .checked_sub(modulus.coefficients.len())
+                .ok_or_else(invalid)?;
+            let coefficient =
+                parent.copy(value.coefficients.last().ok_or_else(invalid)?, budget)?;
+            value = value.sum(
+                &modulus.scaled(&coefficient, shift, engine.state, budget)?,
+                true,
+                engine.state,
+                budget,
+            )?;
+            if value.coefficients.len() >= before {
+                return Err(invalid().into());
+            }
+        }
+        Ok(value)
+    })
 }
 
 /// Normalize an arithmetic result against precisely its earlier defining polynomial.

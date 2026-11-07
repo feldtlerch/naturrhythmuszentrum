@@ -213,21 +213,23 @@ impl Rational {
         budget: &mut Budget,
     ) -> Result<Self, Fault> {
         let at = Location::new("rational constructor");
-        budget.check(BudgetKind::IntermediateBits, numerator.bits(), at)?;
-        budget.check(BudgetKind::IntermediateBits, denominator.bits(), at)?;
-        if denominator.bits() == 0 {
-            return Err(Fault::invalid(InvalidCode::ZeroDenominator, at));
-        }
-        let divisor = gcd(numerator, denominator, budget, at)?;
-        let numerator = quotient(numerator, &divisor, budget, at)?;
-        let denominator = quotient(denominator, &divisor, budget, at)?;
-        budget.check(BudgetKind::ComponentBits, numerator.bits(), at)?;
-        budget.check(BudgetKind::ComponentBits, denominator.bits(), at)?;
-        Ok(Self::from_coprime_magnitudes(
-            negative,
-            numerator,
-            denominator,
-        ))
+        crate::work_observation::observe!(budget, at, {
+            budget.check(BudgetKind::IntermediateBits, numerator.bits(), at)?;
+            budget.check(BudgetKind::IntermediateBits, denominator.bits(), at)?;
+            if denominator.bits() == 0 {
+                return Err(Fault::invalid(InvalidCode::ZeroDenominator, at));
+            }
+            let divisor = gcd(numerator, denominator, budget, at)?;
+            let numerator = quotient(numerator, &divisor, budget, at)?;
+            let denominator = quotient(denominator, &divisor, budget, at)?;
+            budget.check(BudgetKind::ComponentBits, numerator.bits(), at)?;
+            budget.check(BudgetKind::ComponentBits, denominator.bits(), at)?;
+            Ok(Self::from_coprime_magnitudes(
+                negative,
+                numerator,
+                denominator,
+            ))
+        })
     }
 
     /// The exact additive identity.
@@ -331,18 +333,20 @@ impl Rational {
     /// Refuses component or work budget exhaustion.
     pub fn negated(&self, budget: &mut Budget) -> Result<Self, Fault> {
         let at = Location::new("rational negation");
-        self.check(budget, at)?;
-        charge(
-            self.numerator().bits(),
-            self.denominator().bits(),
-            budget,
-            at,
-        )?;
-        Ok(Self::from_coprime_magnitudes(
-            !self.negative,
-            self.numerator().clone(),
-            self.denominator().clone(),
-        ))
+        crate::work_observation::observe!(budget, at, {
+            self.check(budget, at)?;
+            charge(
+                self.numerator().bits(),
+                self.denominator().bits(),
+                budget,
+                at,
+            )?;
+            Ok(Self::from_coprime_magnitudes(
+                !self.negative,
+                self.numerator().clone(),
+                self.denominator().clone(),
+            ))
+        })
     }
 
     /// Add through denominator gcd reduction and signed-magnitude accumulation.
@@ -351,19 +355,21 @@ impl Rational {
     /// Refuses any oversized intermediate or exhausted work budget.
     pub fn add(&self, other: &Self, budget: &mut Budget) -> Result<Self, Fault> {
         let at = Location::new("rational addition");
-        self.check(budget, at)?;
-        other.check(budget, at)?;
-        let common = gcd(self.denominator(), other.denominator(), budget, at)?;
-        let left_scale = quotient(other.denominator(), &common, budget, at)?;
-        let right_scale = quotient(self.denominator(), &common, budget, at)?;
-        let left = product(self.numerator(), &left_scale, budget, at)?;
-        let right = product(other.numerator(), &right_scale, budget, at)?;
-        let (negative, numerator) =
-            signed_sum((self.negative, left), (other.negative, right), budget, at)?;
-        let denominator = product(self.denominator(), &left_scale, budget, at)?;
-        Self::new(negative, &numerator, &denominator, budget).map_err(|mut error| {
-            error.location = at;
-            error
+        crate::work_observation::observe!(budget, at, {
+            self.check(budget, at)?;
+            other.check(budget, at)?;
+            let common = gcd(self.denominator(), other.denominator(), budget, at)?;
+            let left_scale = quotient(other.denominator(), &common, budget, at)?;
+            let right_scale = quotient(self.denominator(), &common, budget, at)?;
+            let left = product(self.numerator(), &left_scale, budget, at)?;
+            let right = product(other.numerator(), &right_scale, budget, at)?;
+            let (negative, numerator) =
+                signed_sum((self.negative, left), (other.negative, right), budget, at)?;
+            let denominator = product(self.denominator(), &left_scale, budget, at)?;
+            Self::new(negative, &numerator, &denominator, budget).map_err(|mut error| {
+                error.location = at;
+                error
+            })
         })
     }
 
@@ -382,25 +388,27 @@ impl Rational {
     /// Refuses component, intermediate or work exhaustion.
     pub fn mul(&self, other: &Self, budget: &mut Budget) -> Result<Self, Fault> {
         let at = Location::new("rational multiplication");
-        self.check(budget, at)?;
-        other.check(budget, at)?;
-        let first = gcd(self.numerator(), other.denominator(), budget, at)?;
-        let second = gcd(other.numerator(), self.denominator(), budget, at)?;
-        let left_n = quotient(self.numerator(), &first, budget, at)?;
-        let right_n = quotient(other.numerator(), &second, budget, at)?;
-        let left_d = quotient(self.denominator(), &second, budget, at)?;
-        let right_d = quotient(other.denominator(), &first, budget, at)?;
-        let numerator = product(&left_n, &right_n, budget, at)?;
-        let denominator = product(&left_d, &right_d, budget, at)?;
-        Self::new(
-            self.negative != other.negative,
-            &numerator,
-            &denominator,
-            budget,
-        )
-        .map_err(|mut error| {
-            error.location = at;
-            error
+        crate::work_observation::observe!(budget, at, {
+            self.check(budget, at)?;
+            other.check(budget, at)?;
+            let first = gcd(self.numerator(), other.denominator(), budget, at)?;
+            let second = gcd(other.numerator(), self.denominator(), budget, at)?;
+            let left_n = quotient(self.numerator(), &first, budget, at)?;
+            let right_n = quotient(other.numerator(), &second, budget, at)?;
+            let left_d = quotient(self.denominator(), &second, budget, at)?;
+            let right_d = quotient(other.denominator(), &first, budget, at)?;
+            let numerator = product(&left_n, &right_n, budget, at)?;
+            let denominator = product(&left_d, &right_d, budget, at)?;
+            Self::new(
+                self.negative != other.negative,
+                &numerator,
+                &denominator,
+                budget,
+            )
+            .map_err(|mut error| {
+                error.location = at;
+                error
+            })
         })
     }
 
@@ -410,24 +418,26 @@ impl Rational {
     /// Refuses a zero divisor or exhausted size/work budgets.
     pub fn div(&self, other: &Self, budget: &mut Budget) -> Result<Self, Fault> {
         let at = Location::new("rational division");
-        other.check(budget, at)?;
-        if other.is_zero() {
-            return Err(Fault::invalid(InvalidCode::ZeroDenominator, at));
-        }
-        charge(
-            other.numerator().bits(),
-            other.denominator().bits(),
-            budget,
-            at,
-        )?;
-        let reciprocal = Self::from_coprime_magnitudes(
-            other.negative,
-            other.denominator().clone(),
-            other.numerator().clone(),
-        );
-        self.mul(&reciprocal, budget).map_err(|mut error| {
-            error.location = at;
-            error
+        crate::work_observation::observe!(budget, at, {
+            other.check(budget, at)?;
+            if other.is_zero() {
+                return Err(Fault::invalid(InvalidCode::ZeroDenominator, at));
+            }
+            charge(
+                other.numerator().bits(),
+                other.denominator().bits(),
+                budget,
+                at,
+            )?;
+            let reciprocal = Self::from_coprime_magnitudes(
+                other.negative,
+                other.denominator().clone(),
+                other.numerator().clone(),
+            );
+            self.mul(&reciprocal, budget).map_err(|mut error| {
+                error.location = at;
+                error
+            })
         })
     }
 
@@ -477,48 +487,50 @@ impl Rational {
     /// Refuses component or work exhaustion.
     pub fn compare(&self, other: &Self, budget: &mut Budget) -> Result<Ordering, Fault> {
         let at = Location::new("rational comparison");
-        self.check(budget, at)?;
-        other.check(budget, at)?;
-        charge(
-            self.numerator().bits(),
-            self.denominator().bits(),
-            budget,
-            at,
-        )?;
-        charge(
-            other.numerator().bits(),
-            other.denominator().bits(),
-            budget,
-            at,
-        )?;
-        if self.negative != other.negative {
-            return Ok(if self.negative {
-                Ordering::Less
-            } else {
-                Ordering::Greater
-            });
-        }
-        let (mut an, mut ad) = (self.numerator().clone(), self.denominator().clone());
-        let (mut bn, mut bd) = (other.numerator().clone(), other.denominator().clone());
-        let mut reverse = self.negative;
-        loop {
-            let aq = quotient(&an, &ad, budget, at)?;
-            let bq = quotient(&bn, &bd, budget, at)?;
-            charge(aq.bits(), bq.bits(), budget, at)?;
-            let order = aq.cmp(&bq);
-            if order != Ordering::Equal {
-                return Ok(if reverse { order.reverse() } else { order });
+        crate::work_observation::observe!(budget, at, {
+            self.check(budget, at)?;
+            other.check(budget, at)?;
+            charge(
+                self.numerator().bits(),
+                self.denominator().bits(),
+                budget,
+                at,
+            )?;
+            charge(
+                other.numerator().bits(),
+                other.denominator().bits(),
+                budget,
+                at,
+            )?;
+            if self.negative != other.negative {
+                return Ok(if self.negative {
+                    Ordering::Less
+                } else {
+                    Ordering::Greater
+                });
             }
-            let ar = remainder(&an, &ad, budget, at)?;
-            let br = remainder(&bn, &bd, budget, at)?;
-            if ar.bits() == 0 || br.bits() == 0 {
-                let order = ar.bits().cmp(&br.bits());
-                return Ok(if reverse { order.reverse() } else { order });
+            let (mut an, mut ad) = (self.numerator().clone(), self.denominator().clone());
+            let (mut bn, mut bd) = (other.numerator().clone(), other.denominator().clone());
+            let mut reverse = self.negative;
+            loop {
+                let aq = quotient(&an, &ad, budget, at)?;
+                let bq = quotient(&bn, &bd, budget, at)?;
+                charge(aq.bits(), bq.bits(), budget, at)?;
+                let order = aq.cmp(&bq);
+                if order != Ordering::Equal {
+                    return Ok(if reverse { order.reverse() } else { order });
+                }
+                let ar = remainder(&an, &ad, budget, at)?;
+                let br = remainder(&bn, &bd, budget, at)?;
+                if ar.bits() == 0 || br.bits() == 0 {
+                    let order = ar.bits().cmp(&br.bits());
+                    return Ok(if reverse { order.reverse() } else { order });
+                }
+                (an, ad) = (ad, ar);
+                (bn, bd) = (bd, br);
+                reverse = !reverse;
             }
-            (an, ad) = (ad, ar);
-            (bn, bd) = (bd, br);
-            reverse = !reverse;
-        }
+        })
     }
 
     /// Format an exact signed numerator and optional denominator under a byte limit.
@@ -599,43 +611,46 @@ impl Rational {
     /// Share the exact magnitude layout while keeping admission and export limits distinct.
     fn encode_magnitudes(&self, budget: &mut Budget, limit: BudgetKind) -> Result<Vec<u8>, Fault> {
         let at = Location::new("rational encoding");
-        self.check(budget, at)?;
-        charge(
-            self.numerator().bits(),
-            self.denominator().bits(),
-            budget,
-            at,
-        )?;
-        for bits in [self.numerator().bits(), self.denominator().bits()] {
-            u32::try_from(bits.div_ceil(8)).map_err(|_| Fault::capacity(limit, at))?;
-        }
-        let size = self
-            .numerator()
-            .bits()
-            .div_ceil(8)
-            .checked_add(self.denominator().bits().div_ceil(8))
-            .and_then(|n| n.checked_add(9))
-            .ok_or_else(|| Fault::capacity(BudgetKind::OutputBytes, at))?;
-        budget.check(limit, size, at)?;
-        let mut bytes = Vec::new();
-        bytes
-            .try_reserve_exact(
-                usize::try_from(size).map_err(|_| Fault::capacity(BudgetKind::OutputBytes, at))?,
-            )
-            .map_err(|_| Fault::allocation(at))?;
-        bytes.push(u8::from(self.negative));
-        for magnitude in [self.numerator(), self.denominator()] {
-            let digits = if magnitude.bits() == 0 {
-                Vec::new()
-            } else {
-                magnitude.to_bytes_le()
-            };
-            let length = u32::try_from(digits.len())
-                .map_err(|_| Fault::capacity(BudgetKind::OutputBytes, at))?;
-            bytes.extend_from_slice(&length.to_le_bytes());
-            bytes.extend_from_slice(&digits);
-        }
-        Ok(bytes)
+        crate::work_observation::observe!(budget, at, {
+            self.check(budget, at)?;
+            charge(
+                self.numerator().bits(),
+                self.denominator().bits(),
+                budget,
+                at,
+            )?;
+            for bits in [self.numerator().bits(), self.denominator().bits()] {
+                u32::try_from(bits.div_ceil(8)).map_err(|_| Fault::capacity(limit, at))?;
+            }
+            let size = self
+                .numerator()
+                .bits()
+                .div_ceil(8)
+                .checked_add(self.denominator().bits().div_ceil(8))
+                .and_then(|n| n.checked_add(9))
+                .ok_or_else(|| Fault::capacity(BudgetKind::OutputBytes, at))?;
+            budget.check(limit, size, at)?;
+            let mut bytes = Vec::new();
+            bytes
+                .try_reserve_exact(
+                    usize::try_from(size)
+                        .map_err(|_| Fault::capacity(BudgetKind::OutputBytes, at))?,
+                )
+                .map_err(|_| Fault::allocation(at))?;
+            bytes.push(u8::from(self.negative));
+            for magnitude in [self.numerator(), self.denominator()] {
+                let digits = if magnitude.bits() == 0 {
+                    Vec::new()
+                } else {
+                    magnitude.to_bytes_le()
+                };
+                let length = u32::try_from(digits.len())
+                    .map_err(|_| Fault::capacity(BudgetKind::OutputBytes, at))?;
+                bytes.extend_from_slice(&length.to_le_bytes());
+                bytes.extend_from_slice(&digits);
+            }
+            Ok(bytes)
+        })
     }
 
     /// Read reduced components when the numerator fits `i64` and denominator fits `u64`.

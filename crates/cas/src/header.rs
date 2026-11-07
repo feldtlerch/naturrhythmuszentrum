@@ -168,23 +168,25 @@ pub(crate) fn embeds(
     target: LogicalId,
     budget: &mut Budget,
 ) -> Result<bool, Fault> {
-    state.header(actual)?;
-    let mut current = target;
-    let mut depth = 0_u64;
-    loop {
-        budget.work(1, AT)?;
-        budget.check(BudgetKind::Depth, depth, AT)?;
-        if current == actual {
-            return Ok(true);
+    crate::work_observation::observe!(budget, AT, {
+        state.header(actual)?;
+        let mut current = target;
+        let mut depth = 0_u64;
+        loop {
+            budget.work(1, AT)?;
+            budget.check(BudgetKind::Depth, depth, AT)?;
+            if current == actual {
+                return Ok(true);
+            }
+            let Some(parent) = state.header(current)?.parent else {
+                return Ok(false);
+            };
+            current = parent;
+            depth = depth
+                .checked_add(1)
+                .ok_or_else(|| Fault::capacity(BudgetKind::Depth, AT))?;
         }
-        let Some(parent) = state.header(current)?.parent else {
-            return Ok(false);
-        };
-        current = parent;
-        depth = depth
-            .checked_add(1)
-            .ok_or_else(|| Fault::capacity(BudgetKind::Depth, AT))?;
-    }
+    })
 }
 
 /// Check an explicit expression space and any exact declaration binding.
@@ -371,28 +373,30 @@ pub(crate) fn declaration_index(
     budget: &mut Budget,
     at: Location,
 ) -> Result<Option<usize>, Fault> {
-    let comparisons = if declarations.is_empty() {
-        0
-    } else {
-        u64::from((declarations.len() - 1).bit_width()) + 1
-    };
-    budget.work(
-        comparisons
-            .checked_mul(budget.limits().name_bytes)
-            .ok_or_else(|| Fault::capacity(BudgetKind::Work, at))?,
-        at,
-    )?;
-    let mut lower = 0;
-    let mut upper = declarations.len();
-    while lower < upper {
-        let middle = lower + (upper - lower) / 2;
-        match declarations[middle].key.as_str().cmp(key) {
-            std::cmp::Ordering::Less => lower = middle + 1,
-            std::cmp::Ordering::Greater => upper = middle,
-            std::cmp::Ordering::Equal => return Ok(Some(middle)),
+    crate::work_observation::observe!(budget, at, {
+        let comparisons = if declarations.is_empty() {
+            0
+        } else {
+            u64::from((declarations.len() - 1).bit_width()) + 1
+        };
+        budget.work(
+            comparisons
+                .checked_mul(budget.limits().name_bytes)
+                .ok_or_else(|| Fault::capacity(BudgetKind::Work, at))?,
+            at,
+        )?;
+        let mut lower = 0;
+        let mut upper = declarations.len();
+        while lower < upper {
+            let middle = lower + (upper - lower) / 2;
+            match declarations[middle].key.as_str().cmp(key) {
+                std::cmp::Ordering::Less => lower = middle + 1,
+                std::cmp::Ordering::Greater => upper = middle,
+                std::cmp::Ordering::Equal => return Ok(Some(middle)),
+            }
         }
-    }
-    Ok(None)
+        Ok(None)
+    })
 }
 
 /// Bottom-up stable merging prepays n*ceil(log2(n)) key comparisons and index moves explicitly.
@@ -401,47 +405,49 @@ pub(crate) fn sort_declarations(
     budget: &mut Budget,
     at: Location,
 ) -> Result<(), Fault> {
-    let count = declarations.len();
-    let levels = if count < 2 {
-        0
-    } else {
-        u64::from((count - 1).bit_width())
-    };
-    let count_u64 = size(count, at)?;
-    let unit = budget
-        .limits()
-        .name_bytes
-        .checked_add(1)
-        .ok_or_else(|| Fault::capacity(BudgetKind::Work, at))?;
-    let work = levels
-        .checked_mul(unit)
-        .and_then(|value| value.checked_add(12))
-        .and_then(|value| value.checked_mul(count_u64))
-        .ok_or_else(|| Fault::capacity(BudgetKind::Work, at))?;
-    let bytes = count_u64
-        .checked_mul(size(2 * std::mem::size_of::<usize>(), at)?)
-        .ok_or_else(|| Fault::capacity(BudgetKind::StagedPayloadBytes, at))?;
-    budget.with_retained_payload(bytes, at, |budget| {
-        budget.work(work, at)?;
-        let mut source = indices(count, at)?;
-        let mut scratch = indices(count, at)?;
-        let mut width = 1;
-        while width < count {
-            merge_indices(declarations, &source, &mut scratch, width);
-            std::mem::swap(&mut source, &mut scratch);
-            width = width.saturating_mul(2);
-        }
-        for (position, original) in source.into_iter().enumerate() {
-            scratch[original] = position;
-        }
-        for position in 0..count {
-            while scratch[position] != position {
-                let destination = scratch[position];
-                declarations.swap(position, destination);
-                scratch.swap(position, destination);
+    crate::work_observation::observe!(budget, at, {
+        let count = declarations.len();
+        let levels = if count < 2 {
+            0
+        } else {
+            u64::from((count - 1).bit_width())
+        };
+        let count_u64 = size(count, at)?;
+        let unit = budget
+            .limits()
+            .name_bytes
+            .checked_add(1)
+            .ok_or_else(|| Fault::capacity(BudgetKind::Work, at))?;
+        let work = levels
+            .checked_mul(unit)
+            .and_then(|value| value.checked_add(12))
+            .and_then(|value| value.checked_mul(count_u64))
+            .ok_or_else(|| Fault::capacity(BudgetKind::Work, at))?;
+        let bytes = count_u64
+            .checked_mul(size(2 * std::mem::size_of::<usize>(), at)?)
+            .ok_or_else(|| Fault::capacity(BudgetKind::StagedPayloadBytes, at))?;
+        budget.with_retained_payload(bytes, at, |budget| {
+            budget.work(work, at)?;
+            let mut source = indices(count, at)?;
+            let mut scratch = indices(count, at)?;
+            let mut width = 1;
+            while width < count {
+                merge_indices(declarations, &source, &mut scratch, width);
+                std::mem::swap(&mut source, &mut scratch);
+                width = width.saturating_mul(2);
             }
-        }
-        Ok(())
+            for (position, original) in source.into_iter().enumerate() {
+                scratch[original] = position;
+            }
+            for position in 0..count {
+                while scratch[position] != position {
+                    let destination = scratch[position];
+                    declarations.swap(position, destination);
+                    scratch.swap(position, destination);
+                }
+            }
+            Ok(())
+        })
     })
 }
 

@@ -38,18 +38,19 @@ pub(crate) fn equation(
     original: &SolveProblemData<Handle>,
     budget: &mut Budget,
 ) -> Result<Value, Fault> {
-    #[cfg(test)]
-    let _attribution = crate::testing::work_trace::Scope::phase("exclusion.equation");
-    let (PredicateKind::Equal, [left, right]) =
-        super::evidence::predicate(evaluation.cas, original.predicate.logical_id())?
-    else {
-        return Err(invalid());
-    };
-    evaluation.expression(*left, true, budget)?.sub(
-        &evaluation.expression(*right, true, budget)?,
-        &evaluation.engine,
-        budget,
-    )
+    let _attribution = crate::work_observation::Scope::phase("exclusion.equation");
+    crate::work_observation::observe!(budget, crate::error::Location::new(""), {
+        let (PredicateKind::Equal, [left, right]) =
+            super::evidence::predicate(evaluation.cas, original.predicate.logical_id())?
+        else {
+            return Err(invalid());
+        };
+        evaluation.expression(*left, true, budget)?.sub(
+            &evaluation.expression(*right, true, budget)?,
+            &evaluation.engine,
+            budget,
+        )
+    })
 }
 
 /// Identity evidence must name precisely the reconstructed endpoints and the same coefficient region.
@@ -60,34 +61,39 @@ pub(crate) fn identity(
     right: &Value,
     budget: &mut Budget,
 ) -> Result<(), Fault> {
-    #[cfg(test)]
-    let _attribution = crate::testing::work_trace::Scope::phase("exclusion.identity");
-    let statement = &premise(evaluation.premises, slot)?.judgment.statement;
-    let (first, second) = match statement {
-        Statement::Equality {
-            left,
-            right,
-            domain,
-            domain_contract: DomainContract::DefinedAndEqual,
-        } if domain == evaluation.region => (left, right),
-        Statement::Solve(statement) => match statement.as_ref() {
-            SolveStatement::CoefficientEquality(value) if value.region == *evaluation.region => {
-                (&value.left, &value.right)
-            }
+    let _attribution = crate::work_observation::Scope::phase("exclusion.identity");
+    crate::work_observation::observe!(budget, crate::error::Location::new(""), {
+        let statement = &premise(evaluation.premises, slot)?.judgment.statement;
+        let (first, second) = match statement {
+            Statement::Equality {
+                left,
+                right,
+                domain,
+                domain_contract: DomainContract::DefinedAndEqual,
+            } if domain == evaluation.region => (left, right),
+            Statement::Solve(statement) => match statement.as_ref() {
+                SolveStatement::CoefficientEquality(value)
+                    if value.region == *evaluation.region =>
+                {
+                    (&value.left, &value.right)
+                }
+                _ => return Err(invalid()),
+            },
             _ => return Err(invalid()),
-        },
-        _ => return Err(invalid()),
-    };
-    let first = evaluation.expression(first.logical_id(), true, budget)?;
-    let second = evaluation.expression(second.logical_id(), true, budget)?;
-    if (decides(evaluation.zero(&left.sub(&first, &evaluation.engine, budget)?, budget))?
-        && decides(evaluation.zero(&right.sub(&second, &evaluation.engine, budget)?, budget))?)
-        || (decides(evaluation.zero(&left.sub(&second, &evaluation.engine, budget)?, budget))?
-            && decides(evaluation.zero(&right.sub(&first, &evaluation.engine, budget)?, budget))?)
-    {
-        return Ok(());
-    }
-    Err(invalid())
+        };
+        let first = evaluation.expression(first.logical_id(), true, budget)?;
+        let second = evaluation.expression(second.logical_id(), true, budget)?;
+        if (decides(evaluation.zero(&left.sub(&first, &evaluation.engine, budget)?, budget))?
+            && decides(evaluation.zero(&right.sub(&second, &evaluation.engine, budget)?, budget))?)
+            || (decides(evaluation.zero(&left.sub(&second, &evaluation.engine, budget)?, budget))?
+                && decides(
+                    evaluation.zero(&right.sub(&first, &evaluation.engine, budget)?, budget),
+                )?)
+        {
+            return Ok(());
+        }
+        Err(invalid())
+    })
 }
 
 /// A finite cover contains exactly full-region finite/empty branches of this original problem.
@@ -96,45 +102,46 @@ pub(crate) fn entries(
     coverage: &StatementCoverage,
     budget: &mut Budget,
 ) -> Result<Vec<Handle>, Fault> {
-    #[cfg(test)]
-    let _attribution = crate::testing::work_trace::Scope::phase("inventory");
-    let original = problem(cas, &coverage.problem)?;
-    let SolveDraft::SolutionSet(set) =
-        crate::solving::graph::object(&cas.state, cas.checked(&coverage.set)?)?
-    else {
-        return Err(invalid());
-    };
-    if set.problem != coverage.problem {
-        return Err(invalid());
-    }
-    let mut result = vector(0, budget)?;
-    for branch in &set.branches {
-        budget.work(1, AT)?;
-        let SolveDraft::SolutionBranch(branch) =
-            crate::solving::graph::object(&cas.state, cas.checked(branch)?)?
+    let _attribution = crate::work_observation::Scope::phase("inventory");
+    crate::work_observation::observe!(budget, AT, {
+        let original = problem(cas, &coverage.problem)?;
+        let SolveDraft::SolutionSet(set) =
+            crate::solving::graph::object(&cas.state, cas.checked(&coverage.set)?)?
         else {
             return Err(invalid());
         };
-        if (&branch.problem, &branch.region, &branch.domain)
-            != (&coverage.problem, &coverage.region, &original.domain)
-        {
+        if set.problem != coverage.problem {
             return Err(invalid());
         }
-        match &branch.kind {
-            SolutionBranchKind::Empty => {}
-            SolutionBranchKind::Finite { tuples } => {
-                reserve(&mut result, tuples.len(), budget)?;
-                for handle in tuples {
-                    let [entry] = tuple(cas, handle)?.entries.as_slice() else {
-                        return Err(invalid());
-                    };
-                    result.push(entry.clone());
-                }
+        let mut result = vector(0, budget)?;
+        for branch in &set.branches {
+            budget.work(1, AT)?;
+            let SolveDraft::SolutionBranch(branch) =
+                crate::solving::graph::object(&cas.state, cas.checked(branch)?)?
+            else {
+                return Err(invalid());
+            };
+            if (&branch.problem, &branch.region, &branch.domain)
+                != (&coverage.problem, &coverage.region, &original.domain)
+            {
+                return Err(invalid());
             }
-            _ => return Err(invalid()),
+            match &branch.kind {
+                SolutionBranchKind::Empty => {}
+                SolutionBranchKind::Finite { tuples } => {
+                    reserve(&mut result, tuples.len(), budget)?;
+                    for handle in tuples {
+                        let [entry] = tuple(cas, handle)?.entries.as_slice() else {
+                            return Err(invalid());
+                        };
+                        result.push(entry.clone());
+                    }
+                }
+                _ => return Err(invalid()),
+            }
         }
-    }
-    Ok(result)
+        Ok(result)
+    })
 }
 
 /// Every represented tuple is an original solution, independently of the factor identity.
@@ -144,22 +151,23 @@ pub(crate) fn membership(
     entries: &[Handle],
     budget: &mut Budget,
 ) -> Result<(), Fault> {
-    #[cfg(test)]
-    let _attribution = crate::testing::work_trace::Scope::phase("existence.membership");
-    let unknowns = coordinates(evaluation.cas, &original.unknowns)?;
-    let [coordinate] = unknowns.coordinates.as_slice() else {
-        return Err(invalid());
-    };
-    for entry in entries {
-        let value = evaluation.expression(entry.logical_id(), true, budget)?;
-        let replacement = [(coordinate.key.as_str(), value)];
-        let substituted = Evaluation {
-            free: &replacement,
-            ..evaluation.unbound()
+    let _attribution = crate::work_observation::Scope::phase("existence.membership");
+    crate::work_observation::observe!(budget, crate::error::Location::new(""), {
+        let unknowns = coordinates(evaluation.cas, &original.unknowns)?;
+        let [coordinate] = unknowns.coordinates.as_slice() else {
+            return Err(invalid());
         };
-        super::member::original(&substituted, original, budget)?;
-    }
-    Ok(())
+        for entry in entries {
+            let value = evaluation.expression(entry.logical_id(), true, budget)?;
+            let replacement = [(coordinate.key.as_str(), value)];
+            let substituted = Evaluation {
+                free: &replacement,
+                ..evaluation.unbound()
+            };
+            super::member::original(&substituted, original, budget)?;
+        }
+        Ok(())
+    })
 }
 
 /// Each factor is either represented or excluded by an exact original denominator zero.
@@ -205,36 +213,37 @@ pub(crate) fn factors(
     entries: &[Handle],
     budget: &mut Budget,
 ) -> Result<Value, Fault> {
-    #[cfg(test)]
-    let _attribution = crate::testing::work_trace::Scope::phase("exclusion.factors");
-    let input = super::transport::unknowns(evaluation, original, budget)?;
-    let [unknown] = input.as_slice() else {
-        return Err(invalid());
-    };
-    let mut result = evaluation.expression(certificate.scalar.logical_id(), true, budget)?;
-    evaluation.nonzero(&result, budget)?;
-    for factor in &certificate.factors {
-        if factor.multiplicity == 0 {
+    let _attribution = crate::work_observation::Scope::phase("exclusion.factors");
+    crate::work_observation::observe!(budget, crate::error::Location::new(""), {
+        let input = super::transport::unknowns(evaluation, original, budget)?;
+        let [unknown] = input.as_slice() else {
             return Err(invalid());
-        }
-        budget.check(
-            BudgetKind::PolynomialDegree,
-            u64::from(factor.multiplicity),
-            AT,
-        )?;
-        let root = evaluation.expression(factor.root.logical_id(), true, budget)?;
-        inclusion(evaluation, original, &root, entries, budget)?;
-        result = result.mul(
-            &unknown.sub(&root, &evaluation.engine, budget)?.pow(
-                factor.multiplicity,
+        };
+        let mut result = evaluation.expression(certificate.scalar.logical_id(), true, budget)?;
+        evaluation.nonzero(&result, budget)?;
+        for factor in &certificate.factors {
+            if factor.multiplicity == 0 {
+                return Err(invalid());
+            }
+            budget.check(
+                BudgetKind::PolynomialDegree,
+                u64::from(factor.multiplicity),
+                AT,
+            )?;
+            let root = evaluation.expression(factor.root.logical_id(), true, budget)?;
+            inclusion(evaluation, original, &root, entries, budget)?;
+            result = result.mul(
+                &unknown.sub(&root, &evaluation.engine, budget)?.pow(
+                    factor.multiplicity,
+                    &evaluation.engine,
+                    budget,
+                )?,
                 &evaluation.engine,
                 budget,
-            )?,
-            &evaluation.engine,
-            budget,
-        )?;
-    }
-    Ok(result)
+            )?;
+        }
+        Ok(result)
+    })
 }
 
 /// Nonzero scalar, exact identity and both inclusions justify complete coverage in a scalar field.

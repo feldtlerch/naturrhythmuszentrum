@@ -92,15 +92,17 @@ fn encode_leaf(
 
 /// Prepay all retained node and vector copies, and authenticate every embedded handle.
 pub(crate) fn measure(cas: &Cas, dag: &EmptinessDag, budget: &mut Budget) -> Result<(), Fault> {
-    budget.check(BudgetKind::ProofNodes, size(dag.nodes.len(), AT)?, AT)?;
-    let mut out = Encoder::new(budget, AT);
-    encode(dag, &mut out, &mut |handle, out| {
-        cas.checked(handle)?;
-        crate::statement::handle(handle, out)
-    })?;
-    let bytes = size(out.finish().len(), AT)?.saturating_mul(32);
-    budget.check(BudgetKind::StagedPayloadBytes, bytes, AT)?;
-    budget.work(bytes, AT)
+    crate::work_observation::observe!(budget, AT, {
+        budget.check(BudgetKind::ProofNodes, size(dag.nodes.len(), AT)?, AT)?;
+        let mut out = Encoder::new(budget, AT);
+        encode(dag, &mut out, &mut |handle, out| {
+            cas.checked(handle)?;
+            crate::statement::handle(handle, out)
+        })?;
+        let bytes = size(out.finish().len(), AT)?.saturating_mul(32);
+        budget.check(BudgetKind::StagedPayloadBytes, bytes, AT)?;
+        budget.work(bytes, AT)
+    })
 }
 
 /// Decode a bounded topological node vector; the kernel checks edges and mathematical content.

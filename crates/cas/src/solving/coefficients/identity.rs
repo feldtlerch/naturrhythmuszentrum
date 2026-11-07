@@ -141,71 +141,74 @@ pub(crate) fn check(
     premises: &[CheckedApplication],
     budget: &mut Budget,
 ) -> Result<ScopedConditions, Fault> {
-    budget.solving(BudgetKind::SolveIdentities, 1, AT)?;
-    let Certificate::Solve(certificate) = &draft.certificate else {
-        return Err(invalid());
-    };
-    let SolveCertificate::CoefficientIdentity(certificate) = certificate.as_ref() else {
-        return Err(invalid());
-    };
-    if draft.rule != crate::rule::Primitive::Solve(crate::solving::SolveSchema::CoefficientIdentity)
-    {
-        return Err(invalid());
-    }
-    if let IdentityMode::NonzeroPower(exponent) = certificate.mode {
-        return super::consequence_check::check(
+    crate::work_observation::observe!(budget, AT, {
+        budget.solving(BudgetKind::SolveIdentities, 1, AT)?;
+        let Certificate::Solve(certificate) = &draft.certificate else {
+            return Err(invalid());
+        };
+        let SolveCertificate::CoefficientIdentity(certificate) = certificate.as_ref() else {
+            return Err(invalid());
+        };
+        if draft.rule
+            != crate::rule::Primitive::Solve(crate::solving::SolveSchema::CoefficientIdentity)
+        {
+            return Err(invalid());
+        }
+        if let IdentityMode::NonzeroPower(exponent) = certificate.mode {
+            return super::consequence_check::check(
+                cas,
+                draft,
+                certificate,
+                exponent,
+                premises,
+                budget,
+            );
+        }
+        conclusion(draft, certificate)?;
+        if certificate.mode == IdentityMode::Normalize && !certificate.combinations.is_empty() {
+            return Err(invalid());
+        }
+        let mut inherited = conditions(cas, draft, premises, budget)?;
+        let map = mapping(
             cas,
-            draft,
-            certificate,
-            exponent,
-            premises,
-            budget,
-        );
-    }
-    conclusion(draft, certificate)?;
-    if certificate.mode == IdentityMode::Normalize && !certificate.combinations.is_empty() {
-        return Err(invalid());
-    }
-    let mut inherited = conditions(cas, draft, premises, budget)?;
-    let map = mapping(
-        cas,
-        &certificate.map,
-        &draft.context,
-        &certificate.region,
-        budget,
-    )?;
-    identity_map(cas, map, premises, budget)?;
-    if certificate.denominators != map.denominators {
-        return Err(invalid());
-    }
-    for denominator in &certificate.denominators {
-        super::proof::denominator(
-            cas,
-            denominator,
-            &map.source,
+            &certificate.map,
+            &draft.context,
             &certificate.region,
-            premises,
             budget,
         )?;
-    }
-    super::transport::frames(cas, map, certificate, budget)?;
-    let interpreter = Interpretation {
-        cas,
-        engine: Engine {
-            state: &cas.state,
-            domain: super::transport::domain(cas, map)?,
-        },
-        map: &certificate.map,
-        region: &certificate.region,
-        premises,
-    };
-    calculate(&interpreter, certificate, &draft.context, budget)?;
-    super::vieta::discharge(
-        &interpreter,
-        &draft.context,
-        certificate,
-        &mut inherited,
-        budget,
-    )?;
-    Ok(inherited)
+        identity_map(cas, map, premises, budget)?;
+        if certificate.denominators != map.denominators {
+            return Err(invalid());
+        }
+        for denominator in &certificate.denominators {
+            super::proof::denominator(
+                cas,
+                denominator,
+                &map.source,
+                &certificate.region,
+                premises,
+                budget,
+            )?;
+        }
+        super::transport::frames(cas, map, certificate, budget)?;
+        let interpreter = Interpretation {
+            cas,
+            engine: Engine {
+                state: &cas.state,
+                domain: super::transport::domain(cas, map)?,
+            },
+            map: &certificate.map,
+            region: &certificate.region,
+            premises,
+        };
+        calculate(&interpreter, certificate, &draft.context, budget)?;
+        super::vieta::discharge(
+            &interpreter,
+            &draft.context,
+            certificate,
+            &mut inherited,
+            budget,
+        )?;
+        Ok(inherited)
+    })
 }

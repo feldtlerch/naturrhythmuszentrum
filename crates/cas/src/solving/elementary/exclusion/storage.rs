@@ -23,63 +23,73 @@ const fn rational((numerator, denominator): (u64, u64)) -> u64 {
 
 /// Include rational limb bounds for both components of a Gaussian scalar.
 fn scalar(value: &Scalar, budget: &mut Budget) -> Result<u64, Fault> {
-    budget.work(1, AT)?;
-    Ok(match value {
-        Scalar::Rational(value) => rational(value.component_bits()),
-        Scalar::Gaussian(value) => value
-            .component_bits()
-            .into_iter()
-            .map(rational)
-            .fold(0, u64::saturating_add),
+    crate::work_observation::observe!(budget, AT, {
+        budget.work(1, AT)?;
+        Ok(match value {
+            Scalar::Rational(value) => rational(value.component_bits()),
+            Scalar::Gaussian(value) => value
+                .component_bits()
+                .into_iter()
+                .map(rational)
+                .fold(0, u64::saturating_add),
+        })
     })
 }
 
 /// Count every retained term, exponent capacity and exact scalar payload.
 fn polynomial(value: &Polynomial, budget: &mut Budget) -> Result<u64, Fault> {
-    let mut bytes = allocation(&value.terms)?;
-    for term in &value.terms {
-        budget.work(1, AT)?;
-        bytes = bytes
-            .saturating_add(allocation(&term.powers)?)
-            .saturating_add(scalar(&term.coefficient, budget)?);
-    }
-    Ok(bytes)
+    crate::work_observation::observe!(budget, AT, {
+        let mut bytes = allocation(&value.terms)?;
+        for term in &value.terms {
+            budget.work(1, AT)?;
+            bytes = bytes
+                .saturating_add(allocation(&term.powers)?)
+                .saturating_add(scalar(&term.coefficient, budget)?);
+        }
+        Ok(bytes)
+    })
 }
 
 /// Walk only the actual coefficient representation, including nested tower entries.
 fn coefficient(value: &model::Value, budget: &mut Budget) -> Result<u64, Fault> {
-    budget.work(1, AT)?;
-    match value {
-        model::Value::Scalar(value) => scalar(value, budget),
-        model::Value::Fraction(value) => Ok(polynomial(&value.numerator, budget)?
-            .saturating_add(polynomial(&value.denominator, budget)?)),
-        model::Value::Tower(values) => {
-            let mut bytes = allocation(values)?;
-            for value in values {
-                bytes = bytes.saturating_add(coefficient(&value.value, budget)?);
+    crate::work_observation::observe!(budget, AT, {
+        budget.work(1, AT)?;
+        match value {
+            model::Value::Scalar(value) => scalar(value, budget),
+            model::Value::Fraction(value) => Ok(polynomial(&value.numerator, budget)?
+                .saturating_add(polynomial(&value.denominator, budget)?)),
+            model::Value::Tower(values) => {
+                let mut bytes = allocation(values)?;
+                for value in values {
+                    bytes = bytes.saturating_add(coefficient(&value.value, budget)?);
+                }
+                Ok(bytes)
             }
-            Ok(bytes)
         }
-    }
+    })
 }
 
 /// Count sparse formal keys and their independently owned coefficient payloads.
 fn form(value: &Form, budget: &mut Budget) -> Result<u64, Fault> {
-    let mut bytes = allocation(&value.terms)?;
-    for term in &value.terms {
-        budget.work(1, AT)?;
-        bytes = bytes
-            .saturating_add(allocation(&term.powers)?)
-            .saturating_add(coefficient(&term.coefficient.value, budget)?);
-    }
-    Ok(bytes)
+    crate::work_observation::observe!(budget, AT, {
+        let mut bytes = allocation(&value.terms)?;
+        for term in &value.terms {
+            budget.work(1, AT)?;
+            bytes = bytes
+                .saturating_add(allocation(&term.powers)?)
+                .saturating_add(coefficient(&term.coefficient.value, budget)?);
+        }
+        Ok(bytes)
+    })
 }
 
 /// Include the owning value slot and every nested owned allocation without cloning it.
 pub(super) fn value(value: &Value, budget: &mut Budget) -> Result<u64, Fault> {
-    budget.work(1, AT)?;
-    Ok(crate::graph::size(std::mem::size_of::<Value>(), AT)?
-        .saturating_add(allocation(&value.maps)?)
-        .saturating_add(form(&value.numerator, budget)?)
-        .saturating_add(form(&value.denominator, budget)?))
+    crate::work_observation::observe!(budget, AT, {
+        budget.work(1, AT)?;
+        Ok(crate::graph::size(std::mem::size_of::<Value>(), AT)?
+            .saturating_add(allocation(&value.maps)?)
+            .saturating_add(form(&value.numerator, budget)?)
+            .saturating_add(form(&value.denominator, budget)?))
+    })
 }

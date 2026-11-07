@@ -47,11 +47,14 @@ impl<'a, 'b> Reader<'a, 'b> {
 
     /// Consume an exact byte span after checked addition and range validation.
     pub(crate) fn take(&mut self, count: usize) -> Result<&'a [u8], Fault> {
-        let end = self.position.checked_add(count).ok_or_else(invalid)?;
-        let value = self.bytes.get(self.position..end).ok_or_else(invalid)?;
-        self.budget.work(size(count, AT)?, AT)?;
-        self.position = end;
-        Ok(value)
+        let reader = self;
+        crate::work_observation::observe!(reader.budget, AT, {
+            let end = reader.position.checked_add(count).ok_or_else(invalid)?;
+            let value = reader.bytes.get(reader.position..end).ok_or_else(invalid)?;
+            reader.budget.work(size(count, AT)?, AT)?;
+            reader.position = end;
+            Ok(value)
+        })
     }
 
     /// Read one byte.
@@ -87,13 +90,17 @@ impl<'a, 'b> Reader<'a, 'b> {
 
     /// Reserve cumulative decoded memory before building a vector or owned string.
     pub(crate) fn allocation(&mut self, bytes: u64) -> Result<(), Fault> {
-        self.allocated = self
-            .allocated
-            .checked_add(bytes)
-            .ok_or_else(|| Fault::capacity(BudgetKind::StagedPayloadBytes, AT))?;
-        self.budget
-            .check(BudgetKind::StagedPayloadBytes, self.allocated, AT)?;
-        self.budget.work(bytes, AT)
+        let reader = self;
+        crate::work_observation::observe!(reader.budget, AT, {
+            reader.allocated = reader
+                .allocated
+                .checked_add(bytes)
+                .ok_or_else(|| Fault::capacity(BudgetKind::StagedPayloadBytes, AT))?;
+            reader
+                .budget
+                .check(BudgetKind::StagedPayloadBytes, reader.allocated, AT)?;
+            reader.budget.work(bytes, AT)
+        })
     }
 
     /// Check a vector's count against both a semantic ceiling and available input bytes.
@@ -103,27 +110,30 @@ impl<'a, 'b> Reader<'a, 'b> {
         minimum: u64,
         item_bytes: u64,
     ) -> Result<usize, Fault> {
-        let count = u64::from(self.index()?);
-        if kind.solving_cumulative() == Some(false) {
-            self.budget.solving(kind, count, AT)?;
-        } else {
-            self.budget.check(kind, count, AT)?;
-        }
-        let needed = count.checked_mul(minimum).ok_or_else(invalid)?;
-        let remaining = self
-            .bytes
-            .len()
-            .checked_sub(self.position)
-            .ok_or_else(invalid)?;
-        if needed > size(remaining, AT)? {
-            return Err(invalid());
-        }
-        self.allocation(
-            count
-                .checked_mul(item_bytes)
-                .ok_or_else(|| Fault::capacity(BudgetKind::StagedPayloadBytes, AT))?,
-        )?;
-        usize::try_from(count).map_err(|_| invalid())
+        let reader = self;
+        crate::work_observation::observe!(reader.budget, AT, {
+            let count = u64::from(reader.index()?);
+            if kind.solving_cumulative() == Some(false) {
+                reader.budget.solving(kind, count, AT)?;
+            } else {
+                reader.budget.check(kind, count, AT)?;
+            }
+            let needed = count.checked_mul(minimum).ok_or_else(invalid)?;
+            let remaining = reader
+                .bytes
+                .len()
+                .checked_sub(reader.position)
+                .ok_or_else(invalid)?;
+            if needed > size(remaining, AT)? {
+                return Err(invalid());
+            }
+            reader.allocation(
+                count
+                    .checked_mul(item_bytes)
+                    .ok_or_else(|| Fault::capacity(BudgetKind::StagedPayloadBytes, AT))?,
+            )?;
+            usize::try_from(count).map_err(|_| invalid())
+        })
     }
 
     /// Read a bounded UTF-8 declaration key before copying it.

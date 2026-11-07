@@ -27,16 +27,18 @@ pub(crate) enum Scalar {
 
 /// Reserve a rational copy, including its retained limbs, before cloning.
 pub(crate) fn rational_copy(value: &Rational, budget: &mut Budget) -> Result<Rational, Fault> {
-    value.check(budget, AT)?;
-    let (numerator, denominator) = value.component_bits();
-    let limbs = add(numerator.div_ceil(64), denominator.div_ceil(64))?;
-    budget.check(
-        BudgetKind::StagedPayloadBytes,
-        add(product(limbs, 8)?, 64)?,
-        AT,
-    )?;
-    budget.arithmetic(limbs.max(1), AT)?;
-    Ok(value.clone())
+    crate::work_observation::observe!(budget, AT, {
+        value.check(budget, AT)?;
+        let (numerator, denominator) = value.component_bits();
+        let limbs = add(numerator.div_ceil(64), denominator.div_ceil(64))?;
+        budget.check(
+            BudgetKind::StagedPayloadBytes,
+            add(product(limbs, 8)?, 64)?,
+            AT,
+        )?;
+        budget.arithmetic(limbs.max(1), AT)?;
+        Ok(value.clone())
+    })
 }
 
 impl Scalar {
@@ -54,24 +56,26 @@ impl Scalar {
         nonzero: bool,
         budget: &mut Budget,
     ) -> Result<Self, Fault> {
-        begin(budget)?;
-        match ground {
-            Ground::Rational => {
-                budget.check(BudgetKind::ComponentBits, 1, AT)?;
-                budget.check(BudgetKind::StagedPayloadBytes, 80, AT)?;
-                budget.arithmetic(1, AT)?;
-                Ok(Self::Rational(if nonzero {
-                    Rational::one()
+        crate::work_observation::observe!(budget, AT, {
+            begin(budget)?;
+            match ground {
+                Ground::Rational => {
+                    budget.check(BudgetKind::ComponentBits, 1, AT)?;
+                    budget.check(BudgetKind::StagedPayloadBytes, 80, AT)?;
+                    budget.arithmetic(1, AT)?;
+                    Ok(Self::Rational(if nonzero {
+                        Rational::one()
+                    } else {
+                        Rational::zero()
+                    }))
+                }
+                Ground::Gaussian => Ok(Self::Gaussian(if nonzero {
+                    Gaussian::one(budget)?
                 } else {
-                    Rational::zero()
-                }))
+                    Gaussian::zero(budget)?
+                })),
             }
-            Ground::Gaussian => Ok(Self::Gaussian(if nonzero {
-                Gaussian::one(budget)?
-            } else {
-                Gaussian::zero(budget)?
-            })),
-        }
+        })
     }
 
     /// Copy without bypassing the caller's ledger.
@@ -142,15 +146,17 @@ impl Scalar {
 
     /// Meter canonical zero inspection; formal polynomial nonzero uses a separate regional decision.
     pub(crate) fn zero(&self, budget: &mut Budget) -> Result<bool, Fault> {
-        begin(budget)?;
-        match self {
-            Self::Rational(value) => {
-                value.check(budget, AT)?;
-                budget.arithmetic(add(value.component_bits().0.div_ceil(64), 1)?, AT)?;
-                Ok(value.is_zero())
+        crate::work_observation::observe!(budget, AT, {
+            begin(budget)?;
+            match self {
+                Self::Rational(value) => {
+                    value.check(budget, AT)?;
+                    budget.arithmetic(add(value.component_bits().0.div_ceil(64), 1)?, AT)?;
+                    Ok(value.is_zero())
+                }
+                Self::Gaussian(value) => value.is_zero(budget),
             }
-            Self::Gaussian(value) => value.is_zero(budget),
-        }
+        })
     }
 
     /// Canonical equality charges all component comparisons.

@@ -68,41 +68,43 @@ pub(crate) fn validate(
     map: &CoefficientMapData<Handle>,
     budget: &mut Budget,
 ) -> Result<(), Fault> {
-    let MapTarget::Family { family } = &map.target else {
-        return Err(invalid());
-    };
-    let (header, _) = scalar_target(state, map)?;
-    let region = state.region(map.region.logical_id())?;
-    if region.header != header.logical_id()
-        || super::region::family_state(state, map.region.logical_id(), budget)?
-            != family.logical_id()
-    {
-        return Err(invalid());
-    }
-    let domain = crate::solving::coefficients::storage::domain(state, &map.source)?;
-    let coordinates = if let CoefficientDomainData::Fraction { coordinates, .. } = domain {
-        frame(state, family, coordinates)?;
-        Some(crate::solving::graph::coordinates(
-            state,
-            coordinates.logical_id(),
-        )?)
-    } else {
-        None
-    };
-    for (index, image) in map.images.iter().enumerate() {
-        budget.work(1, AT)?;
-        let expression = state.expression(image.logical_id())?;
-        let field = coordinates
-            .and_then(|value| value.coordinates.get(index))
-            .map_or(Field::Complex, |value| value.field.clone());
-        if expression.header != region.header
-            || expression.scope != region.scope
-            || expression.sort != Sort::Value(AtomicSort::Scalar(field))
+    crate::work_observation::observe!(budget, AT, {
+        let MapTarget::Family { family } = &map.target else {
+            return Err(invalid());
+        };
+        let (header, _) = scalar_target(state, map)?;
+        let region = state.region(map.region.logical_id())?;
+        if region.header != header.logical_id()
+            || super::region::family_state(state, map.region.logical_id(), budget)?
+                != family.logical_id()
         {
             return Err(invalid());
         }
-    }
-    Ok(())
+        let domain = crate::solving::coefficients::storage::domain(state, &map.source)?;
+        let coordinates = if let CoefficientDomainData::Fraction { coordinates, .. } = domain {
+            frame(state, family, coordinates)?;
+            Some(crate::solving::graph::coordinates(
+                state,
+                coordinates.logical_id(),
+            )?)
+        } else {
+            None
+        };
+        for (index, image) in map.images.iter().enumerate() {
+            budget.work(1, AT)?;
+            let expression = state.expression(image.logical_id())?;
+            let field = coordinates
+                .and_then(|value| value.coordinates.get(index))
+                .map_or(Field::Complex, |value| value.field.clone());
+            if expression.header != region.header
+                || expression.scope != region.scope
+                || expression.sort != Sort::Value(AtomicSort::Scalar(field))
+            {
+                return Err(invalid());
+            }
+        }
+        Ok(())
+    })
 }
 
 /// Canonical parameter maps use exact ordered keys, with no retagging or sampled image.
@@ -122,21 +124,23 @@ pub(crate) fn parameters_state(
     coordinates: &Handle,
     budget: &mut Budget,
 ) -> Result<(), Fault> {
-    validate(state, map, budget)?;
-    let product = crate::solving::graph::coordinates(state, coordinates.logical_id())?;
-    if map.mode != crate::solving::MapMode::Specialization
-        || product.coordinates.len() != map.images.len()
-    {
-        return Err(invalid());
-    }
-    for (coordinate, image) in product.coordinates.iter().zip(&map.images) {
-        budget.work(crate::graph::size(coordinate.key.len(), AT)?, AT)?;
-        if !matches!(&state.expression(image.logical_id())?.operator, Operator::Free(key) if key == &coordinate.key)
+    crate::work_observation::observe!(budget, AT, {
+        validate(state, map, budget)?;
+        let product = crate::solving::graph::coordinates(state, coordinates.logical_id())?;
+        if map.mode != crate::solving::MapMode::Specialization
+            || product.coordinates.len() != map.images.len()
         {
             return Err(invalid());
         }
-    }
-    Ok(())
+        for (coordinate, image) in product.coordinates.iter().zip(&map.images) {
+            budget.work(crate::graph::size(coordinate.key.len(), AT)?, AT)?;
+            if !matches!(&state.expression(image.logical_id())?.operator, Operator::Free(key) if key == &coordinate.key)
+            {
+                return Err(invalid());
+            }
+        }
+        Ok(())
+    })
 }
 
 /// A ground family literal still uses only the registered rational/Gaussian scalar laws.

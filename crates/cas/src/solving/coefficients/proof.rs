@@ -27,18 +27,20 @@ pub(crate) fn conditions(
     premises: &[CheckedApplication],
     budget: &mut Budget,
 ) -> Result<ScopedConditions, Fault> {
-    if !draft.substitutions.is_empty() {
-        return Err(invalid());
-    }
-    let mut result = ScopedConditions::default();
-    for premise in premises {
-        budget.work(1, AT)?;
-        if premise.judgment.context != draft.context {
+    crate::work_observation::observe!(budget, AT, {
+        if !draft.substitutions.is_empty() {
             return Err(invalid());
         }
-        crate::statement::merge(cas, &mut result, &premise.conditions, budget)?;
-    }
-    Ok(result)
+        let mut result = ScopedConditions::default();
+        for premise in premises {
+            budget.work(1, AT)?;
+            if premise.judgment.context != draft.context {
+                return Err(invalid());
+            }
+            crate::statement::merge(cas, &mut result, &premise.conditions, budget)?;
+        }
+        Ok(result)
+    })
 }
 
 /// A map's coefficient region must be exactly the claimed region in the full context.
@@ -49,21 +51,23 @@ pub(crate) fn mapping<'a>(
     region: &Handle,
     budget: &mut Budget,
 ) -> Result<&'a CoefficientMapData<Handle>, Fault> {
-    budget.work(1, AT)?;
-    let SolveDraft::CoefficientMap(map) =
-        crate::solving::graph::object(&cas.state, cas.checked(handle)?)?
-    else {
-        return Err(invalid());
-    };
-    let frame = cas.state.context(cas.checked(context)?)?;
-    let coefficient_region = cas.state.region(cas.checked(region)?)?;
-    if map.region != *region
-        || frame.header_id != coefficient_region.header
-        || frame.admissible != region.logical_id()
-    {
-        return Err(invalid());
-    }
-    Ok(map)
+    crate::work_observation::observe!(budget, AT, {
+        budget.work(1, AT)?;
+        let SolveDraft::CoefficientMap(map) =
+            crate::solving::graph::object(&cas.state, cas.checked(handle)?)?
+        else {
+            return Err(invalid());
+        };
+        let frame = cas.state.context(cas.checked(context)?)?;
+        let coefficient_region = cas.state.region(cas.checked(region)?)?;
+        if map.region != *region
+            || frame.header_id != coefficient_region.header
+            || frame.admissible != region.logical_id()
+        {
+            return Err(invalid());
+        }
+        Ok(map)
+    })
 }
 
 /// Admit only canonical ground-domain maps here; other maps require their specific relation checks.
@@ -72,42 +76,44 @@ pub(crate) fn ground_map(
     map: &CoefficientMapData<Handle>,
     budget: &mut Budget,
 ) -> Result<(), Fault> {
-    budget.work(1, AT)?;
-    let source = domain(&cas.state, &map.source)?;
-    match &map.target {
-        MapTarget::Family { .. } => crate::solving::family::mapping::ground(cas, map, budget),
-        MapTarget::CoefficientDomain { domain: target }
-            if *target == map.source && map.images.is_empty() =>
-        {
-            Ok(())
-        }
-        MapTarget::CoefficientDomain { domain: target }
-            if map.images.is_empty()
-                && matches!(source, CoefficientDomainData::Rational)
-                && matches!(domain(&cas.state, target)?, CoefficientDomainData::Gaussian) =>
-        {
-            Ok(())
-        }
-        MapTarget::ScalarAmbient { field, .. } if map.images.is_empty() => {
-            if matches!(
-                (source, field),
-                (
-                    CoefficientDomainData::Rational,
-                    crate::model::Field::Rational
-                        | crate::model::Field::Real
-                        | crate::model::Field::Complex
-                ) | (
-                    CoefficientDomainData::Gaussian,
-                    crate::model::Field::Complex
-                )
-            ) {
+    crate::work_observation::observe!(budget, AT, {
+        budget.work(1, AT)?;
+        let source = domain(&cas.state, &map.source)?;
+        match &map.target {
+            MapTarget::Family { .. } => crate::solving::family::mapping::ground(cas, map, budget),
+            MapTarget::CoefficientDomain { domain: target }
+                if *target == map.source && map.images.is_empty() =>
+            {
                 Ok(())
-            } else {
-                Err(invalid())
             }
+            MapTarget::CoefficientDomain { domain: target }
+                if map.images.is_empty()
+                    && matches!(source, CoefficientDomainData::Rational)
+                    && matches!(domain(&cas.state, target)?, CoefficientDomainData::Gaussian) =>
+            {
+                Ok(())
+            }
+            MapTarget::ScalarAmbient { field, .. } if map.images.is_empty() => {
+                if matches!(
+                    (source, field),
+                    (
+                        CoefficientDomainData::Rational,
+                        crate::model::Field::Rational
+                            | crate::model::Field::Real
+                            | crate::model::Field::Complex
+                    ) | (
+                        CoefficientDomainData::Gaussian,
+                        crate::model::Field::Complex
+                    )
+                ) {
+                    Ok(())
+                } else {
+                    Err(invalid())
+                }
+            }
+            _ => Err(invalid()),
         }
-        _ => Err(invalid()),
-    }
+    })
 }
 
 /// Every actual denominator must be defined and nonzero on the identical coefficient region.
@@ -141,39 +147,42 @@ pub(crate) fn defined(
     premises: &[CheckedApplication],
     budget: &mut Budget,
 ) -> Result<(), Fault> {
-    let mut pending = super::storage::vector(1, budget)?;
-    pending.push(handle);
-    while let Some(current) = pending.pop() {
-        budget.work(1, AT)?;
-        match crate::solving::graph::object(&cas.state, cas.checked(current)?)? {
-            SolveDraft::Polynomial(_) => {
-                let stored = polynomial(&cas.state, current)?;
-                super::storage::reserve(&mut pending, stored.terms.len(), budget)?;
-                pending.extend(stored.terms.iter().map(|term| &term.coefficient));
-            }
-            SolveDraft::CoefficientValue(stored) => match &stored.value {
-                CoefficientValueData::Fraction {
-                    denominator: divisor,
-                    ..
-                } => denominator(cas, divisor, &stored.domain, region, premises, budget)?,
-                CoefficientValueData::Tower { coefficients } => {
-                    let engine = Engine {
-                        state: &cas.state,
-                        domain: &stored.domain,
-                    };
-                    let (_, extension) = crate::solving::towers::arithmetic::level(&engine)
-                        .map_err(|error| fault(&error))?;
-                    super::storage::reserve(&mut pending, 1, budget)?;
-                    pending.push(&extension.polynomial);
-                    super::storage::reserve(&mut pending, coefficients.len(), budget)?;
-                    pending.extend(coefficients);
+    crate::work_observation::observe!(budget, AT, {
+        let mut pending = super::storage::vector(1, budget)?;
+        pending.push(handle);
+        while let Some(current) = pending.pop() {
+            budget.work(1, AT)?;
+            match crate::solving::graph::object(&cas.state, cas.checked(current)?)? {
+                SolveDraft::Polynomial(_) => {
+                    let stored = polynomial(&cas.state, current)?;
+                    super::storage::reserve(&mut pending, stored.terms.len(), budget)?;
+                    pending.extend(stored.terms.iter().map(|term| &term.coefficient));
                 }
-                CoefficientValueData::Rational { .. } | CoefficientValueData::Gaussian { .. } => {}
-            },
-            _ => return Err(invalid()),
+                SolveDraft::CoefficientValue(stored) => match &stored.value {
+                    CoefficientValueData::Fraction {
+                        denominator: divisor,
+                        ..
+                    } => denominator(cas, divisor, &stored.domain, region, premises, budget)?,
+                    CoefficientValueData::Tower { coefficients } => {
+                        let engine = Engine {
+                            state: &cas.state,
+                            domain: &stored.domain,
+                        };
+                        let (_, extension) = crate::solving::towers::arithmetic::level(&engine)
+                            .map_err(|error| fault(&error))?;
+                        super::storage::reserve(&mut pending, 1, budget)?;
+                        pending.push(&extension.polynomial);
+                        super::storage::reserve(&mut pending, coefficients.len(), budget)?;
+                        pending.extend(coefficients);
+                    }
+                    CoefficientValueData::Rational { .. }
+                    | CoefficientValueData::Gaussian { .. } => {}
+                },
+                _ => return Err(invalid()),
+            }
         }
-    }
-    Ok(())
+        Ok(())
+    })
 }
 
 /// Identity source maps are formal homomorphisms; specialization with images needs evaluation.

@@ -18,79 +18,83 @@ use crate::solving::coefficients::storage::{reserve, vector};
 impl Components<'_, '_> {
     /// Import each explicitly referenced exact regional fact once for the whole component interpretation.
     pub(crate) fn premises(&mut self, slots: &[u32], budget: &mut Budget) -> Result<(), Fault> {
-        for slot in slots {
-            budget.work(crate::graph::size(self.imported.len(), AT)?.max(1), AT)?;
-            if self.imported.contains(slot) {
-                continue;
-            }
-            let premise = super::super::proof::premise(self.evaluation.premises, *slot)?;
-            reserve(&mut self.imported, 1, budget)?;
-            self.imported.push(*slot);
-            if let Some(subject) = super::super::exclusion::subject(
-                self.evaluation.cas,
-                self.evaluation.region,
-                &premise.judgment.statement,
-            )? {
-                self.empty_leaves = true;
-                self.import_empty(subject, budget)?;
-            }
-            match &premise.judgment.statement {
-                Statement::Solve(statement) => match statement.as_ref() {
-                    SolveStatement::RealValues(fact) if &fact.region == self.evaluation.region => {
-                        for handle in &fact.values {
-                            let parts = self.expression(handle.logical_id(), &[], budget)?;
-                            reserve(&mut self.equations, 1, budget)?;
-                            self.equations.push(parts.imaginary.numerator);
+        crate::work_observation::observe!(budget, AT, {
+            for slot in slots {
+                budget.work(crate::graph::size(self.imported.len(), AT)?.max(1), AT)?;
+                if self.imported.contains(slot) {
+                    continue;
+                }
+                let premise = super::super::proof::premise(self.evaluation.premises, *slot)?;
+                reserve(&mut self.imported, 1, budget)?;
+                self.imported.push(*slot);
+                if let Some(subject) = super::super::exclusion::subject(
+                    self.evaluation.cas,
+                    self.evaluation.region,
+                    &premise.judgment.statement,
+                )? {
+                    self.empty_leaves = true;
+                    self.import_empty(subject, budget)?;
+                }
+                match &premise.judgment.statement {
+                    Statement::Solve(statement) => match statement.as_ref() {
+                        SolveStatement::RealValues(fact)
+                            if &fact.region == self.evaluation.region =>
+                        {
+                            for handle in &fact.values {
+                                let parts = self.expression(handle.logical_id(), &[], budget)?;
+                                reserve(&mut self.equations, 1, budget)?;
+                                self.equations.push(parts.imaginary.numerator);
+                            }
                         }
+                        SolveStatement::CoefficientEquality(fact)
+                            if &fact.region == self.evaluation.region
+                                && fact.left.logical_id().kind
+                                    == crate::graph::VertexKind::Expression
+                                && fact.right.logical_id().kind
+                                    == crate::graph::VertexKind::Expression =>
+                        {
+                            self.endpoints(
+                                fact.left.logical_id(),
+                                fact.right.logical_id(),
+                                &[],
+                                budget,
+                            )?;
+                        }
+                        _ => {}
+                    },
+                    Statement::Equality {
+                        left,
+                        right,
+                        domain,
+                        domain_contract: DomainContract::DefinedAndEqual,
+                    } if domain == self.evaluation.region => {
+                        self.endpoints(left.logical_id(), right.logical_id(), &[], budget)?;
                     }
-                    SolveStatement::CoefficientEquality(fact)
-                        if &fact.region == self.evaluation.region
-                            && fact.left.logical_id().kind
-                                == crate::graph::VertexKind::Expression
-                            && fact.right.logical_id().kind
-                                == crate::graph::VertexKind::Expression =>
+                    Statement::PredicateFact { predicate, region }
+                        if region == self.evaluation.region =>
                     {
-                        self.endpoints(
-                            fact.left.logical_id(),
-                            fact.right.logical_id(),
-                            &[],
-                            budget,
-                        )?;
+                        if matches!(
+                            super::super::evidence::predicate(
+                                self.evaluation.cas,
+                                predicate.logical_id()
+                            )?,
+                            (PredicateKind::Positive | PredicateKind::NonZero, [_])
+                        ) {
+                            self.empty_leaves = self
+                                .evaluation
+                                .cas
+                                .state
+                                .region(self.evaluation.region.logical_id())?
+                                .lies_over
+                                .is_some();
+                        }
+                        self.record_predicate(predicate.logical_id(), &[], budget)?;
                     }
                     _ => {}
-                },
-                Statement::Equality {
-                    left,
-                    right,
-                    domain,
-                    domain_contract: DomainContract::DefinedAndEqual,
-                } if domain == self.evaluation.region => {
-                    self.endpoints(left.logical_id(), right.logical_id(), &[], budget)?;
                 }
-                Statement::PredicateFact { predicate, region }
-                    if region == self.evaluation.region =>
-                {
-                    if matches!(
-                        super::super::evidence::predicate(
-                            self.evaluation.cas,
-                            predicate.logical_id()
-                        )?,
-                        (PredicateKind::Positive | PredicateKind::NonZero, [_])
-                    ) {
-                        self.empty_leaves = self
-                            .evaluation
-                            .cas
-                            .state
-                            .region(self.evaluation.region.logical_id())?
-                            .lies_over
-                            .is_some();
-                    }
-                    self.record_predicate(predicate.logical_id(), &[], budget)?;
-                }
-                _ => {}
             }
-        }
-        Ok(())
+            Ok(())
+        })
     }
 
     /// Reuse an identical defined fact or interpret one independently checked empty zero set.
@@ -112,28 +116,30 @@ impl Components<'_, '_> {
 
     /// True guards retain their exact region ancestry; unrelated strata contribute no facts.
     pub(crate) fn guards(&mut self, budget: &mut Budget) -> Result<(), Fault> {
-        let mut pending = vector(1, budget)?;
-        pending.push(self.evaluation.region.logical_id());
-        while let Some(id) = pending.pop() {
-            budget.work(1, AT)?;
-            match &self.evaluation.cas.state.region(id)?.expression {
-                RegionExpr::GuardTrue { base, predicate } => {
-                    self.record_predicate(*predicate, &[], budget)?;
-                    reserve(&mut pending, 1, budget)?;
-                    pending.push(*base);
+        crate::work_observation::observe!(budget, AT, {
+            let mut pending = vector(1, budget)?;
+            pending.push(self.evaluation.region.logical_id());
+            while let Some(id) = pending.pop() {
+                budget.work(1, AT)?;
+                match &self.evaluation.cas.state.region(id)?.expression {
+                    RegionExpr::GuardTrue { base, predicate } => {
+                        self.record_predicate(*predicate, &[], budget)?;
+                        reserve(&mut pending, 1, budget)?;
+                        pending.push(*base);
+                    }
+                    RegionExpr::GuardFalse { base, .. } => {
+                        reserve(&mut pending, 1, budget)?;
+                        pending.push(*base);
+                    }
+                    RegionExpr::Meet(members) => {
+                        reserve(&mut pending, members.len(), budget)?;
+                        pending.extend(members);
+                    }
+                    _ => {}
                 }
-                RegionExpr::GuardFalse { base, .. } => {
-                    reserve(&mut pending, 1, budget)?;
-                    pending.push(*base);
-                }
-                RegionExpr::Meet(members) => {
-                    reserve(&mut pending, members.len(), budget)?;
-                    pending.extend(members);
-                }
-                _ => {}
             }
-        }
-        Ok(())
+            Ok(())
+        })
     }
 
     /// An equality contributes both real and imaginary equations without any orientation guess.
@@ -188,91 +194,95 @@ impl Components<'_, '_> {
         bound: &[Parts],
         budget: &mut Budget,
     ) -> Result<(), Fault> {
-        let mut pending = vector(1, budget)?;
-        pending.push(root);
-        while let Some(id) = pending.pop() {
-            budget.work(1, AT)?;
-            let (kind, arguments) = super::super::evidence::predicate(self.evaluation.cas, id)?;
-            match (kind, arguments) {
-                (PredicateKind::And, _) => {
-                    reserve(&mut pending, arguments.len(), budget)?;
-                    pending.extend(arguments);
-                }
-                (PredicateKind::Equal, [left, right]) => {
-                    self.endpoints(*left, *right, bound, budget)?;
-                }
-                (PredicateKind::Positive | PredicateKind::NonZero, [argument]) => {
-                    let parts = self.expression(*argument, bound, budget)?;
-                    let nonzero = if *kind == PredicateKind::Positive {
-                        reserve(&mut self.positive, 1, budget)?;
-                        self.positive
-                            .push(parts.real.copy(&self.evaluation.engine, budget)?);
-                        parts.real
-                    } else {
-                        parts
-                            .real
-                            .mul(&parts.real, &self.evaluation.engine, budget)?
-                            .add(
-                                &parts.imaginary.mul(
-                                    &parts.imaginary,
+        crate::work_observation::observe!(budget, AT, {
+            let mut pending = vector(1, budget)?;
+            pending.push(root);
+            while let Some(id) = pending.pop() {
+                budget.work(1, AT)?;
+                let (kind, arguments) = super::super::evidence::predicate(self.evaluation.cas, id)?;
+                match (kind, arguments) {
+                    (PredicateKind::And, _) => {
+                        reserve(&mut pending, arguments.len(), budget)?;
+                        pending.extend(arguments);
+                    }
+                    (PredicateKind::Equal, [left, right]) => {
+                        self.endpoints(*left, *right, bound, budget)?;
+                    }
+                    (PredicateKind::Positive | PredicateKind::NonZero, [argument]) => {
+                        let parts = self.expression(*argument, bound, budget)?;
+                        let nonzero = if *kind == PredicateKind::Positive {
+                            reserve(&mut self.positive, 1, budget)?;
+                            self.positive
+                                .push(parts.real.copy(&self.evaluation.engine, budget)?);
+                            parts.real
+                        } else {
+                            parts
+                                .real
+                                .mul(&parts.real, &self.evaluation.engine, budget)?
+                                .add(
+                                    &parts.imaginary.mul(
+                                        &parts.imaginary,
+                                        &self.evaluation.engine,
+                                        budget,
+                                    )?,
                                     &self.evaluation.engine,
                                     budget,
-                                )?,
-                                &self.evaluation.engine,
-                                budget,
-                            )?
-                    };
-                    reserve(&mut self.nonzero, 1, budget)?;
-                    self.nonzero
-                        .push((bound.is_empty().then_some(*argument), nonzero));
+                                )?
+                        };
+                        reserve(&mut self.nonzero, 1, budget)?;
+                        self.nonzero
+                            .push((bound.is_empty().then_some(*argument), nonzero));
+                    }
+                    _ => {}
                 }
-                _ => {}
             }
-        }
-        Ok(())
+            Ok(())
+        })
     }
 
     /// Pseudo-reduction multiplies only by proved ground units, so preserves zero and nonzero.
     fn reduced(&self, form: &Form, budget: &mut Budget) -> Result<Form, Fault> {
-        let engine = &self.evaluation.engine;
-        let mut remainder = form.copy(engine, budget).map_err(|error| fault(&error))?;
-        let mut result = Form {
-            terms: vector(0, budget)?,
-        };
-        while !remainder.terms.is_empty() {
-            let mut changed = false;
-            for equation in &self.equations {
-                if let Some(scale) =
-                    super::super::reduction::reduce(&mut remainder, equation, engine, budget)?
-                {
-                    if scale == super::super::reduction::Scale::Leading {
-                        let coefficient = engine
-                            .copy(
-                                &equation.terms.first().ok_or_else(invalid)?.coefficient,
-                                budget,
-                            )
-                            .map_err(|error| fault(&error))?;
-                        let scalar = Form::constant(coefficient, engine, budget)
-                            .map_err(|error| fault(&error))?;
-                        result = result
-                            .mul(&scalar, engine, budget)
-                            .map_err(|error| fault(&error))?;
+        crate::work_observation::observe!(budget, AT, {
+            let engine = &self.evaluation.engine;
+            let mut remainder = form.copy(engine, budget).map_err(|error| fault(&error))?;
+            let mut result = Form {
+                terms: vector(0, budget)?,
+            };
+            while !remainder.terms.is_empty() {
+                let mut changed = false;
+                for equation in &self.equations {
+                    if let Some(scale) =
+                        super::super::reduction::reduce(&mut remainder, equation, engine, budget)?
+                    {
+                        if scale == super::super::reduction::Scale::Leading {
+                            let coefficient = engine
+                                .copy(
+                                    &equation.terms.first().ok_or_else(invalid)?.coefficient,
+                                    budget,
+                                )
+                                .map_err(|error| fault(&error))?;
+                            let scalar = Form::constant(coefficient, engine, budget)
+                                .map_err(|error| fault(&error))?;
+                            result = result
+                                .mul(&scalar, engine, budget)
+                                .map_err(|error| fault(&error))?;
+                        }
+                        changed = true;
+                        break;
                     }
-                    changed = true;
-                    break;
+                }
+                if !changed {
+                    budget.work(crate::graph::size(remainder.terms.len(), AT)?, AT)?;
+                    let leading = remainder.terms.remove(0);
+                    let mut terms = vector(1, budget)?;
+                    terms.push(leading);
+                    result = result
+                        .add(&Form { terms }, engine, budget)
+                        .map_err(|error| fault(&error))?;
                 }
             }
-            if !changed {
-                budget.work(crate::graph::size(remainder.terms.len(), AT)?, AT)?;
-                let leading = remainder.terms.remove(0);
-                let mut terms = vector(1, budget)?;
-                terms.push(leading);
-                result = result
-                    .add(&Form { terms }, engine, budget)
-                    .map_err(|error| fault(&error))?;
-            }
-        }
-        Ok(result)
+            Ok(result)
+        })
     }
 
     /// Zero is a finite consequence of component equations, never of coefficient spelling.
@@ -286,12 +296,13 @@ impl Components<'_, '_> {
 
     /// Nonzero squares and exact regional nonzero facts are independent of conjugate orientation.
     pub(crate) fn nonzero(&self, value: &Value, budget: &mut Budget) -> Result<(), Fault> {
-        #[cfg(test)]
-        let _attribution = crate::testing::work_trace::Scope::phase("exclusion.component-nonzero");
-        if super::super::exclusion::enabled() && self.excluded(value, budget)? {
-            return Ok(());
-        }
-        self.nonzero_oracle(value, budget)
+        let _attribution = crate::work_observation::Scope::phase("exclusion.component-nonzero");
+        crate::work_observation::observe!(budget, crate::error::Location::new(""), {
+            if super::super::exclusion::enabled() && self.excluded(value, budget)? {
+                return Ok(());
+            }
+            self.nonzero_oracle(value, budget)
+        })
     }
 
     /// The retained complete search is independent of the empty-set lemma route.
@@ -354,58 +365,61 @@ impl Components<'_, '_> {
         bound: &[Parts],
         budget: &mut Budget,
     ) -> Result<(), Fault> {
-        let mut pending = vector(1, budget)?;
-        pending.push(root);
-        while let Some(id) = pending.pop() {
-            budget.work(1, AT)?;
-            let (kind, arguments) = super::super::evidence::predicate(self.evaluation.cas, id)?;
-            match (kind, arguments) {
-                (PredicateKind::And, _) => {
-                    reserve(&mut pending, arguments.len(), budget)?;
-                    pending.extend(arguments);
-                }
-                (PredicateKind::Equal, [left, right]) => {
-                    let original = self.expression(*left, bound, budget)?;
-                    let expected = self.expression(*right, bound, budget)?;
-                    let difference = original.sum(&expected, true, self.evaluation, budget)?;
-                    self.zero(&difference.real, budget)?;
-                    self.zero(&difference.imaginary, budget)?;
-                }
-                (PredicateKind::Positive | PredicateKind::NonNegative, [argument]) => {
-                    let value = self.expression(*argument, bound, budget)?;
-                    self.zero(&value.imaginary, budget)?;
-                    self.sign(&value.real, *kind == PredicateKind::Positive, budget)?;
-                }
-                (PredicateKind::NonZero, [argument]) => {
-                    let value = self.expression(*argument, bound, budget)?;
-                    if !super::super::product::decides(self.nonzero(&value.real, budget))? {
-                        self.nonzero(&value.imaginary, budget)?;
+        crate::work_observation::observe!(budget, AT, {
+            let mut pending = vector(1, budget)?;
+            pending.push(root);
+            while let Some(id) = pending.pop() {
+                budget.work(1, AT)?;
+                let (kind, arguments) = super::super::evidence::predicate(self.evaluation.cas, id)?;
+                match (kind, arguments) {
+                    (PredicateKind::And, _) => {
+                        reserve(&mut pending, arguments.len(), budget)?;
+                        pending.extend(arguments);
                     }
+                    (PredicateKind::Equal, [left, right]) => {
+                        let original = self.expression(*left, bound, budget)?;
+                        let expected = self.expression(*right, bound, budget)?;
+                        let difference = original.sum(&expected, true, self.evaluation, budget)?;
+                        self.zero(&difference.real, budget)?;
+                        self.zero(&difference.imaginary, budget)?;
+                    }
+                    (PredicateKind::Positive | PredicateKind::NonNegative, [argument]) => {
+                        let value = self.expression(*argument, bound, budget)?;
+                        self.zero(&value.imaginary, budget)?;
+                        self.sign(&value.real, *kind == PredicateKind::Positive, budget)?;
+                    }
+                    (PredicateKind::NonZero, [argument]) => {
+                        let value = self.expression(*argument, bound, budget)?;
+                        if !super::super::product::decides(self.nonzero(&value.real, budget))? {
+                            self.nonzero(&value.imaginary, budget)?;
+                        }
+                    }
+                    _ => return Err(invalid()),
                 }
-                _ => return Err(invalid()),
             }
-        }
-        Ok(())
+            Ok(())
+        })
     }
 
     /// Sign claims use a rational value or an identical earlier positive regional fact.
     fn sign(&self, value: &Value, strict: bool, budget: &mut Budget) -> Result<(), Fault> {
-        #[cfg(test)]
-        let _attribution = crate::testing::work_trace::Scope::phase("exclusion.component-sign");
-        if let Some(sign) = super::selection::sign(value, budget)?
-            && (sign == std::cmp::Ordering::Greater
-                || (!strict && sign == std::cmp::Ordering::Equal))
-        {
-            return Ok(());
-        }
-        for fact in &self.positive {
-            if super::super::product::decides(
-                self.zero(&value.sub(fact, &self.evaluation.engine, budget)?, budget),
-            )? {
+        let _attribution = crate::work_observation::Scope::phase("exclusion.component-sign");
+        crate::work_observation::observe!(budget, crate::error::Location::new(""), {
+            if let Some(sign) = super::selection::sign(value, budget)?
+                && (sign == std::cmp::Ordering::Greater
+                    || (!strict && sign == std::cmp::Ordering::Equal))
+            {
                 return Ok(());
             }
-        }
-        Err(invalid())
+            for fact in &self.positive {
+                if super::super::product::decides(
+                    self.zero(&value.sub(fact, &self.evaluation.engine, budget)?, budget),
+                )? {
+                    return Ok(());
+                }
+            }
+            Err(invalid())
+        })
     }
 }
 

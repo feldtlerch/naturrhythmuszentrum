@@ -18,37 +18,39 @@ pub(crate) fn contained(
     parent: &Handle,
     budget: &mut Budget,
 ) -> Result<(), Fault> {
-    let target = cas.state.region(cas.checked(parent)?)?;
-    let mut pending = vector(1, budget)?;
-    pending.push(cas.checked(child)?);
-    while let Some(id) = pending.pop() {
-        budget.work(1, AT)?;
-        let current = cas.state.region(id)?;
-        if (&current.ambient, &current.scope, current.header)
-            != (&target.ambient, &target.scope, target.header)
-        {
-            return Err(invalid());
-        }
-        if id == parent.logical_id()
-            || matches!(target.expression, crate::domain_model::RegionExpr::Ambient)
-        {
-            return Ok(());
-        }
-        match &current.expression {
-            crate::domain_model::RegionExpr::GuardTrue { base, .. }
-            | crate::domain_model::RegionExpr::GuardFalse { base, .. } => pending.push(*base),
-            crate::domain_model::RegionExpr::Meet(members) => {
-                crate::solving::coefficients::storage::reserve(
-                    &mut pending,
-                    members.len(),
-                    budget,
-                )?;
-                pending.extend(members);
+    crate::work_observation::observe!(budget, AT, {
+        let target = cas.state.region(cas.checked(parent)?)?;
+        let mut pending = vector(1, budget)?;
+        pending.push(cas.checked(child)?);
+        while let Some(id) = pending.pop() {
+            budget.work(1, AT)?;
+            let current = cas.state.region(id)?;
+            if (&current.ambient, &current.scope, current.header)
+                != (&target.ambient, &target.scope, target.header)
+            {
+                return Err(invalid());
             }
-            _ => {}
+            if id == parent.logical_id()
+                || matches!(target.expression, crate::domain_model::RegionExpr::Ambient)
+            {
+                return Ok(());
+            }
+            match &current.expression {
+                crate::domain_model::RegionExpr::GuardTrue { base, .. }
+                | crate::domain_model::RegionExpr::GuardFalse { base, .. } => pending.push(*base),
+                crate::domain_model::RegionExpr::Meet(members) => {
+                    crate::solving::coefficients::storage::reserve(
+                        &mut pending,
+                        members.len(),
+                        budget,
+                    )?;
+                    pending.extend(members);
+                }
+                _ => {}
+            }
         }
-    }
-    Err(invalid())
+        Err(invalid())
+    })
 }
 
 /// Retain the original predicate, unknown domain and every original denominator independently.

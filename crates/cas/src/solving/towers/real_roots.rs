@@ -99,27 +99,29 @@ pub(crate) fn positive_selection(
     selection: &RootSelectionData<Handle>,
     budget: &mut Budget,
 ) -> Result<bool, Fault> {
-    budget.work(1, AT)?;
-    if selection.mode != SelectionMode::Constrained {
-        return Err(invalid());
-    }
-    let crate::graph::Vertex::Condition(predicate) =
-        cas.state.node(selection.predicate.logical_id())?
-    else {
-        return Err(invalid());
-    };
-    let strict = match predicate.kind {
-        PredicateKind::Positive => true,
-        PredicateKind::NonNegative => false,
-        _ => return Err(invalid()),
-    };
-    let [argument] = predicate.arguments.as_slice() else {
-        return Err(invalid());
-    };
-    if cas.state.expression(*argument)?.operator != (Operator::Bound { depth: 0, slot: 0 }) {
-        return Err(invalid());
-    }
-    Ok(strict)
+    crate::work_observation::observe!(budget, AT, {
+        budget.work(1, AT)?;
+        if selection.mode != SelectionMode::Constrained {
+            return Err(invalid());
+        }
+        let crate::graph::Vertex::Condition(predicate) =
+            cas.state.node(selection.predicate.logical_id())?
+        else {
+            return Err(invalid());
+        };
+        let strict = match predicate.kind {
+            PredicateKind::Positive => true,
+            PredicateKind::NonNegative => false,
+            _ => return Err(invalid()),
+        };
+        let [argument] = predicate.arguments.as_slice() else {
+            return Err(invalid());
+        };
+        if cas.state.expression(*argument)?.operator != (Operator::Bound { depth: 0, slot: 0 }) {
+            return Err(invalid());
+        }
+        Ok(strict)
+    })
 }
 
 /// A supplied sign fact must refer to -c for this exact binomial's constant c and scalar map.
@@ -131,40 +133,43 @@ fn sign_premise(
     premises: &[CheckedApplication],
     budget: &mut Budget,
 ) -> Result<bool, Fault> {
-    for premise in premises {
-        budget.work(1, AT)?;
-        let Statement::PredicateFact { region, predicate } = &premise.judgment.statement else {
-            continue;
-        };
-        if *region != relation.region {
-            continue;
+    crate::work_observation::observe!(budget, AT, {
+        for premise in premises {
+            budget.work(1, AT)?;
+            let Statement::PredicateFact { region, predicate } = &premise.judgment.statement else {
+                continue;
+            };
+            if *region != relation.region {
+                continue;
+            }
+            let crate::graph::Vertex::Condition(condition) =
+                cas.state.node(predicate.logical_id())?
+            else {
+                return Err(invalid());
+            };
+            if condition.kind != PredicateKind::Positive
+                && (strict || condition.kind != PredicateKind::NonNegative)
+            {
+                continue;
+            }
+            let [argument] = condition.arguments.as_slice() else {
+                continue;
+            };
+            let expression = cas.state.expression(*argument)?;
+            if expression.operator != Operator::Neg {
+                continue;
+            }
+            let [operand] = expression.operands.as_slice() else {
+                continue;
+            };
+            let literal = cas.state.expression(*operand)?;
+            if matches!(&literal.attachment, Some(ExpressionAttachment::ExactCoefficient { value, map }) if *value == constant.logical_id() && *map == relation.map.logical_id())
+            {
+                return Ok(true);
+            }
         }
-        let crate::graph::Vertex::Condition(condition) = cas.state.node(predicate.logical_id())?
-        else {
-            return Err(invalid());
-        };
-        if condition.kind != PredicateKind::Positive
-            && (strict || condition.kind != PredicateKind::NonNegative)
-        {
-            continue;
-        }
-        let [argument] = condition.arguments.as_slice() else {
-            continue;
-        };
-        let expression = cas.state.expression(*argument)?;
-        if expression.operator != Operator::Neg {
-            continue;
-        }
-        let [operand] = expression.operands.as_slice() else {
-            continue;
-        };
-        let literal = cas.state.expression(*operand)?;
-        if matches!(&literal.attachment, Some(ExpressionAttachment::ExactCoefficient { value, map }) if *value == constant.logical_id() && *map == relation.map.logical_id())
-        {
-            return Ok(true);
-        }
-    }
-    Ok(false)
+        Ok(false)
+    })
 }
 
 /// Nonnegative or strictly positive radicands are proved exactly; no principal branch is inferred.

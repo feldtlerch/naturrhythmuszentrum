@@ -1037,6 +1037,8 @@ impl BudgetUsage {
 /// A finite work ledger, shared by all operations in a call.
 #[derive(Debug)]
 pub struct Budget {
+    /// Lazy observer identity is independent of deterministic limits and consumption.
+    pub(crate) observation: crate::work_observation::Identity,
     /// Resolved ceilings.
     limits: Limits,
     /// Monotone measured consumption.
@@ -1058,14 +1060,17 @@ impl Budget {
     /// Returns an invalid-policy fault when limits are inconsistent.
     pub fn new(limits: Limits) -> Result<Self, Fault> {
         limits.validate()?;
-        Ok(Self {
+        let budget = Self {
+            observation: crate::work_observation::Identity::default(),
             limits,
             usage: BudgetUsage::default(),
             region_partitions: crate::region_cache::Cache::default(),
             witness_records: crate::wire_memo::Cache::default(),
             reading_proofs: crate::reading_memo::Cache::default(),
             checked_records: crate::decision_kernel::cache::Accounting::default(),
-        })
+        };
+        crate::work_observation::ledger(&budget, "created");
+        Ok(budget)
     }
 
     /// Temporarily intersect every permanent ceiling with the active call policy.
@@ -1193,8 +1198,6 @@ impl Budget {
             })?;
         self.check(BudgetKind::Work, next, at)?;
         self.usage.work = next;
-        #[cfg(test)]
-        crate::testing::work_trace::record(amount, at)?;
         Ok(())
     }
 
@@ -1382,3 +1385,9 @@ pub(crate) const ALL_KINDS: [BudgetKind; 71] = [
     BudgetKind::IsolationSteps,
     BudgetKind::LocalBranches,
 ];
+
+impl Drop for Budget {
+    fn drop(&mut self) {
+        crate::work_observation::ledger(self, "closed");
+    }
+}

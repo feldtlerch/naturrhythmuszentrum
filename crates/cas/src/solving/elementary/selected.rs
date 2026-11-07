@@ -65,71 +65,73 @@ impl Evaluation<'_> {
         id: LogicalId,
         budget: &mut Budget,
     ) -> Result<Option<Value>, Fault> {
-        if self
-            .cas
-            .state
-            .region(self.region.logical_id())?
-            .lies_over
-            .is_some()
-        {
-            return crate::solving::family::parameters::read(self, id, budget);
-        }
-        let Some(frame) = self.parameter_frame()? else {
-            return Ok(None);
-        };
-        let expression = self.cas.state.expression(id)?;
-        let (Operator::Free(key), None) = (&expression.operator, &expression.attachment) else {
-            return Ok(None);
-        };
-        budget.work(crate::graph::size(frame.coordinates.len(), AT)?.max(1), AT)?;
-        let real = expression.sort
-            == crate::model::Sort::Value(crate::model::AtomicSort::Scalar(
-                crate::model::Field::Real,
-            ));
-        let real_frame = if real && expression.header == frame.header.logical_id() {
+        crate::work_observation::observe!(budget, AT, {
+            if self
+                .cas
+                .state
+                .region(self.region.logical_id())?
+                .lies_over
+                .is_some()
+            {
+                return crate::solving::family::parameters::read(self, id, budget);
+            }
+            let Some(frame) = self.parameter_frame()? else {
+                return Ok(None);
+            };
+            let expression = self.cas.state.expression(id)?;
+            let (Operator::Free(key), None) = (&expression.operator, &expression.attachment) else {
+                return Ok(None);
+            };
             budget.work(crate::graph::size(frame.coordinates.len(), AT)?.max(1), AT)?;
-            frame.coordinates.iter().all(|coordinate| {
-                coordinate.field == crate::model::Field::Real
-                    && coordinate.role == crate::solving::CoordinateRole::Coefficient
-            })
-        } else {
-            false
-        };
-        if !frame.coordinates.iter().any(|coordinate| {
-            coordinate.key == *key
-                && (coordinate.field == crate::model::Field::Complex || real_frame)
-                && expression.sort
-                    == crate::model::Sort::Value(crate::model::AtomicSort::Scalar(
-                        coordinate.field.clone(),
-                    ))
-                && coordinate.role == crate::solving::CoordinateRole::Coefficient
-        }) {
-            return Ok(None);
-        }
-        let Some(numerator) = crate::solving::coefficients::guard_polynomial::read(
-            &self.cas.state,
-            self.engine.domain,
-            self.region.logical_id(),
-            id,
-            budget,
-        )?
-        else {
-            return Ok(None);
-        };
-        let denominator = numerator.one(budget)?;
-        let coefficient =
-            self.engine
-                .element(crate::solving::coefficients::model::Value::Fraction(
-                    crate::solving::coefficients::fraction::Fraction {
-                        numerator,
-                        denominator,
-                    },
+            let real = expression.sort
+                == crate::model::Sort::Value(crate::model::AtomicSort::Scalar(
+                    crate::model::Field::Real,
                 ));
-        Ok(Some(Value::polynomial(
-            Form::constant(coefficient, &self.engine, budget).map_err(|error| fault(&error))?,
-            &self.engine,
-            budget,
-        )?))
+            let real_frame = if real && expression.header == frame.header.logical_id() {
+                budget.work(crate::graph::size(frame.coordinates.len(), AT)?.max(1), AT)?;
+                frame.coordinates.iter().all(|coordinate| {
+                    coordinate.field == crate::model::Field::Real
+                        && coordinate.role == crate::solving::CoordinateRole::Coefficient
+                })
+            } else {
+                false
+            };
+            if !frame.coordinates.iter().any(|coordinate| {
+                coordinate.key == *key
+                    && (coordinate.field == crate::model::Field::Complex || real_frame)
+                    && expression.sort
+                        == crate::model::Sort::Value(crate::model::AtomicSort::Scalar(
+                            coordinate.field.clone(),
+                        ))
+                    && coordinate.role == crate::solving::CoordinateRole::Coefficient
+            }) {
+                return Ok(None);
+            }
+            let Some(numerator) = crate::solving::coefficients::guard_polynomial::read(
+                &self.cas.state,
+                self.engine.domain,
+                self.region.logical_id(),
+                id,
+                budget,
+            )?
+            else {
+                return Ok(None);
+            };
+            let denominator = numerator.one(budget)?;
+            let coefficient =
+                self.engine
+                    .element(crate::solving::coefficients::model::Value::Fraction(
+                        crate::solving::coefficients::fraction::Fraction {
+                            numerator,
+                            denominator,
+                        },
+                    ));
+            Ok(Some(Value::polynomial(
+                Form::constant(coefficient, &self.engine, budget).map_err(|error| fault(&error))?,
+                &self.engine,
+                budget,
+            )?))
+        })
     }
 
     /// Coefficients may vanish only after their denominator is proved nonzero on this exact cell.
@@ -266,18 +268,20 @@ impl Evaluation<'_> {
 
     /// A checked free parameter with no replacement is total and carries no nested map provenance.
     fn unchanged_parameter(&self, image: &Handle, budget: &mut Budget) -> Result<bool, Fault> {
-        budget.work(1, AT)?;
-        let expression = self.cas.state.expression(image.logical_id())?;
-        let (Operator::Free(key), None) = (&expression.operator, &expression.attachment) else {
-            return Ok(false);
-        };
-        for (name, _) in self.free {
+        crate::work_observation::observe!(budget, AT, {
             budget.work(1, AT)?;
-            if *name == key.as_str() {
+            let expression = self.cas.state.expression(image.logical_id())?;
+            let (Operator::Free(key), None) = (&expression.operator, &expression.attachment) else {
                 return Ok(false);
+            };
+            for (name, _) in self.free {
+                budget.work(1, AT)?;
+                if *name == key.as_str() {
+                    return Ok(false);
+                }
             }
-        }
-        Ok(true)
+            Ok(true)
+        })
     }
 
     /// Evaluate a canonical rational function through its explicit ordered scalar images.
@@ -324,40 +328,42 @@ impl Evaluation<'_> {
         map: &CoefficientMapData<Handle>,
         budget: &mut Budget,
     ) -> Result<Option<Value>, Fault> {
-        if matches!(map.target, MapTarget::Family { .. }) {
-            return crate::solving::family::parameters::fraction(self, handle, map, budget);
-        }
-        if map.source != *self.engine.domain {
-            return Ok(None);
-        }
-        let Some(frame) = self.parameter_frame()? else {
-            return Ok(None);
-        };
-        budget.work(crate::graph::size(frame.coordinates.len(), AT)?.max(1), AT)?;
-        if !frame.coordinates.iter().all(|coordinate| {
-            matches!(
-                coordinate.field,
-                crate::model::Field::Real | crate::model::Field::Complex
-            ) && frame
-                .coordinates
-                .first()
-                .is_some_and(|first| first.field == coordinate.field)
-                && coordinate.role == crate::solving::CoordinateRole::Coefficient
-        }) {
-            return Ok(None);
-        }
-        for image in &map.images {
-            if !self.unchanged_parameter(image, budget)? {
+        crate::work_observation::observe!(budget, AT, {
+            if matches!(map.target, MapTarget::Family { .. }) {
+                return crate::solving::family::parameters::fraction(self, handle, map, budget);
+            }
+            if map.source != *self.engine.domain {
                 return Ok(None);
             }
-        }
-        let coefficient = self
-            .engine
-            .read(handle, budget)
-            .map_err(|error| fault(&error))?;
-        let numerator =
-            Form::constant(coefficient, &self.engine, budget).map_err(|error| fault(&error))?;
-        Ok(Some(Value::polynomial(numerator, &self.engine, budget)?))
+            let Some(frame) = self.parameter_frame()? else {
+                return Ok(None);
+            };
+            budget.work(crate::graph::size(frame.coordinates.len(), AT)?.max(1), AT)?;
+            if !frame.coordinates.iter().all(|coordinate| {
+                matches!(
+                    coordinate.field,
+                    crate::model::Field::Real | crate::model::Field::Complex
+                ) && frame
+                    .coordinates
+                    .first()
+                    .is_some_and(|first| first.field == coordinate.field)
+                    && coordinate.role == crate::solving::CoordinateRole::Coefficient
+            }) {
+                return Ok(None);
+            }
+            for image in &map.images {
+                if !self.unchanged_parameter(image, budget)? {
+                    return Ok(None);
+                }
+            }
+            let coefficient = self
+                .engine
+                .read(handle, budget)
+                .map_err(|error| fault(&error))?;
+            let numerator =
+                Form::constant(coefficient, &self.engine, budget).map_err(|error| fault(&error))?;
+            Ok(Some(Value::polynomial(numerator, &self.engine, budget)?))
+        })
     }
 
     /// Interpret the selected scalar map, preserving every rational-function denominator.
@@ -543,43 +549,47 @@ impl Evaluation<'_> {
         form: &Form,
         budget: &mut Budget,
     ) -> Result<Vec<Form>, Fault> {
-        let mut reached = vector(0, budget)?;
-        relation_atoms(form, &mut reached, budget)?;
-        let mut result = vector(0, budget)?;
-        let mut next = 0;
-        while let Some(id) = reached.get(next).copied() {
-            budget.work(1, AT)?;
-            next += 1;
-            if let Some(equation) = self.selected_equation(id, budget)? {
-                relation_atoms(&equation, &mut reached, budget)?;
-                reserve(&mut result, 1, budget)?;
-                result.push(equation);
+        crate::work_observation::observe!(budget, AT, {
+            let mut reached = vector(0, budget)?;
+            relation_atoms(form, &mut reached, budget)?;
+            let mut result = vector(0, budget)?;
+            let mut next = 0;
+            while let Some(id) = reached.get(next).copied() {
+                budget.work(1, AT)?;
+                next += 1;
+                if let Some(equation) = self.selected_equation(id, budget)? {
+                    relation_atoms(&equation, &mut reached, budget)?;
+                    reserve(&mut result, 1, budget)?;
+                    result.push(equation);
+                }
             }
-        }
-        Ok(result)
+            Ok(result)
+        })
     }
 
     /// Preserve exact selection, existence, map, region and strict denominator checks at every level.
     fn selected_equation(&self, id: LogicalId, budget: &mut Budget) -> Result<Option<Form>, Fault> {
-        let value = self.cas.state.expression(id)?;
-        let (Operator::RootValue { slot }, Some(ExpressionAttachment::SelectedRoot(selected))) =
-            (&value.operator, &value.attachment)
-        else {
-            return Ok(None);
-        };
-        let selected = selection(self.cas, &self.cas.handle(*selected))?;
-        budget.solving(
-            BudgetKind::SelectionSlots,
-            crate::graph::size(selected.relations.len(), AT)?,
-            AT,
-        )?;
-        let handle = selected
-            .relations
-            .get(usize::try_from(*slot).map_err(|_| invalid())?)
-            .ok_or_else(invalid)?;
-        let root = self.expression(id, true, budget)?;
-        let equation = self.root_equation(&root, relation(self.cas, handle)?, budget)?;
-        Ok(Some(equation.numerator))
+        crate::work_observation::observe!(budget, AT, {
+            let value = self.cas.state.expression(id)?;
+            let (Operator::RootValue { slot }, Some(ExpressionAttachment::SelectedRoot(selected))) =
+                (&value.operator, &value.attachment)
+            else {
+                return Ok(None);
+            };
+            let selected = selection(self.cas, &self.cas.handle(*selected))?;
+            budget.solving(
+                BudgetKind::SelectionSlots,
+                crate::graph::size(selected.relations.len(), AT)?,
+                AT,
+            )?;
+            let handle = selected
+                .relations
+                .get(usize::try_from(*slot).map_err(|_| invalid())?)
+                .ok_or_else(invalid)?;
+            let root = self.expression(id, true, budget)?;
+            let equation = self.root_equation(&root, relation(self.cas, handle)?, budget)?;
+            Ok(Some(equation.numerator))
+        })
     }
 }
 
@@ -589,21 +599,23 @@ fn relation_atoms(
     reached: &mut Vec<LogicalId>,
     budget: &mut Budget,
 ) -> Result<(), Fault> {
-    for term in &form.terms {
-        budget.work(1, AT)?;
-        for (variable, _) in &term.powers {
+    crate::work_observation::observe!(budget, AT, {
+        for term in &form.terms {
             budget.work(1, AT)?;
-            let Variable::Atom(id) = variable else {
-                continue;
-            };
-            budget.work(crate::graph::size(reached.len(), AT)?.max(1), AT)?;
-            if !reached.contains(id) {
-                reserve(reached, 1, budget)?;
-                reached.push(*id);
+            for (variable, _) in &term.powers {
+                budget.work(1, AT)?;
+                let Variable::Atom(id) = variable else {
+                    continue;
+                };
+                budget.work(crate::graph::size(reached.len(), AT)?.max(1), AT)?;
+                if !reached.contains(id) {
+                    reserve(reached, 1, budget)?;
+                    reached.push(*id);
+                }
             }
         }
-    }
-    Ok(())
+        Ok(())
+    })
 }
 
 /// Locate a slot occurrence by following only the supplied expression closure.

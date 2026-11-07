@@ -71,43 +71,44 @@ pub(crate) fn values(
     slots: &[usize],
     budget: &mut Budget,
 ) -> Result<Lemmas, Fault> {
-    #[cfg(test)]
-    let _attribution = crate::testing::work_trace::Scope::phase("exclusion.sign-leaves");
-    let mut result = Lemmas {
-        values: vector(0, budget)?,
-        bytes: 0,
-    };
-    if slots.is_empty() {
-        return Ok(result);
-    }
-    guards(evaluation, &mut result, budget)?;
-    for slot in slots {
-        budget.work(1, AT)?;
-        let premise = evaluation
-            .premises
-            .get(*slot)
-            .ok_or_else(super::proof::invalid)?;
-        if let Statement::PredicateFact { predicate, region } = &premise.judgment.statement
-            && region == evaluation.region
-            && let (PredicateKind::Positive | PredicateKind::NonZero, [subject]) =
-                super::evidence::predicate(evaluation.cas, predicate.logical_id())?
-        {
-            let fact = crate::proof::EmptyFact::Premise(
-                u32::try_from(*slot).map_err(|_| super::proof::invalid())?,
-            );
-            sign(evaluation, *subject, &fact, &mut result, budget)?;
-        } else if let Some(subject) = subject(
-            evaluation.cas,
-            evaluation.region,
-            &premise.judgment.statement,
-        )? {
-            let value = budget.with_retained_payload(result.bytes, AT, |budget| {
-                evaluation.unbound().expression(subject, true, budget)
-            })?;
-            result.push(value, budget)?;
+    let _attribution = crate::work_observation::Scope::phase("exclusion.sign-leaves");
+    crate::work_observation::observe!(budget, AT, {
+        let mut result = Lemmas {
+            values: vector(0, budget)?,
+            bytes: 0,
+        };
+        if slots.is_empty() {
+            return Ok(result);
         }
-    }
-    Ok(result)
+        guards(evaluation, &mut result, budget)?;
+        for slot in slots {
+            budget.work(1, AT)?;
+            let premise = evaluation
+                .premises
+                .get(*slot)
+                .ok_or_else(super::proof::invalid)?;
+            if let Statement::PredicateFact { predicate, region } = &premise.judgment.statement
+                && region == evaluation.region
+                && let (PredicateKind::Positive | PredicateKind::NonZero, [subject]) =
+                    super::evidence::predicate(evaluation.cas, predicate.logical_id())?
+            {
+                let fact = crate::proof::EmptyFact::Premise(
+                    u32::try_from(*slot).map_err(|_| super::proof::invalid())?,
+                );
+                sign(evaluation, *subject, &fact, &mut result, budget)?;
+            } else if let Some(subject) = subject(
+                evaluation.cas,
+                evaluation.region,
+                &premise.judgment.statement,
+            )? {
+                let value = budget.with_retained_payload(result.bytes, AT, |budget| {
+                    evaluation.unbound().expression(subject, true, budget)
+                })?;
+                result.push(value, budget)?;
+            }
+        }
+        Ok(result)
+    })
 }
 
 /// The shared sign-leaf checker validates the original strict fact before interpreting its subject.
@@ -139,45 +140,49 @@ fn guards(
     result: &mut Lemmas,
     budget: &mut Budget,
 ) -> Result<(), Fault> {
-    let mut pending = vector(1, budget)?;
-    pending.push(evaluation.region.logical_id());
-    while let Some(id) = pending.pop() {
-        budget.work(1, AT)?;
-        match &evaluation.cas.state.region(id)?.expression {
-            RegionExpr::GuardTrue { base, predicate } => {
-                if let (PredicateKind::Positive | PredicateKind::NonZero, [subject]) =
-                    super::evidence::predicate(evaluation.cas, *predicate)?
-                {
-                    sign(
-                        evaluation,
-                        *subject,
-                        &crate::proof::EmptyFact::Guard(evaluation.cas.handle(id)),
-                        result,
-                        budget,
-                    )?;
+    crate::work_observation::observe!(budget, AT, {
+        let mut pending = vector(1, budget)?;
+        pending.push(evaluation.region.logical_id());
+        while let Some(id) = pending.pop() {
+            budget.work(1, AT)?;
+            match &evaluation.cas.state.region(id)?.expression {
+                RegionExpr::GuardTrue { base, predicate } => {
+                    if let (PredicateKind::Positive | PredicateKind::NonZero, [subject]) =
+                        super::evidence::predicate(evaluation.cas, *predicate)?
+                    {
+                        sign(
+                            evaluation,
+                            *subject,
+                            &crate::proof::EmptyFact::Guard(evaluation.cas.handle(id)),
+                            result,
+                            budget,
+                        )?;
+                    }
+                    pending.push(*base);
                 }
-                pending.push(*base);
+                RegionExpr::GuardFalse { base, .. } => pending.push(*base),
+                RegionExpr::Meet(members) => {
+                    reserve(&mut pending, members.len(), budget)?;
+                    pending.extend(members);
+                }
+                _ => {}
             }
-            RegionExpr::GuardFalse { base, .. } => pending.push(*base),
-            RegionExpr::Meet(members) => {
-                reserve(&mut pending, members.len(), budget)?;
-                pending.extend(members);
-            }
-            _ => {}
         }
-    }
-    Ok(())
+        Ok(())
+    })
 }
 
 /// A previously checked defined value excludes an exactly equal query without regional search.
 pub(crate) fn matches(value: &Value, facts: &[Value], budget: &mut Budget) -> Result<bool, Fault> {
-    for fact in facts {
-        budget.work(1, AT)?;
-        if same_form(&value.numerator, &fact.numerator, budget)? {
-            return Ok(true);
+    crate::work_observation::observe!(budget, AT, {
+        for fact in facts {
+            budget.work(1, AT)?;
+            if same_form(&value.numerator, &fact.numerator, budget)? {
+                return Ok(true);
+            }
         }
-    }
-    Ok(false)
+        Ok(false)
+    })
 }
 
 /// The independent oracle retains the complete previous exclusion algorithm in tests.
@@ -198,27 +203,29 @@ fn same_coefficient(
     right: &crate::solving::coefficients::model::Element,
     budget: &mut Budget,
 ) -> Result<bool, Fault> {
-    use crate::solving::coefficients::model::Value as Coefficient;
-    budget.work(1, AT)?;
-    if left.domain != right.domain {
-        return Ok(false);
-    }
-    match (&left.value, &right.value) {
-        (Coefficient::Scalar(a), Coefficient::Scalar(b)) => a.equals(b, budget),
-        (Coefficient::Fraction(a), Coefficient::Fraction(b)) => {
-            Ok(a.numerator.equals(&b.numerator, budget)?
-                && a.denominator.equals(&b.denominator, budget)?)
+    crate::work_observation::observe!(budget, AT, {
+        use crate::solving::coefficients::model::Value as Coefficient;
+        budget.work(1, AT)?;
+        if left.domain != right.domain {
+            return Ok(false);
         }
-        (Coefficient::Tower(a), Coefficient::Tower(b)) if a.len() == b.len() => {
-            for (first, second) in a.iter().zip(b) {
-                if !same_coefficient(first, second, budget)? {
-                    return Ok(false);
-                }
+        match (&left.value, &right.value) {
+            (Coefficient::Scalar(a), Coefficient::Scalar(b)) => a.equals(b, budget),
+            (Coefficient::Fraction(a), Coefficient::Fraction(b)) => {
+                Ok(a.numerator.equals(&b.numerator, budget)?
+                    && a.denominator.equals(&b.denominator, budget)?)
             }
-            Ok(true)
+            (Coefficient::Tower(a), Coefficient::Tower(b)) if a.len() == b.len() => {
+                for (first, second) in a.iter().zip(b) {
+                    if !same_coefficient(first, second, budget)? {
+                        return Ok(false);
+                    }
+                }
+                Ok(true)
+            }
+            _ => Ok(false),
         }
-        _ => Ok(false),
-    }
+    })
 }
 
 /// Exact sparse equality avoids constructing a new subtraction or rerunning factor search.
@@ -227,21 +234,24 @@ pub(crate) fn same_form(
     right: &crate::solving::coefficients::forms::Form,
     budget: &mut Budget,
 ) -> Result<bool, Fault> {
-    if left.terms.len() != right.terms.len() {
-        return Ok(false);
-    }
-    for (first, second) in left.terms.iter().zip(&right.terms) {
-        budget.work(
-            crate::graph::size(first.powers.len().max(second.powers.len()), AT)?.saturating_add(1),
-            AT,
-        )?;
-        if first.powers != second.powers
-            || !same_coefficient(&first.coefficient, &second.coefficient, budget)?
-        {
+    crate::work_observation::observe!(budget, AT, {
+        if left.terms.len() != right.terms.len() {
             return Ok(false);
         }
-    }
-    Ok(true)
+        for (first, second) in left.terms.iter().zip(&right.terms) {
+            budget.work(
+                crate::graph::size(first.powers.len().max(second.powers.len()), AT)?
+                    .saturating_add(1),
+                AT,
+            )?;
+            if first.powers != second.powers
+                || !same_coefficient(&first.coefficient, &second.coefficient, budget)?
+            {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    })
 }
 
 /// A nonzero monomial makes each of its formal factors nonzero on the same exact frame.
@@ -250,30 +260,32 @@ pub(crate) fn monomial<'a>(
     facts: &(impl Iterator<Item = &'a Value> + Clone),
     budget: &mut Budget,
 ) -> Result<bool, Fault> {
-    let [term] = subject.terms.as_slice() else {
-        return Ok(false);
-    };
-    if !super::evidence::ground_unit(&term.coefficient.value, budget)? {
-        return Ok(false);
-    }
-    for (variable, _) in &term.powers {
-        let mut found = false;
-        for fact in (*facts).clone() {
-            budget.work(1, AT)?;
-            if let [factor] = fact.numerator.terms.as_slice() {
-                budget.work(crate::graph::size(factor.powers.len(), AT)?, AT)?;
-                found |= factor
-                    .powers
-                    .iter()
-                    .any(|(candidate, exponent)| candidate == variable && *exponent > 0);
-            }
-            if found {
-                break;
-            }
-        }
-        if !found {
+    crate::work_observation::observe!(budget, AT, {
+        let [term] = subject.terms.as_slice() else {
+            return Ok(false);
+        };
+        if !super::evidence::ground_unit(&term.coefficient.value, budget)? {
             return Ok(false);
         }
-    }
-    Ok(true)
+        for (variable, _) in &term.powers {
+            let mut found = false;
+            for fact in (*facts).clone() {
+                budget.work(1, AT)?;
+                if let [factor] = fact.numerator.terms.as_slice() {
+                    budget.work(crate::graph::size(factor.powers.len(), AT)?, AT)?;
+                    found |= factor
+                        .powers
+                        .iter()
+                        .any(|(candidate, exponent)| candidate == variable && *exponent > 0);
+                }
+                if found {
+                    break;
+                }
+            }
+            if !found {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    })
 }

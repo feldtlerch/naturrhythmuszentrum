@@ -33,44 +33,48 @@ impl Components<'_, '_> {
         map: &CoefficientMapData<Handle>,
         budget: &mut Budget,
     ) -> Result<Parts, Fault> {
-        budget.work(1, AT)?;
-        self.depth = self.depth.checked_add(1).ok_or_else(invalid)?;
-        budget.check(BudgetKind::Depth, self.depth, AT)?;
-        let stored = value(&self.evaluation.cas.state, handle)?;
-        if stored.domain != map.source {
-            return Err(invalid());
-        }
-        if map.region != *self.evaluation.region {
-            crate::solving::family::mapping::base_map(self.evaluation, map, budget)?;
-        }
-        crate::solving::coefficients::proof::identity_map(
-            self.evaluation.cas,
-            map,
-            self.evaluation.premises,
-            budget,
-        )?;
-        let result = match &stored.value {
-            CoefficientValueData::Rational { value } => Parts::rational(
-                self.evaluation,
-                value,
-                &crate::number::Rational::zero(),
+        crate::work_observation::observe!(budget, AT, {
+            budget.work(1, AT)?;
+            self.depth = self.depth.checked_add(1).ok_or_else(invalid)?;
+            budget.check(BudgetKind::Depth, self.depth, AT)?;
+            let stored = value(&self.evaluation.cas.state, handle)?;
+            if stored.domain != map.source {
+                return Err(invalid());
+            }
+            if map.region != *self.evaluation.region {
+                crate::solving::family::mapping::base_map(self.evaluation, map, budget)?;
+            }
+            crate::solving::coefficients::proof::identity_map(
+                self.evaluation.cas,
+                map,
+                self.evaluation.premises,
                 budget,
-            ),
-            CoefficientValueData::Gaussian { real, imaginary } => {
-                Parts::rational(self.evaluation, real, imaginary, budget)
-            }
-            CoefficientValueData::Fraction {
-                numerator,
-                denominator,
-            } => {
-                let dividend = self.polynomial(numerator, map, budget)?;
-                let divisor = self.polynomial(denominator, map, budget)?;
-                self.divide(&dividend, &divisor, budget)
-            }
-            CoefficientValueData::Tower { coefficients } => self.tower(coefficients, map, budget),
-        };
-        self.depth = self.depth.checked_sub(1).ok_or_else(invalid)?;
-        result
+            )?;
+            let result = match &stored.value {
+                CoefficientValueData::Rational { value } => Parts::rational(
+                    self.evaluation,
+                    value,
+                    &crate::number::Rational::zero(),
+                    budget,
+                ),
+                CoefficientValueData::Gaussian { real, imaginary } => {
+                    Parts::rational(self.evaluation, real, imaginary, budget)
+                }
+                CoefficientValueData::Fraction {
+                    numerator,
+                    denominator,
+                } => {
+                    let dividend = self.polynomial(numerator, map, budget)?;
+                    let divisor = self.polynomial(denominator, map, budget)?;
+                    self.divide(&dividend, &divisor, budget)
+                }
+                CoefficientValueData::Tower { coefficients } => {
+                    self.tower(coefficients, map, budget)
+                }
+            };
+            self.depth = self.depth.checked_sub(1).ok_or_else(invalid)?;
+            result
+        })
     }
 
     /// Ground coefficients of a fraction polynomial use the canonical real/Gaussian embedding.

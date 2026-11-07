@@ -109,39 +109,44 @@ pub(crate) fn check(
     earlier: &[CheckedApplication],
     budget: &mut Budget,
 ) -> Result<(), Fault> {
-    let frame = cas.state.context(cas.checked(&draft.context)?)?;
-    let scope = &cas.state.region(frame.admissible)?.scope;
-    if scope.is_empty() {
-        if super::formal_close::boundary(cas, draft, earlier)? {
+    crate::work_observation::observe!(budget, AT, {
+        let frame = cas.state.context(cas.checked(&draft.context)?)?;
+        let scope = &cas.state.region(frame.admissible)?.scope;
+        if scope.is_empty() {
+            if super::formal_close::boundary(cas, draft, earlier)? {
+                return Ok(());
+            }
+            for premise in earlier {
+                budget.work(1, AT)?;
+                crate::context::require_closed(
+                    &cas.state,
+                    cas.checked(&premise.judgment.context)?,
+                )?;
+            }
             return Ok(());
         }
-        for premise in earlier {
-            budget.work(1, AT)?;
-            crate::context::require_closed(&cas.state, cas.checked(&premise.judgment.context)?)?;
-        }
-        return Ok(());
-    }
-    match draft.rule {
-        Primitive::ContextHypothesis | Primitive::RegionConstruct | Primitive::ContextClose => {
-            Ok(())
-        }
-        Primitive::Solve(SolveSchema::CoefficientIdentity) => {
-            if let Certificate::Solve(certificate) = &draft.certificate
-                && let SolveCertificate::CoefficientIdentity(identity) = certificate.as_ref()
-                && identity
-                    .combinations
-                    .iter()
-                    .any(|row| row.hypothesis.is_some())
-            {
+        match draft.rule {
+            Primitive::ContextHypothesis | Primitive::RegionConstruct | Primitive::ContextClose => {
                 Ok(())
-            } else {
-                Err(invalid())
             }
+            Primitive::Solve(SolveSchema::CoefficientIdentity) => {
+                if let Certificate::Solve(certificate) = &draft.certificate
+                    && let SolveCertificate::CoefficientIdentity(identity) = certificate.as_ref()
+                    && identity
+                        .combinations
+                        .iter()
+                        .any(|row| row.hypothesis.is_some())
+                {
+                    Ok(())
+                } else {
+                    Err(invalid())
+                }
+            }
+            Primitive::Solve(SolveSchema::RootAdjunction | SolveSchema::ExtensionUnit) => {
+                support(cas, draft, scope, budget)?;
+                premises(cas, earlier, scope, budget)
+            }
+            _ => Err(invalid()),
         }
-        Primitive::Solve(SolveSchema::RootAdjunction | SolveSchema::ExtensionUnit) => {
-            support(cas, draft, scope, budget)?;
-            premises(cas, earlier, scope, budget)
-        }
-        _ => Err(invalid()),
-    }
+    })
 }

@@ -96,13 +96,15 @@ pub(crate) fn scalar(state: &State, context: LogicalId, id: LogicalId) -> Result
 
 /// Prepay complete metadata comparisons, including arbitrarily large checked scope frames.
 pub(crate) fn prepay_shape(expression: &Expression, budget: &mut Budget) -> Result<(), Fault> {
-    let mut out = crate::encoding::Encoder::new(budget, AT);
-    crate::encoding::operator(&expression.operator, &mut out)?;
-    crate::encoding::sort(&expression.sort, &mut out)?;
-    crate::encoding::scope(&expression.scope, &mut out)?;
-    crate::encoding::binding(expression.binding.as_ref(), &mut out)?;
-    let bytes = size(out.finish().len(), AT)?;
-    budget.work(bytes, AT)
+    crate::work_observation::observe!(budget, AT, {
+        let mut out = crate::encoding::Encoder::new(budget, AT);
+        crate::encoding::operator(&expression.operator, &mut out)?;
+        crate::encoding::sort(&expression.sort, &mut out)?;
+        crate::encoding::scope(&expression.scope, &mut out)?;
+        crate::encoding::binding(expression.binding.as_ref(), &mut out)?;
+        let bytes = size(out.finish().len(), AT)?;
+        budget.work(bytes, AT)
+    })
 }
 
 /// Check all equality schemas except simultaneous substitution.

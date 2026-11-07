@@ -185,86 +185,88 @@ pub(crate) fn construct(
     certificate: &Certificate,
     budget: &mut Budget,
 ) -> Result<(), Fault> {
-    if *certificate != Certificate::None {
-        return Err(invalid());
-    }
-    budget.condition(1, AT)?;
-    match statement {
-        Statement::Constructor {
-            region,
-            law: ConstructorLaw::Membership,
-        } => {
-            cas.state.region(cas.checked(region)?)?;
-            Ok(())
+    crate::work_observation::observe!(budget, AT, {
+        if *certificate != Certificate::None {
+            return Err(invalid());
         }
-        Statement::Subset { subset, superset } => {
-            let subset = cas.checked(subset)?;
-            let superset = cas.checked(superset)?;
-            let smaller = cas.state.region(subset)?;
-            let larger = cas.state.region(superset)?;
-            if smaller.ambient != larger.ambient || smaller.scope != larger.scope {
-                return Err(invalid());
-            }
-            let valid = subset == superset
-                || matches!(smaller.expression, RegionExpr::Empty)
-                || matches!(larger.expression, RegionExpr::Ambient)
-                || matches!(&smaller.expression, RegionExpr::Meet(members) if
-                    members.contains(&superset))
-                || matches!(&larger.expression, RegionExpr::Union(members) if
-                    members.contains(&subset))
-                || matches!(smaller.expression, RegionExpr::GuardTrue { base, .. }
-                    | RegionExpr::GuardFalse { base, .. } | RegionExpr::Difference { base, .. } if
-                        base == superset);
-            if valid {
+        budget.condition(1, AT)?;
+        match statement {
+            Statement::Constructor {
+                region,
+                law: ConstructorLaw::Membership,
+            } => {
+                cas.state.region(cas.checked(region)?)?;
                 Ok(())
-            } else if smaller.lies_over.is_some() || larger.lies_over.is_some() {
-                if crate::solving::family::region::subset(cas, subset, superset, budget)? {
+            }
+            Statement::Subset { subset, superset } => {
+                let subset = cas.checked(subset)?;
+                let superset = cas.checked(superset)?;
+                let smaller = cas.state.region(subset)?;
+                let larger = cas.state.region(superset)?;
+                if smaller.ambient != larger.ambient || smaller.scope != larger.scope {
+                    return Err(invalid());
+                }
+                let valid = subset == superset
+                    || matches!(smaller.expression, RegionExpr::Empty)
+                    || matches!(larger.expression, RegionExpr::Ambient)
+                    || matches!(&smaller.expression, RegionExpr::Meet(members) if
+                        members.contains(&superset))
+                    || matches!(&larger.expression, RegionExpr::Union(members) if
+                        members.contains(&subset))
+                    || matches!(smaller.expression, RegionExpr::GuardTrue { base, .. }
+                        | RegionExpr::GuardFalse { base, .. } | RegionExpr::Difference { base, .. } if
+                            base == superset);
+                if valid {
+                    Ok(())
+                } else if smaller.lies_over.is_some() || larger.lies_over.is_some() {
+                    if crate::solving::family::region::subset(cas, subset, superset, budget)? {
+                        Ok(())
+                    } else {
+                        Err(invalid())
+                    }
+                } else {
+                    Err(invalid())
+                }
+            }
+            Statement::Empty { region } => {
+                let expression = &cas.state.region(cas.checked(region)?)?.expression;
+                if matches!(expression, RegionExpr::Empty)
+                    || matches!(expression, RegionExpr::Union(members) if members.is_empty())
+                {
                     Ok(())
                 } else {
                     Err(invalid())
                 }
-            } else {
-                Err(invalid())
             }
-        }
-        Statement::Empty { region } => {
-            let expression = &cas.state.region(cas.checked(region)?)?.expression;
-            if matches!(expression, RegionExpr::Empty)
-                || matches!(expression, RegionExpr::Union(members) if members.is_empty())
-            {
-                Ok(())
-            } else {
-                Err(invalid())
+            Statement::Cover { domain, members } => construct_cover(cas, domain, members, budget),
+            Statement::Disjoint { left, right } => {
+                let first = &cas.state.region(cas.checked(left)?)?.expression;
+                let second = &cas.state.region(cas.checked(right)?)?.expression;
+                if matches!(first, RegionExpr::Empty) || matches!(second, RegionExpr::Empty) {
+                    return Ok(());
+                }
+                let valid = match (first, second) {
+                    (
+                        RegionExpr::GuardTrue { base, predicate },
+                        RegionExpr::GuardFalse {
+                            base: other,
+                            predicate: guard,
+                        },
+                    )
+                    | (
+                        RegionExpr::GuardFalse { base, predicate },
+                        RegionExpr::GuardTrue {
+                            base: other,
+                            predicate: guard,
+                        },
+                    ) => base == other && predicate == guard,
+                    _ => false,
+                };
+                if valid { Ok(()) } else { Err(invalid()) }
             }
+            _ => Err(invalid()),
         }
-        Statement::Cover { domain, members } => construct_cover(cas, domain, members, budget),
-        Statement::Disjoint { left, right } => {
-            let first = &cas.state.region(cas.checked(left)?)?.expression;
-            let second = &cas.state.region(cas.checked(right)?)?.expression;
-            if matches!(first, RegionExpr::Empty) || matches!(second, RegionExpr::Empty) {
-                return Ok(());
-            }
-            let valid = match (first, second) {
-                (
-                    RegionExpr::GuardTrue { base, predicate },
-                    RegionExpr::GuardFalse {
-                        base: other,
-                        predicate: guard,
-                    },
-                )
-                | (
-                    RegionExpr::GuardFalse { base, predicate },
-                    RegionExpr::GuardTrue {
-                        base: other,
-                        predicate: guard,
-                    },
-                ) => base == other && predicate == guard,
-                _ => false,
-            };
-            if valid { Ok(()) } else { Err(invalid()) }
-        }
-        _ => Err(invalid()),
-    }
+    })
 }
 
 /// Compare the exact constructor cover inventory without changing its accounting.

@@ -52,47 +52,51 @@ fn parameters(
     coordinates: &Handle,
     budget: &mut Budget,
 ) -> Result<(), Fault> {
-    if matches!(map.target, MapTarget::Family { .. }) {
-        return crate::solving::family::mapping::parameters(cas, map, coordinates, budget);
-    }
-    if map.mode != MapMode::Specialization {
-        return Err(invalid());
-    }
-    let CoefficientDomainData::Fraction { base, .. } = domain(&cas.state, &map.source)? else {
-        return Err(invalid());
-    };
-    let MapTarget::ScalarAmbient { field, .. } = &map.target else {
-        return Err(invalid());
-    };
-    if matches!(domain(&cas.state, base)?, CoefficientDomainData::Gaussian)
-        && *field != crate::model::Field::Complex
-    {
-        return Err(invalid());
-    }
-    if !matches!(
-        field,
-        crate::model::Field::Rational | crate::model::Field::Real | crate::model::Field::Complex
-    ) {
-        return Err(invalid());
-    }
-    let SolveDraft::CoordinateSpace(product) =
-        crate::solving::graph::object(&cas.state, coordinates.logical_id())?
-    else {
-        return Err(invalid());
-    };
-    if map.images.len() != product.coordinates.len() {
-        return Err(invalid());
-    }
-    for (image, coordinate) in map.images.iter().zip(&product.coordinates) {
-        budget.work(crate::graph::size(coordinate.key.len(), AT)?, AT)?;
-        let expression = cas.state.expression(cas.checked(image)?)?;
-        if !matches!(&expression.operator, Operator::Free(key) if key == &coordinate.key)
-            || expression.header != product.header.logical_id()
+    crate::work_observation::observe!(budget, AT, {
+        if matches!(map.target, MapTarget::Family { .. }) {
+            return crate::solving::family::mapping::parameters(cas, map, coordinates, budget);
+        }
+        if map.mode != MapMode::Specialization {
+            return Err(invalid());
+        }
+        let CoefficientDomainData::Fraction { base, .. } = domain(&cas.state, &map.source)? else {
+            return Err(invalid());
+        };
+        let MapTarget::ScalarAmbient { field, .. } = &map.target else {
+            return Err(invalid());
+        };
+        if matches!(domain(&cas.state, base)?, CoefficientDomainData::Gaussian)
+            && *field != crate::model::Field::Complex
         {
             return Err(invalid());
         }
-    }
-    Ok(())
+        if !matches!(
+            field,
+            crate::model::Field::Rational
+                | crate::model::Field::Real
+                | crate::model::Field::Complex
+        ) {
+            return Err(invalid());
+        }
+        let SolveDraft::CoordinateSpace(product) =
+            crate::solving::graph::object(&cas.state, coordinates.logical_id())?
+        else {
+            return Err(invalid());
+        };
+        if map.images.len() != product.coordinates.len() {
+            return Err(invalid());
+        }
+        for (image, coordinate) in map.images.iter().zip(&product.coordinates) {
+            budget.work(crate::graph::size(coordinate.key.len(), AT)?, AT)?;
+            let expression = cas.state.expression(cas.checked(image)?)?;
+            if !matches!(&expression.operator, Operator::Free(key) if key == &coordinate.key)
+                || expression.header != product.header.logical_id()
+            {
+                return Err(invalid());
+            }
+        }
+        Ok(())
+    })
 }
 
 /// A selected root may evaluate a quotient only after that exact selection is known to exist.
@@ -102,17 +106,19 @@ fn existence(
     premises: &[CheckedApplication],
     budget: &mut Budget,
 ) -> Result<(), Fault> {
-    for premise in premises {
-        budget.work(1, AT)?;
-        if let Statement::Solve(statement) = &premise.judgment.statement
-            && let SolveStatement::RootExistence(value) = statement.as_ref()
-            && value.relation == *selection
-            && value.region == *region
-        {
-            return Ok(());
+    crate::work_observation::observe!(budget, AT, {
+        for premise in premises {
+            budget.work(1, AT)?;
+            if let Statement::Solve(statement) = &premise.judgment.statement
+                && let SolveStatement::RootExistence(value) = statement.as_ref()
+                && value.relation == *selection
+                && value.region == *region
+            {
+                return Ok(());
+            }
         }
-    }
-    Err(invalid())
+        Err(invalid())
+    })
 }
 
 /// Root evaluation retains the parent coefficient interpretation from the root relation itself.
@@ -177,42 +183,44 @@ pub(crate) fn check(
     premises: &[CheckedApplication],
     budget: &mut Budget,
 ) -> Result<(), Fault> {
-    if matches!(map.target, MapTarget::Family { .. }) {
-        crate::solving::family::region::projection(cas, &map.region, premises, budget)?;
-    }
-    let mut current = map;
-    let mut depth = 0_u64;
-    loop {
-        budget.work(1, AT)?;
-        depth = depth
-            .checked_add(1)
-            .ok_or_else(|| Fault::capacity(BudgetKind::Depth, AT))?;
-        budget.check(BudgetKind::Depth, depth, AT)?;
-        for denominator in &current.denominators {
-            super::proof::denominator(
-                cas,
-                denominator,
-                &current.source,
-                &current.region,
-                premises,
-                budget,
-            )?;
+    crate::work_observation::observe!(budget, AT, {
+        if matches!(map.target, MapTarget::Family { .. }) {
+            crate::solving::family::region::projection(cas, &map.region, premises, budget)?;
         }
-        if let MapTarget::CoefficientDomain { domain: target } = &current.target {
-            return coefficient_target(cas, current, target, premises, budget);
+        let mut current = map;
+        let mut depth = 0_u64;
+        loop {
+            budget.work(1, AT)?;
+            depth = depth
+                .checked_add(1)
+                .ok_or_else(|| Fault::capacity(BudgetKind::Depth, AT))?;
+            budget.check(BudgetKind::Depth, depth, AT)?;
+            for denominator in &current.denominators {
+                super::proof::denominator(
+                    cas,
+                    denominator,
+                    &current.source,
+                    &current.region,
+                    premises,
+                    budget,
+                )?;
+            }
+            if let MapTarget::CoefficientDomain { domain: target } = &current.target {
+                return coefficient_target(cas, current, target, premises, budget);
+            }
+            match domain(&cas.state, &current.source)? {
+                CoefficientDomainData::Rational | CoefficientDomainData::Gaussian => {
+                    return super::proof::ground_map(cas, current, budget);
+                }
+                CoefficientDomainData::Fraction { coordinates, .. } => {
+                    return parameters(cas, current, coordinates, budget);
+                }
+                CoefficientDomainData::Quotient { level } => {
+                    current = parent_map(cas, current, level, premises, budget)?;
+                }
+            }
         }
-        match domain(&cas.state, &current.source)? {
-            CoefficientDomainData::Rational | CoefficientDomainData::Gaussian => {
-                return super::proof::ground_map(cas, current, budget);
-            }
-            CoefficientDomainData::Fraction { coordinates, .. } => {
-                return parameters(cas, current, coordinates, budget);
-            }
-            CoefficientDomainData::Quotient { level } => {
-                current = parent_map(cas, current, level, premises, budget)?;
-            }
-        }
-    }
+    })
 }
 
 /// Domain specializations replay the source modulus at the explicit, defined target generator.

@@ -4,12 +4,19 @@
 use crate::budget::{Budget, Limits};
 use crate::error::{Fault, Location};
 use crate::testing::common::TestResult;
-use crate::testing::work_trace::{Row, Scope, measured};
+use crate::testing::work_trace::{Row, measured};
+use crate::work_observation::{Scope, observe};
+
+mod concurrency;
+mod disabled;
+mod evidence;
 
 /// A failing nested operation retains only successfully charged Work and restores its caller scope.
 fn refused(budget: &mut Budget) -> Result<(), Fault> {
     let _scope = Scope::phase("excluded-zero");
-    budget.work(2, Location::new("inner"))?;
+    observe!(budget, Location::new("inner"), {
+        budget.work(2, Location::new("inner"))
+    })?;
     budget.work(1, Location::new("unperformed"))
 }
 
@@ -23,7 +30,7 @@ fn work_attribution_preserves_refusal_boundary() -> TestResult {
     })?;
     budget.work(3, Location::new("prior"))?;
     let (result, rows) = measured(|| {
-        let _scope = Scope::rule("test.root");
+        let _scope = Scope::rule(|| "test.root");
         refused(&mut budget)
     })?;
     assert!(result.is_err());
@@ -31,9 +38,9 @@ fn work_attribution_preserves_refusal_boundary() -> TestResult {
     assert_eq!(
         rows,
         [Row {
-            rule: "test.root",
-            phase: "excluded-zero",
-            location: "inner",
+            rule: "test.root".into(),
+            phase: "excluded-zero".into(),
+            location: "inner".into(),
             work: 2,
         }]
     );
@@ -55,29 +62,35 @@ fn work_attribution_preserves_refusal_boundary() -> TestResult {
 fn work_attribution_restores_observation() -> TestResult {
     let mut budget = Budget::new(Limits::default())?;
     let (result, rows) = measured(|| -> TestResult {
-        let _scope = Scope::rule("test.root");
+        let _scope = Scope::rule(|| "test.root");
         assert!(measured(|| ()).is_err());
-        budget.work(1, Location::new("outer"))?;
+        observe!(budget, Location::new("outer"), {
+            budget.work(1, Location::new("outer"))
+        })?;
         Ok(())
     })?;
     result?;
     assert_eq!(
         rows,
         [Row {
-            rule: "test.root",
-            phase: "validation",
-            location: "outer",
+            rule: "test.root".into(),
+            phase: "validation".into(),
+            location: "outer".into(),
             work: 1,
         }]
     );
-    let (result, rows) = measured(|| budget.work(2, Location::new("later")))?;
+    let (result, rows) = measured(|| {
+        observe!(budget, Location::new("later"), {
+            budget.work(2, Location::new("later"))
+        })
+    })?;
     result?;
     assert_eq!(
         rows,
         [Row {
-            rule: "replay",
-            phase: "overhead",
-            location: "later",
+            rule: "replay".into(),
+            phase: "overhead".into(),
+            location: "later".into(),
             work: 2,
         }]
     );

@@ -25,38 +25,40 @@ pub(crate) fn reduce(
     engine: &Engine<'_>,
     budget: &mut Budget,
 ) -> Result<Option<Scale>, Fault> {
-    budget.work(1, AT)?;
-    let Some(leading) = dividend.terms.first() else {
-        return Ok(None);
-    };
-    let Some(factor) = divisor.terms.first() else {
-        return Ok(None);
-    };
-    if !super::evidence::ground_unit(&factor.coefficient.value, budget)? {
-        return Ok(None);
-    }
-    let mut powers = crate::solving::coefficients::storage::copied(&leading.powers, budget)?;
-    for (variable, exponent) in &factor.powers {
-        budget.work(crate::graph::size(powers.len(), AT)?, AT)?;
-        let Ok(index) = powers.binary_search_by_key(variable, |entry| entry.0) else {
+    crate::work_observation::observe!(budget, AT, {
+        budget.work(1, AT)?;
+        let Some(leading) = dividend.terms.first() else {
             return Ok(None);
         };
-        let power = powers.get_mut(index).ok_or_else(invalid)?;
-        let Some(remainder) = power.1.checked_sub(*exponent) else {
+        let Some(factor) = divisor.terms.first() else {
             return Ok(None);
         };
-        power.1 = remainder;
-    }
-    powers.retain(|(_, exponent)| *exponent > 0);
-    if let Some(reduced) = gaussian(dividend, divisor, &powers, engine, budget)? {
-        *dividend = reduced;
-        return Ok(Some(Scale::Unit));
-    }
-    if constant_fraction(dividend, divisor, &powers, engine, budget)? {
-        return Ok(Some(Scale::Unit));
-    }
-    *dividend = pseudo(dividend, divisor, powers, engine, budget)?;
-    Ok(Some(Scale::Leading))
+        if !super::evidence::ground_unit(&factor.coefficient.value, budget)? {
+            return Ok(None);
+        }
+        let mut powers = crate::solving::coefficients::storage::copied(&leading.powers, budget)?;
+        for (variable, exponent) in &factor.powers {
+            budget.work(crate::graph::size(powers.len(), AT)?, AT)?;
+            let Ok(index) = powers.binary_search_by_key(variable, |entry| entry.0) else {
+                return Ok(None);
+            };
+            let power = powers.get_mut(index).ok_or_else(invalid)?;
+            let Some(remainder) = power.1.checked_sub(*exponent) else {
+                return Ok(None);
+            };
+            power.1 = remainder;
+        }
+        powers.retain(|(_, exponent)| *exponent > 0);
+        if let Some(reduced) = gaussian(dividend, divisor, &powers, engine, budget)? {
+            *dividend = reduced;
+            return Ok(Some(Scale::Unit));
+        }
+        if constant_fraction(dividend, divisor, &powers, engine, budget)? {
+            return Ok(Some(Scale::Unit));
+        }
+        *dividend = pseudo(dividend, divisor, powers, engine, budget)?;
+        Ok(Some(Scale::Leading))
+    })
 }
 
 /// Preserve the original pseudo-reduction arithmetic for every remaining coefficient path.

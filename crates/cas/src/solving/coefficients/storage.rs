@@ -16,7 +16,9 @@ pub(crate) const fn invalid() -> Fault {
 
 /// Count every attempted coefficient operation, including recursively called operations.
 pub(crate) fn begin(budget: &mut Budget) -> Result<(), Fault> {
-    budget.solving(BudgetKind::CoefficientOps, 1, AT)
+    crate::work_observation::observe!(budget, AT, {
+        budget.solving(BudgetKind::CoefficientOps, 1, AT)
+    })
 }
 
 /// Checked reservation arithmetic uses the same named capacity fault as allocation ceilings.
@@ -33,15 +35,17 @@ pub(crate) fn product(left: u64, right: u64) -> Result<u64, Fault> {
 
 /// Allocate a bounded vector before copying or computing any entry.
 pub(crate) fn vector<T>(count: usize, budget: &mut Budget) -> Result<Vec<T>, Fault> {
-    let length = size(count, AT)?;
-    let bytes = product(length, size(std::mem::size_of::<T>(), AT)?)?;
-    budget.check(BudgetKind::StagedPayloadBytes, bytes, AT)?;
-    budget.work(length, AT)?;
-    let mut result = Vec::new();
-    result
-        .try_reserve_exact(count)
-        .map_err(|_| Fault::allocation(AT))?;
-    Ok(result)
+    crate::work_observation::observe!(budget, AT, {
+        let length = size(count, AT)?;
+        let bytes = product(length, size(std::mem::size_of::<T>(), AT)?)?;
+        budget.check(BudgetKind::StagedPayloadBytes, bytes, AT)?;
+        budget.work(length, AT)?;
+        let mut result = Vec::new();
+        result
+            .try_reserve_exact(count)
+            .map_err(|_| Fault::allocation(AT))?;
+        Ok(result)
+    })
 }
 
 /// Grow scratch storage only after checking its complete resulting capacity bound.
@@ -50,13 +54,15 @@ pub(crate) fn reserve<T>(
     additional: usize,
     budget: &mut Budget,
 ) -> Result<(), Fault> {
-    let count = add(size(value.len(), AT)?, size(additional, AT)?)?;
-    let bytes = product(count, size(std::mem::size_of::<T>(), AT)?)?;
-    budget.check(BudgetKind::StagedPayloadBytes, bytes, AT)?;
-    budget.work(size(additional, AT)?, AT)?;
-    value
-        .try_reserve_exact(additional)
-        .map_err(|_| Fault::allocation(AT))
+    crate::work_observation::observe!(budget, AT, {
+        let count = add(size(value.len(), AT)?, size(additional, AT)?)?;
+        let bytes = product(count, size(std::mem::size_of::<T>(), AT)?)?;
+        budget.check(BudgetKind::StagedPayloadBytes, bytes, AT)?;
+        budget.work(size(additional, AT)?, AT)?;
+        value
+            .try_reserve_exact(additional)
+            .map_err(|_| Fault::allocation(AT))
+    })
 }
 
 /// Copy a fixed-width variable frame or exponent vector after reserving it.

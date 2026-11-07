@@ -402,39 +402,43 @@ fn prepay_scalar_copy(
     value: &crate::scalar_model::CheckedStep,
     budget: &mut Budget,
 ) -> Result<u64, Fault> {
-    let bytes = crate::proof_storage::pending_bytes(value, value.premises.len(), budget)?;
-    budget.work(bytes, AT)?;
-    Ok(bytes)
+    crate::work_observation::observe!(budget, AT, {
+        let bytes = crate::proof_storage::pending_bytes(value, value.premises.len(), budget)?;
+        budget.work(bytes, AT)?;
+        Ok(bytes)
+    })
 }
 
 /// Native payload and its optional scalar cache are bounded before either is cloned.
 fn prepay_scoped_copy(value: &CheckedApplication, budget: &mut Budget) -> Result<u64, Fault> {
-    let mut out = crate::encoding::Encoder::new(budget, AT);
-    crate::statement::application(value, &mut out)?;
-    let bytes = size(out.finish().len(), AT)?
-        .checked_mul(4)
-        .and_then(|n| n.checked_add(256))
-        .ok_or_else(|| Fault::capacity(BudgetKind::StagedPayloadBytes, AT))?;
-    let scalar = value
-        .scalar
-        .as_ref()
-        .map_or(Ok(0), |value| prepay_scalar_copy(value, budget))?;
-    let retained = match &value.certificate {
-        Certificate::SquareFree(value) => value.payload(budget)?,
-        _ => 0,
-    };
-    let total = bytes
-        .checked_add(scalar)
-        .and_then(|n| n.checked_add(retained))
-        .ok_or_else(|| Fault::capacity(BudgetKind::StagedPayloadBytes, AT))?;
-    budget.check(BudgetKind::StagedPayloadBytes, total, AT)?;
-    budget.work(
-        bytes
-            .checked_add(retained)
-            .ok_or_else(|| Fault::capacity(BudgetKind::Work, AT))?,
-        AT,
-    )?;
-    Ok(total)
+    crate::work_observation::observe!(budget, AT, {
+        let mut out = crate::encoding::Encoder::new(budget, AT);
+        crate::statement::application(value, &mut out)?;
+        let bytes = size(out.finish().len(), AT)?
+            .checked_mul(4)
+            .and_then(|n| n.checked_add(256))
+            .ok_or_else(|| Fault::capacity(BudgetKind::StagedPayloadBytes, AT))?;
+        let scalar = value
+            .scalar
+            .as_ref()
+            .map_or(Ok(0), |value| prepay_scalar_copy(value, budget))?;
+        let retained = match &value.certificate {
+            Certificate::SquareFree(value) => value.payload(budget)?,
+            _ => 0,
+        };
+        let total = bytes
+            .checked_add(scalar)
+            .and_then(|n| n.checked_add(retained))
+            .ok_or_else(|| Fault::capacity(BudgetKind::StagedPayloadBytes, AT))?;
+        budget.check(BudgetKind::StagedPayloadBytes, total, AT)?;
+        budget.work(
+            bytes
+                .checked_add(retained)
+                .ok_or_else(|| Fault::capacity(BudgetKind::Work, AT))?,
+            AT,
+        )?;
+        Ok(total)
+    })
 }
 
 /// Prepay one authenticated premise copy before reserving an aggregate retained inventory.
@@ -555,100 +559,102 @@ pub(crate) fn measure(
     value: &ApplicationDraft,
     budget: &mut Budget,
 ) -> Result<(), Fault> {
-    budget.check(BudgetKind::ProofNodes, size(value.premises.len(), AT)?, AT)?;
-    cas.state.context(cas.checked(&value.context)?)?;
-    crate::distribution_measure::measure(cas, &value.conclusion, &value.certificate, budget)?;
-    if let Certificate::Series(certificate) = &value.certificate {
-        crate::series::codec::measure(certificate, budget)?;
-    }
-    if let Certificate::LatticeSelection(certificate) = &value.certificate {
-        crate::lattice::selection::wire::measure(cas, certificate, budget)?;
-    }
-    if let Certificate::IntegerSelection(certificate) = &value.certificate {
-        crate::decision_integer_wire::measure(cas, certificate, budget)?;
-    }
-    if let Certificate::Decision(certificate) = &value.certificate {
-        crate::decision_wire::measure(cas, certificate, budget)?;
-    }
-    if let Certificate::Emptiness(certificate) = &value.certificate {
-        crate::emptiness::measure(cas, certificate, budget)?;
-    }
-    if let Certificate::Pullback(certificate) = &value.certificate {
-        crate::pullback_check::measure(certificate, budget)?;
-    }
-    if let Certificate::Germ(certificate) = &value.certificate {
-        crate::germ_wire::measure(certificate, budget)?;
-    }
-    if let Certificate::Split(certificate) = &value.certificate {
-        crate::split_check::measure(certificate, budget)?;
-    }
-    crate::boundary_measure::statement(&value.conclusion, budget)?;
-    crate::boundary_measure::certificate(cas, &value.certificate, budget)?;
-    if let Certificate::Solve(certificate) = &value.certificate {
-        for object in certificate.objects() {
-            cas.checked(object)?;
+    crate::work_observation::observe!(budget, AT, {
+        budget.check(BudgetKind::ProofNodes, size(value.premises.len(), AT)?, AT)?;
+        cas.state.context(cas.checked(&value.context)?)?;
+        crate::distribution_measure::measure(cas, &value.conclusion, &value.certificate, budget)?;
+        if let Certificate::Series(certificate) = &value.certificate {
+            crate::series::codec::measure(certificate, budget)?;
         }
-    }
-    let objects = match &value.conclusion {
-        Statement::LatticeSelection(value) | Statement::LatticeNearestSelection(value) => {
-            lattice_selection_objects(value, budget)?
+        if let Certificate::LatticeSelection(certificate) = &value.certificate {
+            crate::lattice::selection::wire::measure(cas, certificate, budget)?;
         }
-        Statement::LatticeCover(value) => lattice_cover_objects(value, budget)?,
-        Statement::IntegerSelection(value) => 7 + usize::from(value.family.count.is_some()),
-        Statement::IntegerFamily(value) => 6 + usize::from(value.count.is_some()),
-        Statement::BoundaryPartition(value) => {
-            budget.check(
-                BudgetKind::BoundaryNodes,
-                size(value.boundaries.len(), AT)?,
-                AT,
-            )?;
-            budget.check(BudgetKind::RegionCells, size(value.cells.len(), AT)?, AT)?;
-            value
-                .boundaries
-                .len()
-                .checked_add(value.cells.len())
-                .and_then(|count| count.checked_add(2))
-                .ok_or_else(invalid)?
+        if let Certificate::IntegerSelection(certificate) = &value.certificate {
+            crate::decision_integer_wire::measure(cas, certificate, budget)?;
         }
-        Statement::Cover { members, .. } => {
-            budget.check(BudgetKind::RegionNodes, size(members.len(), AT)?, AT)?;
-            members.len().checked_add(1).ok_or_else(invalid)?
+        if let Certificate::Decision(certificate) = &value.certificate {
+            crate::decision_wire::measure(cas, certificate, budget)?;
         }
-        Statement::Jet { values, .. } => {
-            budget.check(BudgetKind::JetEntries, size(values.len(), AT)?, AT)?;
-            values.len().checked_add(3).ok_or_else(invalid)?
+        if let Certificate::Emptiness(certificate) = &value.certificate {
+            crate::emptiness::measure(cas, certificate, budget)?;
         }
-        Statement::Jacobian { variables, .. } => {
-            budget.check(
-                BudgetKind::PolynomialVariables,
-                size(variables.len(), AT)?,
-                AT,
-            )?;
-            3
+        if let Certificate::Pullback(certificate) = &value.certificate {
+            crate::pullback_check::measure(certificate, budget)?;
         }
-        _ => 4,
-    };
-    let bytes = size(objects, AT)?.checked_mul(128).ok_or_else(invalid)?;
-    budget.check(BudgetKind::StagedPayloadBytes, bytes, AT)?;
-    budget.work(bytes, AT)?;
-    for object in crate::statement::objects(&value.conclusion) {
-        cas.checked(object)?;
-    }
-    if let Statement::Cover { members, .. } = &value.conclusion {
-        let mut unique = std::collections::BTreeSet::new();
-        for member in members {
-            budget.condition(size(members.len(), AT)?, AT)?;
-            if !unique.insert(cas.checked(member)?) {
-                return Err(Fault::invalid(InvalidCode::Rule, AT));
+        if let Certificate::Germ(certificate) = &value.certificate {
+            crate::germ_wire::measure(certificate, budget)?;
+        }
+        if let Certificate::Split(certificate) = &value.certificate {
+            crate::split_check::measure(certificate, budget)?;
+        }
+        crate::boundary_measure::statement(&value.conclusion, budget)?;
+        crate::boundary_measure::certificate(cas, &value.certificate, budget)?;
+        if let Certificate::Solve(certificate) = &value.certificate {
+            for object in certificate.objects() {
+                cas.checked(object)?;
             }
         }
-    }
-    let mut out = crate::encoding::Encoder::new(budget, AT);
-    crate::statement::encode(&value.conclusion, &mut out, crate::statement::handle)?;
-    crate::statement::certificate(&value.certificate, &mut out, crate::statement::handle)?;
-    let bytes = size(out.finish().len(), AT)?;
-    budget.check(BudgetKind::StagedPayloadBytes, bytes, AT)?;
-    budget.work(bytes, AT)
+        let objects = match &value.conclusion {
+            Statement::LatticeSelection(value) | Statement::LatticeNearestSelection(value) => {
+                lattice_selection_objects(value, budget)?
+            }
+            Statement::LatticeCover(value) => lattice_cover_objects(value, budget)?,
+            Statement::IntegerSelection(value) => 7 + usize::from(value.family.count.is_some()),
+            Statement::IntegerFamily(value) => 6 + usize::from(value.count.is_some()),
+            Statement::BoundaryPartition(value) => {
+                budget.check(
+                    BudgetKind::BoundaryNodes,
+                    size(value.boundaries.len(), AT)?,
+                    AT,
+                )?;
+                budget.check(BudgetKind::RegionCells, size(value.cells.len(), AT)?, AT)?;
+                value
+                    .boundaries
+                    .len()
+                    .checked_add(value.cells.len())
+                    .and_then(|count| count.checked_add(2))
+                    .ok_or_else(invalid)?
+            }
+            Statement::Cover { members, .. } => {
+                budget.check(BudgetKind::RegionNodes, size(members.len(), AT)?, AT)?;
+                members.len().checked_add(1).ok_or_else(invalid)?
+            }
+            Statement::Jet { values, .. } => {
+                budget.check(BudgetKind::JetEntries, size(values.len(), AT)?, AT)?;
+                values.len().checked_add(3).ok_or_else(invalid)?
+            }
+            Statement::Jacobian { variables, .. } => {
+                budget.check(
+                    BudgetKind::PolynomialVariables,
+                    size(variables.len(), AT)?,
+                    AT,
+                )?;
+                3
+            }
+            _ => 4,
+        };
+        let bytes = size(objects, AT)?.checked_mul(128).ok_or_else(invalid)?;
+        budget.check(BudgetKind::StagedPayloadBytes, bytes, AT)?;
+        budget.work(bytes, AT)?;
+        for object in crate::statement::objects(&value.conclusion) {
+            cas.checked(object)?;
+        }
+        if let Statement::Cover { members, .. } = &value.conclusion {
+            let mut unique = std::collections::BTreeSet::new();
+            for member in members {
+                budget.condition(size(members.len(), AT)?, AT)?;
+                if !unique.insert(cas.checked(member)?) {
+                    return Err(Fault::invalid(InvalidCode::Rule, AT));
+                }
+            }
+        }
+        let mut out = crate::encoding::Encoder::new(budget, AT);
+        crate::statement::encode(&value.conclusion, &mut out, crate::statement::handle)?;
+        crate::statement::certificate(&value.certificate, &mut out, crate::statement::handle)?;
+        let bytes = size(out.finish().len(), AT)?;
+        budget.check(BudgetKind::StagedPayloadBytes, bytes, AT)?;
+        budget.work(bytes, AT)
+    })
 }
 
 /// Check the complete scope and layer before interpreting a caller's expected theorem.

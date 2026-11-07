@@ -111,58 +111,59 @@ pub(crate) fn inspect(
     bytes: &[u8],
     budget: &mut Budget,
 ) -> Result<VerifiedWitness, Fault> {
-    #[cfg(test)]
-    let _attribution = crate::testing::work_trace::Scope::phase("wire admission");
-    magic(bytes)?;
-    let mut reader = Reader::new(bytes, budget)?;
-    reader.take(8)?;
-    let manifest = manifest(&mut reader)?;
-    let count = reader.count(BudgetKind::Vertices, 11, 512)?;
-    let mut records = Vec::new();
-    records
-        .try_reserve_exact(count)
-        .map_err(|_| Fault::allocation(AT))?;
-    let mut unique = BTreeSet::new();
-    for _ in 0..count {
-        let tag = reader.byte()?;
-        let length = reader.count(BudgetKind::WitnessBytes, 1, 2)?;
-        let payload = reader.take(length)?;
-        reader.budget.work(
-            size(payload.len(), AT)?
-                .checked_mul(size(unique.len(), AT)?.checked_add(1).ok_or_else(invalid)?)
-                .ok_or_else(invalid)?,
-            AT,
-        )?;
-        if !unique.insert((tag, payload)) {
+    let _attribution = crate::work_observation::Scope::phase("wire admission");
+    crate::work_observation::observe!(budget, AT, {
+        magic(bytes)?;
+        let mut reader = Reader::new(bytes, budget)?;
+        reader.take(8)?;
+        let manifest = manifest(&mut reader)?;
+        let count = reader.count(BudgetKind::Vertices, 11, 512)?;
+        let mut records = Vec::new();
+        records
+            .try_reserve_exact(count)
+            .map_err(|_| Fault::allocation(AT))?;
+        let mut unique = BTreeSet::new();
+        for _ in 0..count {
+            let tag = reader.byte()?;
+            let length = reader.count(BudgetKind::WitnessBytes, 1, 2)?;
+            let payload = reader.take(length)?;
+            reader.budget.work(
+                size(payload.len(), AT)?
+                    .checked_mul(size(unique.len(), AT)?.checked_add(1).ok_or_else(invalid)?)
+                    .ok_or_else(invalid)?,
+                AT,
+            )?;
+            if !unique.insert((tag, payload)) {
+                return Err(invalid());
+            }
+            let mut part = Reader::new(payload, reader.budget)?;
+            if part.index()? != 1 {
+                return Err(Fault::invalid(InvalidCode::UnsupportedVersion, AT));
+            }
+            let layer = match part.byte()? {
+                0 => Layer::Logic,
+                1 => Layer::Pointwise,
+                2 => Layer::Distribution,
+                _ => return Err(invalid()),
+            };
+            let space = optional(&mut part, &records)?;
+            if let Some(space) = &space {
+                cas.state.space(cas.checked(space)?)?;
+            }
+            let record = decode(cas, tag, layer, space, &mut part, &records, &manifest)?;
+            part.finished()?;
+            records.push(record);
+        }
+        let root = usize::try_from(reader.index()?).map_err(|_| invalid())?;
+        reader.finished()?;
+        let Decoded::Conclusion(witness) = records.get(root).ok_or_else(invalid)? else {
+            return Err(invalid());
+        };
+        if witness.bytes != bytes {
             return Err(invalid());
         }
-        let mut part = Reader::new(payload, reader.budget)?;
-        if part.index()? != 1 {
-            return Err(Fault::invalid(InvalidCode::UnsupportedVersion, AT));
-        }
-        let layer = match part.byte()? {
-            0 => Layer::Logic,
-            1 => Layer::Pointwise,
-            2 => Layer::Distribution,
-            _ => return Err(invalid()),
-        };
-        let space = optional(&mut part, &records)?;
-        if let Some(space) = &space {
-            cas.state.space(cas.checked(space)?)?;
-        }
-        let record = decode(cas, tag, layer, space, &mut part, &records, &manifest)?;
-        part.finished()?;
-        records.push(record);
-    }
-    let root = usize::try_from(reader.index()?).map_err(|_| invalid())?;
-    reader.finished()?;
-    let Decoded::Conclusion(witness) = records.get(root).ok_or_else(invalid)? else {
-        return Err(invalid());
-    };
-    if witness.bytes != bytes {
-        return Err(invalid());
-    }
-    Ok(witness.clone())
+        Ok(witness.clone())
+    })
 }
 
 /// Interpret only the admitted record language, never serialized proof-status flags.
@@ -227,55 +228,57 @@ fn application(
     records: &[Decoded],
     manifest: &[Primitive],
 ) -> Result<Decoded, Fault> {
-    #[cfg(test)]
-    let _attribution = crate::testing::work_trace::Scope::phase("application reconstruction");
-    let rule = *manifest
-        .get(usize::try_from(reader.index()?).map_err(|_| invalid())?)
-        .ok_or_else(invalid)?;
-    let Decoded::Statement(judgment) = reference(reader, records)? else {
-        return Err(invalid());
-    };
-    if judgment.layer != layer || judgment.space.as_ref() != space {
-        return Err(invalid());
-    }
-    let count = reader.count(BudgetKind::ProofNodes, 4, 512)?;
-    crate::proof_view::premise_arity(cas, rule, &judgment.statement, count, reader.budget, AT)?;
-    let mut ids = Vec::new();
-    ids.try_reserve_exact(count)
-        .map_err(|_| Fault::allocation(AT))?;
-    for _ in 0..count {
-        let proof = crate::series::portable::proof(reader, records)?;
-        ids.push(cas.checked(proof)?);
-    }
-    let bytes = crate::proof_view::premises_bytes(cas, &ids, reader.budget, AT)?;
-    let substitutions = crate::wire_statement::substitutions(reader, records)?;
-    let certificate = crate::wire_statement::certificate(reader, records)?;
-    let local: Vec<_> = (0..count)
-        .map(|index| u32::try_from(index).map_err(|_| invalid()))
-        .collect::<Result<_, _>>()?;
-    let draft = ApplicationDraft {
-        rule,
-        context: judgment.context.clone(),
-        conclusion: judgment.statement.clone(),
-        premises: local,
-        substitutions,
-        certificate,
-    };
-    reader.budget.with_retained_payload(bytes, AT, |budget| {
-        let mut premises = Vec::new();
-        premises
-            .try_reserve_exact(count)
-            .map_err(|_| Fault::allocation(AT))?;
-        for id in &ids {
-            premises.push(crate::proof_view::application(cas, *id, budget)?);
+    let _attribution = crate::work_observation::Scope::phase("application reconstruction");
+    crate::work_observation::observe!(reader.budget, crate::error::Location::new(""), {
+        let rule = *manifest
+            .get(usize::try_from(reader.index()?).map_err(|_| invalid())?)
+            .ok_or_else(invalid)?;
+        let Decoded::Statement(judgment) = reference(reader, records)? else {
+            return Err(invalid());
+        };
+        if judgment.layer != layer || judgment.space.as_ref() != space {
+            return Err(invalid());
         }
-        #[cfg(test)]
-        let before = budget.usage();
-        let mut checked = crate::scoped_check::check_application(cas, &draft, &premises, budget)?;
-        #[cfg(test)]
-        crate::testing::replay_answer::record(rule, &before, &budget.usage())?;
-        checked.premises = ids;
-        Ok(Decoded::Application(cas.publish_scoped(checked, budget)?))
+        let count = reader.count(BudgetKind::ProofNodes, 4, 512)?;
+        crate::proof_view::premise_arity(cas, rule, &judgment.statement, count, reader.budget, AT)?;
+        let mut ids = Vec::new();
+        ids.try_reserve_exact(count)
+            .map_err(|_| Fault::allocation(AT))?;
+        for _ in 0..count {
+            let proof = crate::series::portable::proof(reader, records)?;
+            ids.push(cas.checked(proof)?);
+        }
+        let bytes = crate::proof_view::premises_bytes(cas, &ids, reader.budget, AT)?;
+        let substitutions = crate::wire_statement::substitutions(reader, records)?;
+        let certificate = crate::wire_statement::certificate(reader, records)?;
+        let local: Vec<_> = (0..count)
+            .map(|index| u32::try_from(index).map_err(|_| invalid()))
+            .collect::<Result<_, _>>()?;
+        let draft = ApplicationDraft {
+            rule,
+            context: judgment.context.clone(),
+            conclusion: judgment.statement.clone(),
+            premises: local,
+            substitutions,
+            certificate,
+        };
+        reader.budget.with_retained_payload(bytes, AT, |budget| {
+            let mut premises = Vec::new();
+            premises
+                .try_reserve_exact(count)
+                .map_err(|_| Fault::allocation(AT))?;
+            for id in &ids {
+                premises.push(crate::proof_view::application(cas, *id, budget)?);
+            }
+            #[cfg(test)]
+            let before = budget.usage();
+            let mut checked =
+                crate::scoped_check::check_application(cas, &draft, &premises, budget)?;
+            #[cfg(test)]
+            crate::testing::replay_answer::record(rule, &before, &budget.usage())?;
+            checked.premises = ids;
+            Ok(Decoded::Application(cas.publish_scoped(checked, budget)?))
+        })
     })
 }
 
@@ -287,50 +290,51 @@ fn conclusion(
     reader: &mut Reader<'_, '_>,
     records: &[Decoded],
 ) -> Result<Decoded, Fault> {
-    #[cfg(test)]
-    let _attribution = crate::testing::work_trace::Scope::phase("conclusion reconstruction");
-    if !reader.boolean()? {
-        return Err(invalid());
-    }
-    let Decoded::Application(proof) = reference(reader, records)? else {
-        return Err(invalid());
-    };
-    let Decoded::Statement(statement) = reference(reader, records)? else {
-        return Err(invalid());
-    };
-    let mut expected = statement.clone();
-    let count = reader.count(BudgetKind::ConditionAtoms, 4, 512)?;
-    expected
-        .residuals
-        .try_reserve_exact(count)
-        .map_err(|_| Fault::allocation(AT))?;
-    for _ in 0..count {
-        let Decoded::Guard(guard) = reference(reader, records)? else {
+    let _attribution = crate::work_observation::Scope::phase("conclusion reconstruction");
+    crate::work_observation::observe!(reader.budget, crate::error::Location::new(""), {
+        if !reader.boolean()? {
+            return Err(invalid());
+        }
+        let Decoded::Application(proof) = reference(reader, records)? else {
             return Err(invalid());
         };
-        expected.residuals.push(guard.clone());
-    }
-    let count = reader.count(BudgetKind::ConditionAtoms, 12, 96)?;
-    let mut hypotheses = Vec::new();
-    hypotheses
-        .try_reserve_exact(count)
-        .map_err(|_| Fault::allocation(AT))?;
-    for _ in 0..count {
-        hypotheses.push(HypothesisRef {
-            context: object(reader, records)?,
-            slot: reader.small()?,
-        });
-    }
-    let witness = cas.seal_scoped(proof, reader.budget)?;
-    expected.residuals = crate::statement::union(cas, &expected.residuals, reader.budget)?;
-    if expected.layer != layer
-        || expected.space.as_ref() != space
-        || expected != witness.judgment
-        || hypotheses != witness.hypotheses
-    {
-        return Err(Fault::invalid(InvalidCode::ConditionMismatch, AT));
-    }
-    Ok(Decoded::Conclusion(witness))
+        let Decoded::Statement(statement) = reference(reader, records)? else {
+            return Err(invalid());
+        };
+        let mut expected = statement.clone();
+        let count = reader.count(BudgetKind::ConditionAtoms, 4, 512)?;
+        expected
+            .residuals
+            .try_reserve_exact(count)
+            .map_err(|_| Fault::allocation(AT))?;
+        for _ in 0..count {
+            let Decoded::Guard(guard) = reference(reader, records)? else {
+                return Err(invalid());
+            };
+            expected.residuals.push(guard.clone());
+        }
+        let count = reader.count(BudgetKind::ConditionAtoms, 12, 96)?;
+        let mut hypotheses = Vec::new();
+        hypotheses
+            .try_reserve_exact(count)
+            .map_err(|_| Fault::allocation(AT))?;
+        for _ in 0..count {
+            hypotheses.push(HypothesisRef {
+                context: object(reader, records)?,
+                slot: reader.small()?,
+            });
+        }
+        let witness = cas.seal_scoped(proof, reader.budget)?;
+        expected.residuals = crate::statement::union(cas, &expected.residuals, reader.budget)?;
+        if expected.layer != layer
+            || expected.space.as_ref() != space
+            || expected != witness.judgment
+            || hypotheses != witness.hypotheses
+        {
+            return Err(Fault::invalid(InvalidCode::ConditionMismatch, AT));
+        }
+        Ok(Decoded::Conclusion(witness))
+    })
 }
 
 /// Reject every noncurrent magic before any record, manifest or replay-store allocation.

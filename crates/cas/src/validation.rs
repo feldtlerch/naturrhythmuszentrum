@@ -34,38 +34,44 @@ pub(crate) fn scope_limit(scope: &Scope, budget: &mut Budget) -> Result<(), Faul
 
 /// A finite field characteristic must be prime, even when algorithms remain unsupported.
 fn field(value: &Field, budget: &mut Budget) -> Result<(), Fault> {
-    budget.work(1, AT)?;
-    match value {
-        Field::PositiveCharacteristic(prime) => {
-            if *prime < 2 {
-                return Err(Fault::invalid(InvalidCode::Context, AT));
-            }
-            let mut divisor = 2_u32;
-            while divisor <= *prime / divisor {
-                budget.work(1, AT)?;
-                if prime.is_multiple_of(divisor) {
+    crate::work_observation::observe!(budget, AT, {
+        budget.work(1, AT)?;
+        match value {
+            Field::PositiveCharacteristic(prime) => {
+                if *prime < 2 {
                     return Err(Fault::invalid(InvalidCode::Context, AT));
                 }
-                divisor = divisor
-                    .checked_add(1)
-                    .ok_or_else(|| Fault::capacity(BudgetKind::Work, AT))?;
+                let mut divisor = 2_u32;
+                while divisor <= *prime / divisor {
+                    budget.work(1, AT)?;
+                    if prime.is_multiple_of(divisor) {
+                        return Err(Fault::invalid(InvalidCode::Context, AT));
+                    }
+                    divisor = divisor
+                        .checked_add(1)
+                        .ok_or_else(|| Fault::capacity(BudgetKind::Work, AT))?;
+                }
             }
+            Field::Named(name) if name.is_empty() => {
+                return Err(Fault::invalid(InvalidCode::Context, AT));
+            }
+            _ => {}
         }
-        Field::Named(name) if name.is_empty() => {
-            return Err(Fault::invalid(InvalidCode::Context, AT));
-        }
-        _ => {}
-    }
-    Ok(())
+        Ok(())
+    })
 }
 
 /// Validate nonrecursive coefficient fields without interpreting named domains.
 fn atomic_sort(value: &AtomicSort, budget: &mut Budget) -> Result<(), Fault> {
-    budget.work(1, AT)?;
-    match value {
-        AtomicSort::Scalar(value) | AtomicSort::Matrix { field: value, .. } => field(value, budget),
-        AtomicSort::Integer | AtomicSort::Boolean => Ok(()),
-    }
+    crate::work_observation::observe!(budget, AT, {
+        budget.work(1, AT)?;
+        match value {
+            AtomicSort::Scalar(value) | AtomicSort::Matrix { field: value, .. } => {
+                field(value, budget)
+            }
+            AtomicSort::Integer | AtomicSort::Boolean => Ok(()),
+        }
+    })
 }
 
 /// Validate every coefficient field in one flat mathematical sort.
@@ -342,35 +348,37 @@ fn encode_request(
 
 /// Canonicalize declaration order after prepaying a conservative sorting bound.
 pub(crate) fn environment(value: &Environment, budget: &mut Budget) -> Result<Environment, Fault> {
-    field(&value.field, budget)?;
-    let count = size(value.declarations.len(), AT)?;
-    budget.check(BudgetKind::Vertices, count, AT)?;
+    crate::work_observation::observe!(budget, AT, {
+        field(&value.field, budget)?;
+        let count = size(value.declarations.len(), AT)?;
+        budget.check(BudgetKind::Vertices, count, AT)?;
 
-    let mut out = Encoder::new(budget, AT);
-    encoding::environment(value, &mut out)?;
-    let encoded = out.finish();
-    budget.work(size(encoded.len(), AT)?, AT)?;
-    let mut canonical = value.clone();
-    crate::header::sort_declarations(&mut canonical.declarations, budget, AT)?;
-    budget.work(
-        count
-            .checked_mul(budget.limits().name_bytes)
-            .ok_or_else(|| Fault::capacity(BudgetKind::Work, AT))?,
-        AT,
-    )?;
-    let mut previous = None;
-    for declaration in &canonical.declarations {
-        declared_sort(&declaration.sort, budget)?;
-        sort_extents(&declaration.sort, &canonical, budget)?;
-        if declaration.key.is_empty() || previous == Some(&declaration.key) {
+        let mut out = Encoder::new(budget, AT);
+        encoding::environment(value, &mut out)?;
+        let encoded = out.finish();
+        budget.work(size(encoded.len(), AT)?, AT)?;
+        let mut canonical = value.clone();
+        crate::header::sort_declarations(&mut canonical.declarations, budget, AT)?;
+        budget.work(
+            count
+                .checked_mul(budget.limits().name_bytes)
+                .ok_or_else(|| Fault::capacity(BudgetKind::Work, AT))?,
+            AT,
+        )?;
+        let mut previous = None;
+        for declaration in &canonical.declarations {
+            declared_sort(&declaration.sort, budget)?;
+            sort_extents(&declaration.sort, &canonical, budget)?;
+            if declaration.key.is_empty() || previous == Some(&declaration.key) {
+                return Err(Fault::invalid(InvalidCode::Context, AT));
+            }
+            previous = Some(&declaration.key);
+        }
+        if matches!(canonical.field, Field::PositiveCharacteristic(0 | 1)) {
             return Err(Fault::invalid(InvalidCode::Context, AT));
         }
-        previous = Some(&declaration.key);
-    }
-    if matches!(canonical.field, Field::PositiveCharacteristic(0 | 1)) {
-        return Err(Fault::invalid(InvalidCode::Context, AT));
-    }
-    Ok(canonical)
+        Ok(canonical)
+    })
 }
 
 /// Check predicate arity/sorts and the semantic header of every argument.
@@ -382,20 +390,24 @@ pub(crate) fn condition(
     arguments: &[LogicalId],
     budget: &mut Budget,
 ) -> Result<(), Fault> {
-    scope_limit(scope, budget)?;
-    let mut values = Vec::new();
-    values
-        .try_reserve_exact(arguments.len())
-        .map_err(|_| Fault::allocation(AT))?;
-    for argument in arguments {
-        budget.work(1, AT)?;
-        let value = state.expression(*argument)?;
-        if !crate::header::embeds(state, value.header, context, budget)? || value.scope != *scope {
-            return Err(Fault::invalid(InvalidCode::Scope, AT));
+    crate::work_observation::observe!(budget, AT, {
+        scope_limit(scope, budget)?;
+        let mut values = Vec::new();
+        values
+            .try_reserve_exact(arguments.len())
+            .map_err(|_| Fault::allocation(AT))?;
+        for argument in arguments {
+            budget.work(1, AT)?;
+            let value = state.expression(*argument)?;
+            if !crate::header::embeds(state, value.header, context, budget)?
+                || value.scope != *scope
+            {
+                return Err(Fault::invalid(InvalidCode::Scope, AT));
+            }
+            values.push(&value.sort);
         }
-        values.push(&value.sort);
-    }
-    predicate_sorts(kind, &values)
+        predicate_sorts(kind, &values)
+    })
 }
 
 /// Check only predicate shape; it provides no truth status.
@@ -455,73 +467,75 @@ pub(crate) fn expression(
     operands: &[LogicalId],
     budget: &mut Budget,
 ) -> Result<(u64, u64), Fault> {
-    if let Operator::SymbolRelation(kind) = draft.operator {
-        return symbol_relation(state, draft, context, operands, kind, budget);
-    }
-    scope_limit(&draft.scope, budget)?;
-    declared_sort(&draft.sort, budget)?;
-    binding_shape(&draft.operator, draft.binding.as_ref(), operands.len())?;
-    let environment = &state.header(context)?.environment;
-    sort_extents(&draft.sort, environment, budget)?;
-    for frame in &draft.scope {
-        for slot in frame {
-            extent_parameters(slot, environment, budget)?;
+    crate::work_observation::observe!(budget, AT, {
+        if let Operator::SymbolRelation(kind) = draft.operator {
+            return symbol_relation(state, draft, context, operands, kind, budget);
         }
-    }
-    let mut scope_key = Encoder::new(budget, AT);
-    encoding::scope(&draft.scope, &mut scope_key)?;
-    encoding::binding(draft.binding.as_ref(), &mut scope_key)?;
-    encoding::sort(&draft.sort, &mut scope_key)?;
-    let comparison_bytes = size(scope_key.finish().len(), AT)?;
-    let charge = comparison_bytes
-        .checked_mul(
-            size(operands.len(), AT)?
-                .checked_add(1)
-                .ok_or_else(|| Fault::capacity(BudgetKind::Work, AT))?,
-        )
-        .and_then(|n| n.checked_mul(8))
-        .ok_or_else(|| Fault::capacity(BudgetKind::Work, AT))?;
-    budget.work(charge, AT)?;
-    let mut children = Vec::new();
-    children
-        .try_reserve_exact(operands.len())
-        .map_err(|_| Fault::allocation(AT))?;
-    let mut depth = 1_u64;
-    let mut unfolded = 1_u64;
-    for (position, operand) in operands.iter().enumerate() {
-        budget.work(1, AT)?;
-        let child = state.expression(*operand)?;
-        if !crate::header::embeds(state, child.header, context, budget)? {
-            return Err(Fault::invalid(InvalidCode::Context, AT));
+        scope_limit(&draft.scope, budget)?;
+        declared_sort(&draft.sort, budget)?;
+        binding_shape(&draft.operator, draft.binding.as_ref(), operands.len())?;
+        let environment = &state.header(context)?.environment;
+        sort_extents(&draft.sort, environment, budget)?;
+        for frame in &draft.scope {
+            for slot in frame {
+                extent_parameters(slot, environment, budget)?;
+            }
         }
-        check_child_scope(&draft.scope, draft.binding.as_ref(), position, &child.scope)?;
-        depth = depth.max(
-            child
-                .depth
-                .checked_add(1)
-                .ok_or_else(|| Fault::capacity(BudgetKind::Depth, AT))?,
-        );
-        unfolded = unfolded
-            .checked_add(child.unfolded)
-            .ok_or_else(|| Fault::capacity(BudgetKind::PeakExpressionSize, AT))?;
-        children.push(child);
-    }
-    budget.check(BudgetKind::Depth, depth, AT)?;
-    budget.check(BudgetKind::PeakExpressionSize, unfolded, AT)?;
-    binding_sorts(draft, &children)?;
-    operator_sorts(
-        &draft.operator,
-        &draft.sort,
-        &draft.scope,
-        environment,
-        &children,
-        budget,
-    )?;
-    if let Operator::AlgebraicRoot { variable, .. } = &draft.operator {
-        let polynomial = operands.first().copied().ok_or_else(sort_error)?;
-        root_polynomial(state, polynomial, variable, budget)?;
-    }
-    Ok((depth, unfolded))
+        let mut scope_key = Encoder::new(budget, AT);
+        encoding::scope(&draft.scope, &mut scope_key)?;
+        encoding::binding(draft.binding.as_ref(), &mut scope_key)?;
+        encoding::sort(&draft.sort, &mut scope_key)?;
+        let comparison_bytes = size(scope_key.finish().len(), AT)?;
+        let charge = comparison_bytes
+            .checked_mul(
+                size(operands.len(), AT)?
+                    .checked_add(1)
+                    .ok_or_else(|| Fault::capacity(BudgetKind::Work, AT))?,
+            )
+            .and_then(|n| n.checked_mul(8))
+            .ok_or_else(|| Fault::capacity(BudgetKind::Work, AT))?;
+        budget.work(charge, AT)?;
+        let mut children = Vec::new();
+        children
+            .try_reserve_exact(operands.len())
+            .map_err(|_| Fault::allocation(AT))?;
+        let mut depth = 1_u64;
+        let mut unfolded = 1_u64;
+        for (position, operand) in operands.iter().enumerate() {
+            budget.work(1, AT)?;
+            let child = state.expression(*operand)?;
+            if !crate::header::embeds(state, child.header, context, budget)? {
+                return Err(Fault::invalid(InvalidCode::Context, AT));
+            }
+            check_child_scope(&draft.scope, draft.binding.as_ref(), position, &child.scope)?;
+            depth = depth.max(
+                child
+                    .depth
+                    .checked_add(1)
+                    .ok_or_else(|| Fault::capacity(BudgetKind::Depth, AT))?,
+            );
+            unfolded = unfolded
+                .checked_add(child.unfolded)
+                .ok_or_else(|| Fault::capacity(BudgetKind::PeakExpressionSize, AT))?;
+            children.push(child);
+        }
+        budget.check(BudgetKind::Depth, depth, AT)?;
+        budget.check(BudgetKind::PeakExpressionSize, unfolded, AT)?;
+        binding_sorts(draft, &children)?;
+        operator_sorts(
+            &draft.operator,
+            &draft.sort,
+            &draft.scope,
+            environment,
+            &children,
+            budget,
+        )?;
+        if let Operator::AlgebraicRoot { variable, .. } = &draft.operator {
+            let polynomial = operands.first().copied().ok_or_else(sort_error)?;
+            root_polynomial(state, polynomial, variable, budget)?;
+        }
+        Ok((depth, unfolded))
+    })
 }
 
 /// Check a fixed association edge without expanding either endpoint's declaration context.
@@ -988,16 +1002,19 @@ fn indexed_sort<'a>(
     key: &str,
     budget: &mut Budget,
 ) -> Result<Option<&'a Sort>, Fault> {
-    let Some(index) = crate::header::declaration_index(&environment.declarations, key, budget, AT)?
-    else {
-        return Ok(None);
-    };
-    let sort = &environment.declarations[index].sort;
-    let mut encoded = Encoder::new(budget, AT);
-    encoding::sort(sort, &mut encoded)?;
-    let bytes = size(encoded.finish().len(), AT)?;
-    budget.work(bytes, AT)?;
-    Ok(Some(sort))
+    crate::work_observation::observe!(budget, AT, {
+        let Some(index) =
+            crate::header::declaration_index(&environment.declarations, key, budget, AT)?
+        else {
+            return Ok(None);
+        };
+        let sort = &environment.declarations[index].sort;
+        let mut encoded = Encoder::new(budget, AT);
+        encoding::sort(sort, &mut encoded)?;
+        let bytes = size(encoded.finish().len(), AT)?;
+        budget.work(bytes, AT)?;
+        Ok(Some(sort))
+    })
 }
 
 /// Check the shape of a represented calculus request without executing it.

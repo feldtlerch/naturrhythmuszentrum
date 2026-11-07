@@ -50,59 +50,63 @@ pub(crate) fn check<'a>(
     forbidden: Option<&Handle>,
     budget: &mut Budget,
 ) -> Result<(), Fault> {
-    let mut pending = crate::solving::coefficients::storage::vector(0, budget)?;
-    let mut seen = HashSet::new();
-    for root in roots {
-        cas.checked(root)?;
-        crate::solving::coefficients::storage::reserve(&mut pending, 1, budget)?;
-        pending.push((
-            *cas.state
-                .indices
-                .get(&root.logical_id())
-                .ok_or_else(invalid)?,
-            1_u64,
-        ));
-    }
-    let forbidden = forbidden.and_then(|handle| cas.state.indices.get(&handle.logical_id()));
-    while let Some((index, depth)) = pending.pop() {
-        budget.work(1, AT)?;
-        budget.check(BudgetKind::Depth, depth, AT)?;
-        if Some(&index) == forbidden {
-            return Err(invalid());
+    crate::work_observation::observe!(budget, AT, {
+        let mut pending = crate::solving::coefficients::storage::vector(0, budget)?;
+        let mut seen = HashSet::new();
+        for root in roots {
+            cas.checked(root)?;
+            crate::solving::coefficients::storage::reserve(&mut pending, 1, budget)?;
+            pending.push((
+                *cas.state
+                    .indices
+                    .get(&root.logical_id())
+                    .ok_or_else(invalid)?,
+                1_u64,
+            ));
         }
-        if seen.contains(&index) {
-            continue;
-        }
-        budget.check(
-            BudgetKind::Vertices,
-            crate::graph::size(seen.len().saturating_add(1), AT)?,
-            AT,
-        )?;
-        seen.try_reserve(1).map_err(|_| Fault::allocation(AT))?;
-        seen.insert(index);
-        let value = cas.state.graph.node_weight(index).ok_or_else(invalid)?;
-        node(value)?;
-        if let Vertex::ScopedApplication(application) = value {
-            for handle in super::closure_evidence::roots(cas, application, budget)? {
-                crate::solving::coefficients::storage::reserve(&mut pending, 1, budget)?;
-                pending.push((
-                    *cas.state
-                        .indices
-                        .get(&handle.logical_id())
-                        .ok_or_else(invalid)?,
-                    depth.saturating_add(1),
-                ));
+        let forbidden = forbidden.and_then(|handle| cas.state.indices.get(&handle.logical_id()));
+        while let Some((index, depth)) = pending.pop() {
+            budget.work(1, AT)?;
+            budget.check(BudgetKind::Depth, depth, AT)?;
+            if Some(&index) == forbidden {
+                return Err(invalid());
             }
-        }
-        for edge in cas.state.graph.edges(index) {
-            if matches!(value, Vertex::Header(_)) && !matches!(edge.weight(), Edge::ParentHeader) {
+            if seen.contains(&index) {
                 continue;
             }
-            crate::solving::coefficients::storage::reserve(&mut pending, 1, budget)?;
-            pending.push((edge.target(), depth.saturating_add(1)));
+            budget.check(
+                BudgetKind::Vertices,
+                crate::graph::size(seen.len().saturating_add(1), AT)?,
+                AT,
+            )?;
+            seen.try_reserve(1).map_err(|_| Fault::allocation(AT))?;
+            seen.insert(index);
+            let value = cas.state.graph.node_weight(index).ok_or_else(invalid)?;
+            node(value)?;
+            if let Vertex::ScopedApplication(application) = value {
+                for handle in super::closure_evidence::roots(cas, application, budget)? {
+                    crate::solving::coefficients::storage::reserve(&mut pending, 1, budget)?;
+                    pending.push((
+                        *cas.state
+                            .indices
+                            .get(&handle.logical_id())
+                            .ok_or_else(invalid)?,
+                        depth.saturating_add(1),
+                    ));
+                }
+            }
+            for edge in cas.state.graph.edges(index) {
+                if matches!(value, Vertex::Header(_))
+                    && !matches!(edge.weight(), Edge::ParentHeader)
+                {
+                    continue;
+                }
+                crate::solving::coefficients::storage::reserve(&mut pending, 1, budget)?;
+                pending.push((edge.target(), depth.saturating_add(1)));
+            }
         }
-    }
-    Ok(())
+        Ok(())
+    })
 }
 
 /// Presentation checks every supplied proof dependency, including intermediates absent from the final tuple.

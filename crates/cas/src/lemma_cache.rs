@@ -134,22 +134,24 @@ impl AnonymousLemmaCache {
         bytes: &[u8],
         budget: &mut Budget,
     ) -> Result<Option<usize>, Fault> {
-        for (index, entry) in self.entries.iter().enumerate() {
-            let work = size(entry.expected.len().max(key.len()), AT)?
-                .saturating_add(size(entry.witness.bytes.len().max(bytes.len()), AT)?)
-                .saturating_add(1);
-            budget.work(work, AT)?;
-            let owned = std::sync::Arc::ptr_eq(&entry.owner, &cas.memo_owner);
-            let current = entry.epoch == cas.memo_epoch;
-            let reusable = cas.memo_epoch != u64::MAX;
-            let local = cas.checked(entry.witness.proof()).is_ok();
-            let same_key = entry.expected == key;
-            let same_proof = entry.witness.bytes == bytes;
-            if owned && current && reusable && local && same_key && same_proof {
-                return Ok(Some(index));
+        crate::work_observation::observe!(budget, AT, {
+            for (index, entry) in self.entries.iter().enumerate() {
+                let work = size(entry.expected.len().max(key.len()), AT)?
+                    .saturating_add(size(entry.witness.bytes.len().max(bytes.len()), AT)?)
+                    .saturating_add(1);
+                budget.work(work, AT)?;
+                let owned = std::sync::Arc::ptr_eq(&entry.owner, &cas.memo_owner);
+                let current = entry.epoch == cas.memo_epoch;
+                let reusable = cas.memo_epoch != u64::MAX;
+                let local = cas.checked(entry.witness.proof()).is_ok();
+                let same_key = entry.expected == key;
+                let same_proof = entry.witness.bytes == bytes;
+                if owned && current && reusable && local && same_key && same_proof {
+                    return Ok(Some(index));
+                }
             }
-        }
-        Ok(None)
+            Ok(None)
+        })
     }
 
     /// Reserve retention before replay, then publish the cache entry after the graph transaction.
@@ -161,39 +163,42 @@ impl AnonymousLemmaCache {
         expected: &Judgment,
         budget: &mut Budget,
     ) -> Result<usize, Fault> {
-        let amount = size(key.len(), AT)?
-            .saturating_add(size(bytes.len(), AT)?)
-            .saturating_mul(8)
-            .saturating_add(1024);
-        budget.check(
-            BudgetKind::OutputBytes,
-            self.bytes.saturating_add(amount),
-            AT,
-        )?;
-        budget.check(BudgetKind::StagedPayloadBytes, amount, AT)?;
-        budget.check(
-            BudgetKind::Vertices,
-            size(self.entries.len(), AT)?.saturating_add(1),
-            AT,
-        )?;
-        budget.work(amount, AT)?;
-        let witness = cas.transaction(budget, |cas, budget| {
-            let witness = budget
-                .with_retained_payload(amount, AT, |budget| cas.replay(bytes, expected, budget))?;
-            self.entries
-                .try_reserve_exact(1)
-                .map_err(|_| Fault::allocation(AT))?;
-            Ok(witness)
-        })?;
-        let index = self.entries.len();
-        self.entries.push(Entry {
-            owner: std::sync::Arc::clone(&cas.memo_owner),
-            epoch: cas.memo_epoch,
-            expected: key,
-            witness,
-        });
-        self.bytes = self.bytes.saturating_add(amount);
-        Ok(index)
+        crate::work_observation::observe!(budget, AT, {
+            let amount = size(key.len(), AT)?
+                .saturating_add(size(bytes.len(), AT)?)
+                .saturating_mul(8)
+                .saturating_add(1024);
+            budget.check(
+                BudgetKind::OutputBytes,
+                self.bytes.saturating_add(amount),
+                AT,
+            )?;
+            budget.check(BudgetKind::StagedPayloadBytes, amount, AT)?;
+            budget.check(
+                BudgetKind::Vertices,
+                size(self.entries.len(), AT)?.saturating_add(1),
+                AT,
+            )?;
+            budget.work(amount, AT)?;
+            let witness = cas.transaction(budget, |cas, budget| {
+                let witness = budget.with_retained_payload(amount, AT, |budget| {
+                    cas.replay(bytes, expected, budget)
+                })?;
+                self.entries
+                    .try_reserve_exact(1)
+                    .map_err(|_| Fault::allocation(AT))?;
+                Ok(witness)
+            })?;
+            let index = self.entries.len();
+            self.entries.push(Entry {
+                owner: std::sync::Arc::clone(&cas.memo_owner),
+                epoch: cas.memo_epoch,
+                expected: key,
+                witness,
+            });
+            self.bytes = self.bytes.saturating_add(amount);
+            Ok(index)
+        })
     }
 }
 

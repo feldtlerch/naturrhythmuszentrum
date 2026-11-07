@@ -234,55 +234,58 @@ pub(crate) fn statement(
     value: &SolveStatement,
     budget: &mut Budget,
 ) -> Result<(), Fault> {
-    budget.work(1, super::admission::AT)?;
-    let state = &cas.state;
-    match value {
-        SolveStatement::CoefficientEvaluation(value) => {
-            let SolveDraft::CoefficientEvaluation(evaluation) = object(state, &value.evaluation)?
-            else {
-                return Err(invalid());
-            };
-            if evaluation.region != value.region
-                || value.left.logical_id().kind != VertexKind::Polynomial
-            {
-                return Err(invalid());
-            }
-            crate::descriptor::metadata(state, value.right.logical_id())?;
-            Ok(())
-        }
-        SolveStatement::RealSign(value) => {
-            let term = state.expression(value.subject.logical_id())?;
-            let region = state.region(value.region.logical_id())?;
-            if term.sort != Sort::Value(AtomicSort::Scalar(Field::Real))
-                || term.header != region.header
-                || term.scope != region.scope
-            {
-                return Err(invalid());
-            }
-            Ok(())
-        }
-        SolveStatement::RealRootCount(value) => {
-            relation(state, &value.relation, &value.region)?;
-            if value.cells.len() != value.counts.len() {
-                return Err(invalid());
-            }
-            for handle in &value.cells {
-                if cell(state, handle)?.region != value.region {
+    crate::work_observation::observe!(budget, super::admission::AT, {
+        budget.work(1, super::admission::AT)?;
+        let state = &cas.state;
+        match value {
+            SolveStatement::CoefficientEvaluation(value) => {
+                let SolveDraft::CoefficientEvaluation(evaluation) =
+                    object(state, &value.evaluation)?
+                else {
+                    return Err(invalid());
+                };
+                if evaluation.region != value.region
+                    || value.left.logical_id().kind != VertexKind::Polynomial
+                {
                     return Err(invalid());
                 }
+                crate::descriptor::metadata(state, value.right.logical_id())?;
+                Ok(())
             }
-            Ok(())
-        }
-        SolveStatement::RealCellExists(value) => {
-            relation(state, &value.relation, &value.region)?;
-            if cell(state, &value.cell)?.region != value.region {
-                return Err(invalid());
+            SolveStatement::RealSign(value) => {
+                let term = state.expression(value.subject.logical_id())?;
+                let region = state.region(value.region.logical_id())?;
+                if term.sort != Sort::Value(AtomicSort::Scalar(Field::Real))
+                    || term.header != region.header
+                    || term.scope != region.scope
+                {
+                    return Err(invalid());
+                }
+                Ok(())
             }
-            crate::domain_admission::predicate_context(state, value.predicate.logical_id())?;
-            Ok(())
+            SolveStatement::RealRootCount(value) => {
+                relation(state, &value.relation, &value.region)?;
+                if value.cells.len() != value.counts.len() {
+                    return Err(invalid());
+                }
+                for handle in &value.cells {
+                    if cell(state, handle)?.region != value.region {
+                        return Err(invalid());
+                    }
+                }
+                Ok(())
+            }
+            SolveStatement::RealCellExists(value) => {
+                relation(state, &value.relation, &value.region)?;
+                if cell(state, &value.cell)?.region != value.region {
+                    return Err(invalid());
+                }
+                crate::domain_admission::predicate_context(state, value.predicate.logical_id())?;
+                Ok(())
+            }
+            _ => Err(invalid()),
         }
-        _ => Err(invalid()),
-    }
+    })
 }
 
 /// Require a Real root relation on the exact stated coefficient region.

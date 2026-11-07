@@ -11,26 +11,28 @@ use crate::proof_model::{
 
 /// Reject forward edges and dead exploration with a linear backward reachability pass.
 pub(super) fn reachable(dag: &EmptinessDag, budget: &mut Budget) -> Result<Vec<bool>, Fault> {
-    let mut reached = crate::solving::coefficients::storage::vector(dag.nodes.len(), budget)?;
-    reached.resize(dag.nodes.len(), false);
-    *reached.last_mut().ok_or_else(invalid)? = true;
-    for (index, node) in dag.nodes.iter().enumerate().rev() {
-        budget.work(1, AT)?;
-        if !reached.get(index).copied().ok_or_else(invalid)? {
-            continue;
-        }
-        if let EmptyEvidence::Split { children, .. } = &node.evidence {
-            for child in children {
-                budget.work(1, AT)?;
-                let child = usize::try_from(*child).map_err(|_| invalid())?;
-                if child >= index {
-                    return Err(invalid());
+    crate::work_observation::observe!(budget, AT, {
+        let mut reached = crate::solving::coefficients::storage::vector(dag.nodes.len(), budget)?;
+        reached.resize(dag.nodes.len(), false);
+        *reached.last_mut().ok_or_else(invalid)? = true;
+        for (index, node) in dag.nodes.iter().enumerate().rev() {
+            budget.work(1, AT)?;
+            if !reached.get(index).copied().ok_or_else(invalid)? {
+                continue;
+            }
+            if let EmptyEvidence::Split { children, .. } = &node.evidence {
+                for child in children {
+                    budget.work(1, AT)?;
+                    let child = usize::try_from(*child).map_err(|_| invalid())?;
+                    if child >= index {
+                        return Err(invalid());
+                    }
+                    *reached.get_mut(child).ok_or_else(invalid)? = true;
                 }
-                *reached.get_mut(child).ok_or_else(invalid)? = true;
             }
         }
-    }
-    Ok(reached)
+        Ok(reached)
+    })
 }
 
 /// A supplied cover must name this exact parent and every explicitly proved-empty child.
@@ -81,41 +83,47 @@ pub(crate) fn check(
     premises: &[CheckedApplication],
     budget: &mut Budget,
 ) -> Result<ScopedConditions, Fault> {
-    let (Statement::Empty { region }, Certificate::Emptiness(dag)) =
-        (&draft.conclusion, &draft.certificate)
-    else {
-        return Err(invalid());
-    };
-    if !draft.substitutions.is_empty() || dag.nodes.last().ok_or_else(invalid)?.region != *region {
-        return Err(invalid());
-    }
-    if reachable(dag, budget)?.iter().any(|reached| !reached) {
-        return Err(invalid());
-    }
-    let mut conditions = ScopedConditions::default();
-    for premise in premises {
-        if premise.judgment.context != draft.context {
+    crate::work_observation::observe!(budget, AT, {
+        let (Statement::Empty { region }, Certificate::Emptiness(dag)) =
+            (&draft.conclusion, &draft.certificate)
+        else {
+            return Err(invalid());
+        };
+        if !draft.substitutions.is_empty()
+            || dag.nodes.last().ok_or_else(invalid)?.region != *region
+        {
             return Err(invalid());
         }
-        crate::statement::merge(cas, &mut conditions, &premise.conditions, budget)?;
-    }
-    for (index, node) in dag.nodes.iter().enumerate() {
-        budget.work(1, AT)?;
-        cas.state.region(cas.checked(&node.region)?)?;
-        match &node.evidence {
-            EmptyEvidence::Split { cover, children } => {
-                split(premises, dag, index, *cover, children, budget)?;
+        if reachable(dag, budget)?.iter().any(|reached| !reached) {
+            return Err(invalid());
+        }
+        let mut conditions = ScopedConditions::default();
+        for premise in premises {
+            if premise.judgment.context != draft.context {
+                return Err(invalid());
             }
-            EmptyEvidence::Leaf(leaf) => leaves::check(cas, &node.region, leaf, premises, budget)?,
-            EmptyEvidence::Lemma { premise } => {
-                let expected = Statement::Empty {
-                    region: node.region.clone(),
-                };
-                if facts::premise(premises, *premise)?.judgment.statement != expected {
-                    return Err(invalid());
+            crate::statement::merge(cas, &mut conditions, &premise.conditions, budget)?;
+        }
+        for (index, node) in dag.nodes.iter().enumerate() {
+            budget.work(1, AT)?;
+            cas.state.region(cas.checked(&node.region)?)?;
+            match &node.evidence {
+                EmptyEvidence::Split { cover, children } => {
+                    split(premises, dag, index, *cover, children, budget)?;
+                }
+                EmptyEvidence::Leaf(leaf) => {
+                    leaves::check(cas, &node.region, leaf, premises, budget)?;
+                }
+                EmptyEvidence::Lemma { premise } => {
+                    let expected = Statement::Empty {
+                        region: node.region.clone(),
+                    };
+                    if facts::premise(premises, *premise)?.judgment.statement != expected {
+                        return Err(invalid());
+                    }
                 }
             }
         }
-    }
-    Ok(conditions)
+        Ok(conditions)
+    })
 }

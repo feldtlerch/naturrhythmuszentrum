@@ -199,31 +199,33 @@ pub(super) fn check(
     premises: &[CheckedApplication],
     budget: &mut Budget,
 ) -> Result<(), Fault> {
-    budget.work(1, AT)?;
-    scalar(cas, &step.subject, region)?;
-    match step.rule {
-        RealSignRule::Hypothesis => {
-            return sign_evidence::hypothesis(cas, region, step, premises, budget);
+    crate::work_observation::observe!(budget, AT, {
+        budget.work(1, AT)?;
+        scalar(cas, &step.subject, region)?;
+        match step.rule {
+            RealSignRule::Hypothesis => {
+                return sign_evidence::hypothesis(cas, region, step, premises, budget);
+            }
+            RealSignRule::Identity => {
+                return sign_evidence::identity(cas, region, step, arguments, premises, budget);
+            }
+            RealSignRule::Root => return sign_evidence::root(cas, region, step, premises, budget),
+            _ => {}
         }
-        RealSignRule::Identity => {
-            return sign_evidence::identity(cas, region, step, arguments, premises, budget);
+        if !step.premises.is_empty() {
+            return Err(invalid());
         }
-        RealSignRule::Root => return sign_evidence::root(cas, region, step, premises, budget),
-        _ => {}
-    }
-    if !step.premises.is_empty() {
-        return Err(invalid());
-    }
-    match step.rule {
-        RealSignRule::EvenPower => power(cas, region, step, arguments, premises, budget),
-        RealSignRule::OddPowerReflection => reflection(cas, step, arguments),
-        _ if step.exponent != 0 => Err(invalid()),
-        RealSignRule::Sum => binary(cas, step, arguments, false),
-        RealSignRule::Product => binary(cas, step, arguments, true),
-        RealSignRule::Rational => rational(cas, step, arguments, budget),
-        RealSignRule::Negation => negation(cas, step, arguments),
-        _ => Err(invalid()),
-    }
+        match step.rule {
+            RealSignRule::EvenPower => power(cas, region, step, arguments, premises, budget),
+            RealSignRule::OddPowerReflection => reflection(cas, step, arguments),
+            _ if step.exponent != 0 => Err(invalid()),
+            RealSignRule::Sum => binary(cas, step, arguments, false),
+            RealSignRule::Product => binary(cas, step, arguments, true),
+            RealSignRule::Rational => rational(cas, step, arguments, budget),
+            RealSignRule::Negation => negation(cas, step, arguments),
+            _ => Err(invalid()),
+        }
+    })
 }
 
 /// Exact literal comparison needs no floating evaluation or producer oracle.

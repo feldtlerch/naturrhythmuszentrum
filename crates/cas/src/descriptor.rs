@@ -112,14 +112,16 @@ fn push(
     id: LogicalId,
     budget: &mut Budget,
 ) -> Result<(), Fault> {
-    let next = size(out.len(), AT)?
-        .checked_add(1)
-        .ok_or_else(|| Fault::capacity(BudgetKind::Edges, AT))?;
-    budget.check(BudgetKind::Edges, next, AT)?;
-    budget.work(64, AT)?;
-    out.try_reserve(1).map_err(|_| Fault::allocation(AT))?;
-    out.push((role, id));
-    Ok(())
+    crate::work_observation::observe!(budget, AT, {
+        let next = size(out.len(), AT)?
+            .checked_add(1)
+            .ok_or_else(|| Fault::capacity(BudgetKind::Edges, AT))?;
+        budget.check(BudgetKind::Edges, next, AT)?;
+        budget.work(64, AT)?;
+        out.try_reserve(1).map_err(|_| Fault::allocation(AT))?;
+        out.push((role, id));
+        Ok(())
+    })
 }
 
 /// Copy an indexed dependency family in its retained semantic order.
@@ -337,43 +339,45 @@ pub(crate) fn measure(
     root: LogicalId,
     budget: &mut Budget,
 ) -> Result<(u64, u64), Fault> {
-    let mut known = std::collections::BTreeMap::new();
-    let mut pending = vec![(root, false)];
-    while let Some((id, expanded)) = pending.pop() {
-        budget.work(size(known.len(), AT)?.saturating_add(1), AT)?;
-        if known.contains_key(&id) {
-            continue;
+    crate::work_observation::observe!(budget, AT, {
+        let mut known = std::collections::BTreeMap::new();
+        let mut pending = vec![(root, false)];
+        while let Some((id, expanded)) = pending.pop() {
+            budget.work(size(known.len(), AT)?.saturating_add(1), AT)?;
+            if known.contains_key(&id) {
+                continue;
+            }
+            let children = children(state, id, budget)?;
+            if !expanded {
+                pending
+                    .try_reserve(children.len().saturating_add(1))
+                    .map_err(|_| Fault::allocation(AT))?;
+                pending.push((id, true));
+                pending.extend(children.into_iter().rev().map(|(_, id)| (id, false)));
+                continue;
+            }
+            let (mut depth, mut count) = (1_u64, 1_u64);
+            for (_, child) in children {
+                let (child_depth, child_count): (u64, u64) = *known
+                    .get(&child)
+                    .ok_or_else(|| Fault::invalid(InvalidCode::Reference, AT))?;
+                depth = depth.max(
+                    child_depth
+                        .checked_add(1)
+                        .ok_or_else(|| Fault::capacity(BudgetKind::Depth, AT))?,
+                );
+                count = count
+                    .checked_add(child_count)
+                    .ok_or_else(|| Fault::capacity(BudgetKind::PeakExpressionSize, AT))?;
+            }
+            budget.check(BudgetKind::Depth, depth, AT)?;
+            budget.check(BudgetKind::PeakExpressionSize, count, AT)?;
+            known.insert(id, (depth, count));
         }
-        let children = children(state, id, budget)?;
-        if !expanded {
-            pending
-                .try_reserve(children.len().saturating_add(1))
-                .map_err(|_| Fault::allocation(AT))?;
-            pending.push((id, true));
-            pending.extend(children.into_iter().rev().map(|(_, id)| (id, false)));
-            continue;
-        }
-        let (mut depth, mut count) = (1_u64, 1_u64);
-        for (_, child) in children {
-            let (child_depth, child_count): (u64, u64) = *known
-                .get(&child)
-                .ok_or_else(|| Fault::invalid(InvalidCode::Reference, AT))?;
-            depth = depth.max(
-                child_depth
-                    .checked_add(1)
-                    .ok_or_else(|| Fault::capacity(BudgetKind::Depth, AT))?,
-            );
-            count = count
-                .checked_add(child_count)
-                .ok_or_else(|| Fault::capacity(BudgetKind::PeakExpressionSize, AT))?;
-        }
-        budget.check(BudgetKind::Depth, depth, AT)?;
-        budget.check(BudgetKind::PeakExpressionSize, count, AT)?;
-        known.insert(id, (depth, count));
-    }
-    known
-        .remove(&root)
-        .ok_or_else(|| Fault::invalid(InvalidCode::Reference, AT))
+        known
+            .remove(&root)
+            .ok_or_else(|| Fault::invalid(InvalidCode::Reference, AT))
+    })
 }
 
 /// Region payload tags never infer guard totality.
