@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-//! Bounded prepared-binary64 oracle admission, shared by tooling and consumers.
+//! Bounded prepared-binary64 golden admission, shared by tooling and consumers.
 
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
@@ -45,7 +45,7 @@ pub enum Cause {
     Exponent,
     /// A number is not a canonical reduced rational string.
     Rational,
-    /// An input or oracle interval has reversed endpoints.
+    /// An input or golden interval has reversed endpoints.
     Ordering,
     /// Evidence is missing, repeated, stray, reordered or bound to another input.
     Association,
@@ -69,11 +69,11 @@ pub enum Cause {
     Depth,
 }
 
-/// Oracle admission never relabels arithmetic exhaustion as malformed data.
+/// Golden admission never relabels arithmetic exhaustion as malformed data.
 #[derive(Debug, Error)]
 pub enum Error {
     /// A structurally invalid field, with its JSON location.
-    #[error("oracle {cause:?} at {path}")]
+    #[error("golden {cause:?} at {path}")]
     Invalid {
         /// Closed structural or resource cause.
         cause: Cause,
@@ -81,10 +81,10 @@ pub enum Error {
         path: String,
     },
     /// The exact engine's original typed cause; the caller retains its ledger.
-    #[error("oracle arithmetic: {0}")]
+    #[error("golden arithmetic: {0}")]
     Arithmetic(#[from] Fault),
     /// Reading the bounded stream failed.
-    #[error("oracle input: {0}")]
+    #[error("golden input: {0}")]
     Io(#[from] std::io::Error),
 }
 
@@ -194,25 +194,25 @@ fn check_depth(bytes: &[u8], limit: usize) -> Result<(), Error> {
     Ok(())
 }
 
-/// Check every authored oracle input when the optional input directory exists.
+/// Check every authored golden input when the optional input directory exists.
 pub(crate) fn check_inputs(root: &Path) -> Result<(), crate::Error> {
-    let directory = root.join("data/oracles");
+    let directory = root.join("data/golden");
     let listing = match std::fs::read_dir(&directory) {
         Ok(listing) => listing,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        Err(error) => return Err(crate::error::io("data/oracles", error)),
+        Err(error) => return Err(crate::error::io("data/golden", error)),
     };
     let mut paths = Vec::new();
     for entry in listing {
-        let entry = entry.map_err(|error| crate::error::io("data/oracles", error))?;
+        let entry = entry.map_err(|error| crate::error::io("data/golden", error))?;
         let path = entry.path();
         let kind = entry
             .file_type()
-            .map_err(|error| crate::error::io("data/oracles", error))?;
+            .map_err(|error| crate::error::io("data/golden", error))?;
         if !kind.is_file() || path.extension().is_none_or(|extension| extension != "json") {
-            return Err(crate::Error::Oracle {
+            return Err(crate::Error::Golden {
                 path: path.display().to_string(),
-                source: invalid(Cause::Fields, "oracle input layout"),
+                source: invalid(Cause::Fields, "golden input layout"),
             });
         }
         paths.push(path);
@@ -222,12 +222,12 @@ pub(crate) fn check_inputs(root: &Path) -> Result<(), crate::Error> {
         let display = path.display().to_string();
         let file = std::fs::File::open(&path).map_err(|error| crate::error::io(&display, error))?;
         let limits = Limits::default();
-        let value = decode(file, limits).map_err(|source| crate::Error::Oracle {
+        let value = decode(file, limits).map_err(|source| crate::Error::Golden {
             path: display.clone(),
             source,
         })?;
         validate_profiled(&value, limits, |_| checker_limits()).map_err(|source| {
-            crate::Error::Oracle {
+            crate::Error::Golden {
                 path: display,
                 source,
             }
@@ -263,7 +263,7 @@ fn validate_profiled(
         let result = entry(row, ids, limits, &mut budget);
         total.work(
             budget.usage().work,
-            nrz_cas::Location::new("oracle payload"),
+            nrz_cas::Location::new("golden payload"),
         )?;
         result
     })
@@ -277,7 +277,7 @@ fn payload_work(count: usize, per_entry: u64) -> Result<u64, Fault> {
         .ok_or_else(|| {
             Fault::capacity(
                 nrz_cas::limits::BudgetKind::Work,
-                nrz_cas::Location::new("oracle payload"),
+                nrz_cas::Location::new("golden payload"),
             )
         })
 }
@@ -300,7 +300,7 @@ fn validate(
         "entries",
     ])?;
     ensure(
-        root.text("namespace")? == "org.naturrhythmuszentrum.test.oracle.prepared-binary64",
+        root.text("namespace")? == "org.naturrhythmuszentrum.test.golden.prepared-binary64",
         Cause::Namespace,
         "$.namespace",
     )?;
@@ -395,7 +395,7 @@ fn entry(row: &Record<'_>, ids: &[&str], limits: Limits, budget: &mut Budget) ->
         keys.push("exponent");
     }
     if enclosure {
-        keys.push("oracle");
+        keys.push("golden");
     }
     row.keys(&keys)?;
     let refusal = if enclosure {
@@ -482,7 +482,7 @@ fn power_exponent(
         let power = i64::try_from(denominator.component_bits().0 - 1).map_err(|_| {
             Fault::capacity(
                 nrz_cas::limits::BudgetKind::IntegerExponent,
-                nrz_cas::Location::new("oracle exponent"),
+                nrz_cas::Location::new("golden exponent"),
             )
         })?;
         denominator == Rational::from_ratio(2, 1, budget)?.pow(power, budget)?
@@ -531,8 +531,8 @@ fn endpoint_evidence(
     if !enclosure {
         return ensure(evidence.is_empty(), Cause::Association, row.path);
     }
-    let oracle = row.record("oracle")?;
-    oracle.keys(&endpoints.iter().map(|(name, _)| *name).collect::<Vec<_>>())?;
+    let golden = row.record("golden")?;
+    golden.keys(&endpoints.iter().map(|(name, _)| *name).collect::<Vec<_>>())?;
     ensure(
         evidence.len() == endpoints.len(),
         Cause::Association,
@@ -572,7 +572,7 @@ fn endpoint_evidence(
             Cause::EmptyIntersection,
             row.path,
         )?;
-        let published = interval(oracle.get(name)?, limits, budget, row.path)?;
+        let published = interval(golden.get(name)?, limits, budget, row.path)?;
         ensure(
             &published[0] == lower && &published[1] == upper,
             Cause::Intersection,

@@ -2,7 +2,7 @@
 //! Preallocation, exact resource cause, exponent and measured-profile controls.
 
 use super::{Cause, Error, Limits, Value, budget, fixture, json, read, rejects};
-use crate::oracle::{Payload, json::Audit};
+use crate::golden::{Payload, json::Audit};
 use nrz_cas::limits::BudgetKind;
 use nrz_cas::{Exhaustion, FaultKind};
 
@@ -29,7 +29,7 @@ pub(super) fn work_refusal(result: &Result<Payload, Error>, limit: u64, needed: 
 /// Panics if preflight loses a resource cause or starts allocating the JSON tree.
 fn before_tree(bytes: &[u8], limits: Limits, cause: Cause) {
     let mut audit = Audit::default();
-    let result = crate::oracle::json::parse(bytes, limits, &mut audit);
+    let result = crate::golden::json::parse(bytes, limits, &mut audit);
     assert!(matches!(result, Err(Error::Invalid { cause: actual, .. }) if actual == cause));
     assert_eq!(audit.tree_decodes, 0);
 }
@@ -37,10 +37,10 @@ fn before_tree(bytes: &[u8], limits: Limits, cause: Cause) {
 /// Oversized entries and literals never reach string or container retention.
 /// # Panics
 /// Panics if an adversarial fixture is not refused at the preallocation boundary.
-/// ´claim:docgen:oracle-preallocation-controls´
-/// ´test:unit:oracle-preallocation-controls´
+/// ´claim:docgen:golden-preallocation-controls´
+/// ´test:unit:golden-preallocation-controls´
 #[test]
-fn oracle_preallocation_controls() {
+fn golden_preallocation_controls() {
     let bytes = serde_json::to_vec(&fixture()).expect("fixture encoding");
     before_tree(
         &bytes,
@@ -71,7 +71,7 @@ fn oracle_preallocation_controls() {
     );
     let mut audit = Audit::default();
     assert!(
-        crate::oracle::json::parse(
+        crate::golden::json::parse(
             escaped,
             Limits {
                 literal_bytes: 2,
@@ -98,10 +98,10 @@ fn oracle_preallocation_controls() {
 /// Closed operation compatibility and exact exponent classes are separate from runtime truth.
 /// # Panics
 /// Panics if a declared operation/exponent control has the wrong outcome.
-/// ´claim:docgen:oracle-exponent-controls´
-/// ´test:unit:oracle-exponent-controls´
+/// ´claim:docgen:golden-exponent-controls´
+/// ´test:unit:golden-exponent-controls´
 #[test]
-fn oracle_exponent_controls() {
+fn golden_exponent_controls() {
     let mut value = fixture();
     value["entries"][6]["expected"]["refusal"] = json!("non-dyadic-exponent");
     rejects(&value, Cause::Expected);
@@ -161,10 +161,10 @@ fn oracle_exponent_controls() {
 /// Returns encoding, admission or output errors.
 /// # Panics
 /// Panics only if the committed sample ceases to have an entry array.
-/// ´claim:docgen:oracle-profile-measurement´
-/// ´test:unit:oracle-profile-measurement´
+/// ´claim:docgen:golden-profile-measurement´
+/// ´test:unit:golden-profile-measurement´
 #[test]
-fn oracle_profile_measurement() -> Result<(), Box<dyn std::error::Error>> {
+fn golden_profile_measurement() -> Result<(), Box<dyn std::error::Error>> {
     use std::io::Write;
     let value = fixture();
     let mut output = std::io::stdout().lock();
@@ -190,7 +190,7 @@ fn measure(
     let mut ledger = budget(100_000_000);
     drop(read(bytes.as_slice(), Limits::default(), &mut ledger)?);
     let mut audit = Audit::default();
-    drop(crate::oracle::json::parse(
+    drop(crate::golden::json::parse(
         &bytes,
         Limits::default(),
         &mut audit,
@@ -214,7 +214,7 @@ fn measure(
         expected
     );
     if name == "whole" {
-        let limits = crate::oracle::checker_limits();
+        let limits = crate::golden::checker_limits();
         assert_eq!(limits.work, 2 * 3_944_721);
         assert_eq!(limits.literal_bytes, 2 * expected.1 as u64);
         for cap in [expected.1 as u64, expected.1 as u64 - 1] {
@@ -257,13 +257,13 @@ fn measure(
 /// Returns encoding or validation errors.
 /// # Panics
 /// Panics if the full entry ceiling fails or the one-below fault changes.
-/// ´claim:docgen:oracle-entry-profile´
-/// ´test:unit:oracle-entry-profile´
+/// ´claim:docgen:golden-entry-profile´
+/// ´test:unit:golden-entry-profile´
 #[test]
-fn oracle_entry_profile() -> Result<(), Box<dyn std::error::Error>> {
+fn golden_entry_profile() -> Result<(), Box<dyn std::error::Error>> {
     let mut value = fixture();
     let row = value["entries"][3].clone();
-    let record = crate::oracle::Record::new(&row, "$.entries[0]")?;
+    let record = crate::golden::Record::new(&row, "$.entries[0]")?;
     let ids: Vec<_> = value["routes"]
         .as_array()
         .expect("routes")
@@ -271,9 +271,9 @@ fn oracle_entry_profile() -> Result<(), Box<dyn std::error::Error>> {
         .map(|route| route["id"].as_str().expect("route id"))
         .collect();
     for prefix in [3_944_721, 3_944_722] {
-        let mut exact = nrz_cas::limits::Budget::new(crate::oracle::checker_limits())?;
+        let mut exact = nrz_cas::limits::Budget::new(crate::golden::checker_limits())?;
         exact.work(prefix, nrz_cas::Location::new("profile boundary prefix"))?;
-        let result = crate::oracle::entry(&record, &ids, Limits::default(), &mut exact);
+        let result = crate::golden::entry(&record, &ids, Limits::default(), &mut exact);
         if prefix == 3_944_721 {
             result?;
             assert_eq!(exact.usage().work, 7_889_442);
@@ -292,9 +292,9 @@ fn oracle_entry_profile() -> Result<(), Box<dyn std::error::Error>> {
             );
         }
     }
-    assert_eq!(crate::oracle::payload_work(256, 7_889_442)?, 2_019_697_152);
+    assert_eq!(crate::golden::payload_work(256, 7_889_442)?, 2_019_697_152);
     assert!(
-        matches!(crate::oracle::payload_work(2, u64::MAX), Err(fault)
+        matches!(crate::golden::payload_work(2, u64::MAX), Err(fault)
         if matches!(fault.kind, FaultKind::Exhausted { reason: Exhaustion::Capacity, budget: BudgetKind::Work, .. }))
     );
     let entries: Vec<_> = (0..Limits::default().entries)
@@ -307,10 +307,10 @@ fn oracle_entry_profile() -> Result<(), Box<dyn std::error::Error>> {
     value["entries"] = json!(entries);
     let bytes = serde_json::to_vec(&value)?;
     let limits = Limits::default();
-    let value = crate::oracle::decode(bytes.as_slice(), limits)?;
-    crate::oracle::validate_profiled(&value, limits, |_| crate::oracle::checker_limits())?;
-    let result = crate::oracle::validate_profiled(&value, limits, |index| {
-        let mut profile = crate::oracle::checker_limits();
+    let value = crate::golden::decode(bytes.as_slice(), limits)?;
+    crate::golden::validate_profiled(&value, limits, |_| crate::golden::checker_limits())?;
+    let result = crate::golden::validate_profiled(&value, limits, |index| {
+        let mut profile = crate::golden::checker_limits();
         if index == limits.entries - 1 {
             profile.work = 3_944_720;
         }
