@@ -261,3 +261,7 @@ requires = []
 [[document]]
 output = "docs/design/enclosed-transcendental-plans-design.md"
 requires = []
+
+[[document]]
+output = "docs/design/matrix-loans-design.md"
+requires = []
