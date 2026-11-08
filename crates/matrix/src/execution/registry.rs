@@ -35,7 +35,7 @@ impl Registry {
         lease.validate(candidate)?;
         let inventory = lease.snapshot()?;
         self.entries
-            .try_reserve_exact(1)
+            .try_reserve(1)
             .map_err(|_| OperationError::ResourceLimit)?;
         Ok(inventory)
     }
