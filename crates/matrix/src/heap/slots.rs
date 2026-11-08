@@ -81,6 +81,28 @@ impl<T> Slots<T> {
         retired: &[Key],
         limit: usize,
     ) -> Result<SlotPlan, HeapError> {
+        self.change_mode(count, keep, retired, limit, false)
+    }
+
+    /// Prepare native mask occupations inside a prechecked exact-capacity reservation.
+    pub(crate) fn change_reserved(
+        &mut self,
+        count: usize,
+        retired: &[Key],
+        limit: usize,
+    ) -> Result<SlotPlan, HeapError> {
+        self.change_mode(count, None, retired, limit, true)
+    }
+
+    /// Preserve ordinary growth while reserved owners request only the admitted capacity.
+    fn change_mode(
+        &mut self,
+        count: usize,
+        keep: Option<Key>,
+        retired: &[Key],
+        limit: usize,
+        exact: bool,
+    ) -> Result<SlotPlan, HeapError> {
         self.check_change(count, keep, retired)?;
         if count > limit || self.entries.len() > limit {
             return Err(HeapError::Capacity);
@@ -108,9 +130,22 @@ impl<T> Slots<T> {
             .try_reserve_exact(retired.len())
             .map_err(|_| HeapError::Capacity)?;
         removals.extend_from_slice(retired);
-        self.entries
-            .try_reserve(append)
-            .map_err(|_| HeapError::Capacity)?;
+        if exact {
+            let capacity = self.entries.capacity().max(end);
+            self.entries
+                .try_reserve_exact(append)
+                .map_err(|_| HeapError::Capacity)?;
+            if self.entries.capacity() > capacity
+                || keys.capacity() > count
+                || removals.capacity() > retired.len()
+            {
+                return Err(HeapError::Capacity);
+            }
+        } else {
+            self.entries
+                .try_reserve(append)
+                .map_err(|_| HeapError::Capacity)?;
+        }
         Ok(SlotPlan {
             keys,
             retired: removals,
@@ -220,6 +255,32 @@ impl<T> Slots<T> {
                 };
                 slot.value.as_mut().map(|value| (key, value))
             })
+    }
+
+    /// Allocated table bytes, including vacant and permanently retired occupations.
+    pub(crate) fn owned_bytes(&self) -> Result<usize, HeapError> {
+        self.entries
+            .capacity()
+            .checked_mul(size_of::<Slot<T>>())
+            .ok_or(HeapError::Capacity)
+    }
+
+    /// Conservative capacity before exact growth, retaining the current allocation.
+    pub(crate) fn reserved_bytes(&self, count: usize) -> Result<usize, HeapError> {
+        self.entries
+            .len()
+            .checked_add(count)
+            .and_then(|length| {
+                length
+                    .max(self.entries.capacity())
+                    .checked_mul(size_of::<Slot<T>>())
+            })
+            .ok_or(HeapError::Capacity)
+    }
+
+    /// Slots inspected by an inventory scan, including vacant positions.
+    pub(crate) const fn scan_work(&self) -> usize {
+        self.entries.len()
     }
 
     /// Test-only corruption access for inaccessible version/dependency guards.

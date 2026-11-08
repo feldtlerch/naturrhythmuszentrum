@@ -51,6 +51,8 @@ pub struct Heap {
     pub(crate) limits: HeapLimits,
     /// Typed owned numerical allocations.
     pub(crate) storage: Storage,
+    /// Independently owned packed masks and their immutable native cell layouts.
+    pub(crate) masks: crate::mask::Store,
     /// Category-bearing descriptor occupations.
     pub(crate) descriptors: Slots<Record>,
     /// Immutable numerical shapes; descriptor-side equality selects their opaque identities.
@@ -79,6 +81,7 @@ impl Heap {
             scope: identity::identity()?,
             limits,
             storage: Storage::new(),
+            masks: crate::mask::Store::new(),
             descriptors: Slots::new(),
             schemas: Vec::new(),
             meanings: Vec::new(),

@@ -384,3 +384,13 @@ pub use publication::{
     FrozenRatioKernel, LiveDecisionCount, LiveDecisionError, PreparedDecision, PublishedDecision,
     RatioKernelEvidence,
 };
+
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "native mask storage is owned by the private heap"
+)]
+mod mask;
+pub use mask::{
+    CellAxis, CellCorrespondence, CellGather, CellLayoutVersion, MaskError, MaskPartition,
+    MaskVersion, MaskView,
+};
