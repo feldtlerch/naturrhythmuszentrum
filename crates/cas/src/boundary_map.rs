@@ -161,6 +161,7 @@ impl Runner<'_> {
         if !cells.arms.is_empty()
             && !result
                 .fault
+                .as_ref()
                 .is_some_and(|fault| matches!(fault.kind, FaultKind::Exhausted { .. }))
         {
             result.proof = Some(self.assemble_cells(job, order, &cells, result.complete)?);
@@ -190,7 +191,7 @@ impl Runner<'_> {
             Err(fault) => {
                 result.complete = false;
                 let blocker = classify(fault);
-                result.fault = Some(blocker);
+                result.fault = Some(blocker.clone());
                 result.pending.push(PendingCell {
                     region: region.clone(),
                     order,
@@ -319,7 +320,7 @@ impl Level {
 
     /// Exhaustion preserves all subsequent cells as explicitly unattempted obligations.
     fn stopped(&mut self, region: &Handle, order: u32) -> bool {
-        if let Some(blocker) = self.fault
+        if let Some(blocker) = self.fault.clone()
             && matches!(blocker.kind, FaultKind::Exhausted { .. })
         {
             self.pending.push(PendingCell {

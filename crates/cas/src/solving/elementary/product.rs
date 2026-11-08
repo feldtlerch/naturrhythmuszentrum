@@ -17,7 +17,7 @@ use crate::solving::{
 };
 
 /// A failed optional finite proof remains undecided; exhaustion always propagates.
-pub(crate) const fn decides(result: Result<(), Fault>) -> Result<bool, Fault> {
+pub(crate) fn decides(result: Result<(), Fault>) -> Result<bool, Fault> {
     match result {
         Ok(()) => Ok(true),
         Err(error)

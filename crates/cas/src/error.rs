@@ -50,6 +50,8 @@ pub enum InvalidCode {
     Expm1Claim,
     /// A well-formed formal-series request exceeds the admitted finite object fragment.
     SeriesUnsupported,
+    /// Formal composition has an exactly nonzero inner constant.
+    SeriesNonzeroConstant,
     /// No admitted exact certificate checker supports this predicate or arithmetic origin.
     UnsupportedCertificate,
     /// The proposed option is not an association of the exact native case.
@@ -225,22 +227,123 @@ pub enum FaultKind {
     },
 }
 
-/// A small structured error that never embeds an expanded expression.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// Historical diagnostic identity, never a capability to access a graph object.
+///
+/// A private shared attempt token distinguishes refusals even when rollback reuses
+/// logical identifiers. Clones preserve that identity; no store token is retained.
+///
+/// ```compile_fail,E0308
+/// fn lookup(cas: &nrz_cas::Cas, identity: &nrz_cas::SeriesDiagnosticIdentity) {
+///     let _ = cas.series_object(identity);
+/// }
+/// ```
+#[derive(Clone, Debug)]
+pub struct SeriesDiagnosticIdentity {
+    /// Historical namespace and serial, without the original store token.
+    id: crate::graph::LogicalId,
+    /// Unique retained refusal attempt; sharing grants no graph access.
+    attempt: std::sync::Arc<()>,
+}
+
+impl SeriesDiagnosticIdentity {
+    /// Read the historical serial and namespace without conferring graph access.
+    #[must_use]
+    pub const fn logical_id(&self) -> crate::graph::LogicalId {
+        self.id
+    }
+
+    /// Whether two diagnostic identities belong to the same retained refusal.
+    #[must_use]
+    pub fn same_attempt(&self, other: &Self) -> bool {
+        std::sync::Arc::ptr_eq(&self.attempt, &other.attempt)
+    }
+
+    /// Construct one prepaid attempt identity shared by the input and coefficient.
+    pub(crate) fn pair(
+        input: &crate::graph::Handle,
+        coefficient: &crate::graph::Handle,
+    ) -> [Self; 2] {
+        let attempt = std::sync::Arc::new(());
+        [
+            Self {
+                id: input.logical_id(),
+                attempt: attempt.clone(),
+            },
+            Self {
+                id: coefficient.logical_id(),
+                attempt,
+            },
+        ]
+    }
+}
+
+impl PartialEq for SeriesDiagnosticIdentity {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id && self.same_attempt(other)
+    }
+}
+
+impl Eq for SeriesDiagnosticIdentity {}
+
+/// Owned finite refusal evidence, independent of graph transaction lifetime.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SeriesConstantEvidence {
+    /// Original inner object identity; descriptive even after its transaction rolls back.
+    pub input: SeriesDiagnosticIdentity,
+    /// Exact original coefficient identity.
+    pub coefficient: SeriesDiagnosticIdentity,
+    /// The constant coefficient always has index zero.
+    pub index: u32,
+    /// Owned exact rational, usable without dereferencing a rolled-back graph handle.
+    pub value: crate::number::Rational,
+}
+
+/// Exact independently owned composition refusal data.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum SeriesRefusalEvidence {
+    /// The offending coefficient and its descriptive original identities.
+    Constant(SeriesConstantEvidence),
+    /// Available outer and inner orders, followed by the requested order.
+    Precision([u32; 3]),
+}
+
+/// A structured error with optional prepaid, independently owned finite refusal evidence.
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Fault {
     /// Failure classification and bounded metadata.
     pub kind: FaultKind,
     /// The operation that refused the value.
     pub location: Location,
+    /// Exact mathematical refusal evidence; sharing does not depend on graph retention.
+    pub series_evidence: Option<std::sync::Arc<SeriesRefusalEvidence>>,
 }
 
 impl Fault {
+    /// Borrow the owned nonzero coefficient without any graph lookup.
+    #[must_use]
+    pub fn series_constant(&self) -> Option<&SeriesConstantEvidence> {
+        match self.series_evidence.as_deref() {
+            Some(SeriesRefusalEvidence::Constant(value)) => Some(value),
+            _ => None,
+        }
+    }
+
+    /// Read both available orders and the requested composition precision.
+    #[must_use]
+    pub fn series_precision(&self) -> Option<[u32; 3]> {
+        match self.series_evidence.as_deref() {
+            Some(SeriesRefusalEvidence::Precision(value)) => Some(*value),
+            _ => None,
+        }
+    }
+
     /// Construct an invalid-input error.
     #[must_use]
     pub const fn invalid(code: InvalidCode, location: Location) -> Self {
         Self {
             kind: FaultKind::Invalid(code),
             location,
+            series_evidence: None,
         }
     }
 
@@ -264,6 +367,7 @@ impl Fault {
                 needed,
             },
             location,
+            series_evidence: None,
         }
     }
 
@@ -278,6 +382,7 @@ impl Fault {
                 needed: u64::MAX,
             },
             location,
+            series_evidence: None,
         }
     }
 
@@ -292,6 +397,7 @@ impl Fault {
                 needed: 0,
             },
             location,
+            series_evidence: None,
         }
     }
 }

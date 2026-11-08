@@ -352,8 +352,11 @@ fn equal(
 }
 
 /// Preserve the public named refusal rather than collapsing it into a sort error.
-pub(crate) const fn refusal(fault: Fault) -> RefusalReason {
+pub(crate) const fn refusal(fault: &Fault) -> RefusalReason {
     match fault.kind {
+        FaultKind::Invalid(InvalidCode::SeriesNonzeroConstant) => {
+            RefusalReason::SeriesNonzeroConstant
+        }
         FaultKind::Invalid(InvalidCode::DistributionPointValue) => {
             RefusalReason::DistributionPointValue
         }

@@ -59,6 +59,15 @@ pub enum SeriesOperation {
         /// Explicit common count, or the recorded minimum default.
         order: Option<u32>,
     },
+    /// Zero-constant composition; absent order records the minimum input order.
+    Compose {
+        /// Original first object.
+        left: Handle,
+        /// Original second object.
+        right: Handle,
+        /// Explicit common count, or the recorded minimum default.
+        order: Option<u32>,
+    },
     /// One exact coefficient, with bounds checked before indexing.
     Coefficient {
         /// Original admitted finite object.
@@ -77,20 +86,22 @@ impl SeriesOperation {
             | Self::Integrate { input, .. }
             | Self::Scale { input, .. }
             | Self::Coefficient { input, .. } => input,
-            Self::Add { left, .. } | Self::Mul { left, .. } => left,
+            Self::Add { left, .. } | Self::Mul { left, .. } | Self::Compose { left, .. } => left,
         }
     }
 
     /// The second object contributes size bounds but never substitutes for a compatibility proof.
     const fn right(&self) -> Option<&Handle> {
         match self {
-            Self::Add { right, .. } | Self::Mul { right, .. } => Some(right),
+            Self::Add { right, .. } | Self::Mul { right, .. } | Self::Compose { right, .. } => {
+                Some(right)
+            }
             _ => None,
         }
     }
 
     /// Requested precision cannot invent coefficients beyond the admitted objects.
-    fn order(&self, cas: &Cas) -> Result<u32, Fault> {
+    fn order(&self, cas: &Cas, budget: &mut Budget) -> Result<u32, Fault> {
         let available = cas.series_object(self.input())?.order;
         let order = match self {
             Self::Derive { .. } => available
@@ -99,10 +110,20 @@ impl SeriesOperation {
                 .ok_or_else(unsupported)?,
             Self::Integrate { .. } => return available.checked_add(1).ok_or_else(unsupported),
             Self::Truncate { order, .. } => *order,
-            Self::Add { right, order, .. } | Self::Mul { right, order, .. } => {
+            Self::Add { right, order, .. }
+            | Self::Mul { right, order, .. }
+            | Self::Compose { right, order, .. } => {
                 let common = available.min(cas.series_object(right)?.order);
                 let chosen = order.unwrap_or(common);
                 if chosen > common {
+                    if matches!(self, Self::Compose { .. }) {
+                        return Err(super::compose::precision(
+                            available,
+                            cas.series_object(right)?.order,
+                            chosen,
+                            budget,
+                        )?);
+                    }
                     return Err(unsupported());
                 }
                 chosen
@@ -116,6 +137,14 @@ impl SeriesOperation {
             Self::Scale { .. } => available,
         };
         if order == 0 || order > available {
+            if let Self::Compose { right, .. } = self {
+                return Err(super::compose::precision(
+                    available,
+                    cas.series_object(right)?.order,
+                    order,
+                    budget,
+                )?);
+            }
             return Err(unsupported());
         }
         Ok(order)
@@ -162,7 +191,9 @@ fn workspace(
         bits = bits.max(u64::from(order.bit_width()));
     }
     let n = u64::from(order);
-    let rows = if matches!(operation, SeriesOperation::Mul { .. }) {
+    let rows = if matches!(operation, SeriesOperation::Compose { .. }) {
+        super::compose::entries(order)?
+    } else if matches!(operation, SeriesOperation::Mul { .. }) {
         n.checked_mul(n.checked_add(1).ok_or_else(invalid)?)
             .ok_or_else(invalid)?
             / 2
@@ -171,6 +202,12 @@ fn workspace(
     };
     budget.check(BudgetKind::JetEntries, rows, AT)?;
     // Each partial sum contains at most n products; this bound includes unreduced denominators.
+    if matches!(operation, SeriesOperation::Compose { .. }) {
+        bits = bits
+            .checked_mul(n)
+            .and_then(|v| v.checked_mul(n))
+            .ok_or_else(invalid)?;
+    }
     let number_bytes = bits
         .checked_mul(n)
         .and_then(|v| v.checked_mul(4))
@@ -265,6 +302,13 @@ fn candidate(
     budget: &mut Budget,
 ) -> Result<(S, C), Fault> {
     match operation {
+        SeriesOperation::Compose {
+            left,
+            right,
+            order: requested,
+        } => {
+            return super::compose::produce(cas, left, right, order, requested.is_none(), budget);
+        }
         SeriesOperation::Derive { input } => {
             return super::calculus::derive(cas, input, order, budget);
         }
@@ -370,6 +414,7 @@ fn candidate(
             },
         ),
         SeriesOperation::Coefficient { .. }
+        | SeriesOperation::Compose { .. }
         | SeriesOperation::Derive { .. }
         | SeriesOperation::Integrate { .. } => return Err(invalid()),
     })
@@ -465,6 +510,7 @@ fn row(
             Ok(sum)
         }
         SeriesOperation::Coefficient { .. }
+        | SeriesOperation::Compose { .. }
         | SeriesOperation::Derive { .. }
         | SeriesOperation::Integrate { .. } => Err(invalid()),
     }
@@ -488,13 +534,14 @@ impl Cas {
         self.proof_limits(budget, |cas, budget| {
             cas.transaction(budget, |cas, budget| {
                 budget.work(1, AT)?;
-                let order = operation.order(cas)?;
+                let order = operation.order(cas, budget)?;
                 let count = match operation {
                     SeriesOperation::Truncate { .. }
                     | SeriesOperation::Coefficient { .. }
                     | SeriesOperation::Derive { .. } => 0,
                     SeriesOperation::Scale { .. } | SeriesOperation::Integrate { .. } => 1,
                     SeriesOperation::Add { left, right, .. }
+                    | SeriesOperation::Compose { left, right, .. }
                     | SeriesOperation::Mul { left, right, .. } => {
                         usize::from(cas.series_object(left)?.order != order)
                             + usize::from(cas.series_object(right)?.order != order)

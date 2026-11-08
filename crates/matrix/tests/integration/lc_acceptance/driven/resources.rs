@@ -44,8 +44,8 @@ fn refusal<P: Scalar + 'static>() -> TestResult {
     let inventory = case.batch.inventory();
     assert_eq!(inventory.points, 3);
     assert!(inventory.observed_capacity_bytes >= inventory.logical_payload_bytes);
-    assert_eq!(inventory.logical_payload_bytes, 7144);
-    assert_eq!(inventory.observed_capacity_bytes, 7144);
+    assert_eq!(inventory.logical_payload_bytes, 7216);
+    assert_eq!(inventory.observed_capacity_bytes, 7216);
 
     Ok(())
 }

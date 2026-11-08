@@ -250,7 +250,7 @@ fn lifetime<P: Scalar + 'static>() -> TestResult {
 #[test]
 fn lc_driven_plan_statistics_execution_boundaries() -> TestResult {
     let work = [measure::<f32>()?, measure::<f64>()?];
-    assert_eq!(work, [[1_913_118, 4_128], [1_913_214, 4_136]]);
+    assert_eq!(work, [[1_913_118, 4_136], [1_913_214, 4_144]]);
     boundaries::<f32>(work[0][0])?;
     boundaries::<f64>(work[1][0])
 }

@@ -872,8 +872,8 @@ After the original deterministic evaluation and source binding are retained, the
 
 |Source factor|Work|Staged bytes f32/f64|Output bytes f32/f64|
 |-------------|----|--------------------|--------------------|
-|Rank one|742|173,795 / 174,851|1,944 / 2,616|
-|Full rank|754|173,795 / 174,851|1,944 / 2,616|
+|Rank one|742|173,905 / 174,961|1,944 / 2,616|
+|Full rank|754|173,905 / 174,961|1,944 / 2,616|
 
 These are literal `N`, `N−1` and consumed-Work-prefix boundaries in both formats. A one-byte resident prefix refuses at the staged limit; releasing that prefix permits a same-ledger retry while keeping the refused attempt's one Work (`test:integration:lc-source-retained-root-literal-boundaries`). The retained evaluation and source-binding allowances remain resident during the call. Output counts the ordinary statistics record, shared covariance owner and source-sensitivity entries; staging adds the borrowed original evaluation and existing scratch allowance. The successful consumer uses 345 less Work than the corresponding unchanged cold source-composition call. Its staged requirement is higher because the original evaluation coexists with the result. These are conservative logical owner allowances, not observed allocator capacities, backend allowances or a disjoint whole-plan inventory. No original root, binding admission or earlier attempted Work is erased from a cumulative caller ledger.
 
@@ -883,11 +883,11 @@ The signed, repeated-copy fixture uses original source order `(C_source,L_source
 
 |Phase|Work|Staged bytes f32/f64|Output bytes f32/f64|
 |-----|----|--------------------|--------------------|
-|Adapter admission|5,481|170,807 / 170,807|170,807 / 170,807|
-|Rank-one evaluation|1,087|173,147 / 174,171|1,944 / 2,616|
-|Full-rank evaluation|1,099|173,147 / 174,171|1,944 / 2,616|
+|Adapter admission|5,503|170,917 / 170,917|170,917 / 170,917|
+|Rank-one evaluation|1,087|173,257 / 174,281|1,944 / 2,616|
+|Full-rank evaluation|1,099|173,257 / 174,281|1,944 / 2,616|
 
-The adapter retains one 170,807-byte allowance, independently checked against staged and output ceilings; these are two budget dimensions over the same owner, not three payloads. Evaluation staged limits include that retained adapter. These literals include the CAS registry reuse key: registering the four exact trigonometric primitives grows each key by 91 bytes, adding 91 admission Work and 455 retained bytes across five key copies. The totality and parity registrations add 82 key bytes, 82 admission Work and 410 retained bytes across five key copies. The five finite-series registrations add 105 key bytes, 105 admission Work and 525 retained bytes across five key copies. Evaluation staging carries these retained-key increases; evaluation Work/output, paired source-map and exact-copy import owners are unchanged. Both formats test literal `N`, `N−1` and a consumed Work prefix; full-rank evaluation's additional factor direction costs twelve Work (`test:integration:lc-source-composition-literal-owner-boundaries`). These conservative scoped allowances are distinct from observed allocator capacities and whole-engine inventories.
+The adapter retains one 170,917-byte allowance, independently checked against staged and output ceilings; these are two budget dimensions over the same owner, not three payloads. Evaluation staged limits include that retained adapter. These literals include the CAS registry reuse key: registering the four exact trigonometric primitives grows each key by 91 bytes, adding 91 admission Work and 455 retained bytes across five key copies. The totality and parity registrations add 82 key bytes, 82 admission Work and 410 retained bytes across five key copies. The five finite-series registrations add 105 key bytes, 105 admission Work and 525 retained bytes across five key copies. Evaluation staging carries these retained-key increases; evaluation Work/output, paired source-map and exact-copy import owners are unchanged. Both formats test literal `N`, `N−1` and a consumed Work prefix; full-rank evaluation's additional factor direction costs twelve Work (`test:integration:lc-source-composition-literal-owner-boundaries`). These conservative scoped allowances are distinct from observed allocator capacities and whole-engine inventories.
 
 The complete exact-copy import needs and consumes 170,620 Work and needs 2,000 staged bytes in either format. Normalizing IEEE significands before rational arithmetic avoids unnecessary powers of two; retained rational temporaries remain reserved through later arithmetic. Work and staged limits have literal one-below twins, consumed Work and retained-byte prefixes, and same-heap retries (`test:integration:lc-source-composition-copy-import-boundaries`). The exact-copy check adds no output owner, so `OutputBytes=0` succeeds on this import route; native heap storage remains governed by its separate heap limits. This is a scratch-accounting statement, not a claim that all import allocations are inventoried.
 

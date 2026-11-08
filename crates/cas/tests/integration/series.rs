@@ -8,7 +8,7 @@ use crate::testing::series_proof::fixture;
 /// ´test:integration:series-output-absent-production´
 #[test]
 fn series_output_absent_production() -> TestResult {
-    for kind in 0..12 {
+    for kind in 0..16 {
         let mut source = crate::testing::series_proof::production(kind)?;
         let witness = source.base.cas.compute_series(
             &source.operation,
@@ -48,7 +48,7 @@ fn series_output_absent_production() -> TestResult {
 /// ´test:integration:series-fresh-expected-replay´
 #[test]
 fn series_fresh_expected_replay() -> TestResult {
-    for kind in 0..12 {
+    for kind in 0..16 {
         let mut sender = fixture(kind, false)?;
         let witness = sender.base.cas.check_proof(
             &sender.base.context,

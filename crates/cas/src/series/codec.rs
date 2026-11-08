@@ -49,6 +49,7 @@ pub(crate) fn statement(
         S::Add { .. } => 1,
         S::Scale { .. } => 2,
         S::Mul { .. } => 3,
+        S::Compose { .. } => 5,
         S::Coefficient { .. } => 4,
         S::Derive { .. } => 8,
         S::Integrate { .. } => 9,
@@ -62,6 +63,13 @@ pub(crate) fn statement(
             write(output, out)?;
         }
         S::Add {
+            left,
+            right,
+            output,
+            order,
+            default_order,
+        }
+        | S::Compose {
             left,
             right,
             output,
@@ -134,11 +142,11 @@ pub(crate) fn read_statement(
             output,
         }));
     }
-    if !matches!(mode, 0..=4 | 8 | 9) {
+    if !matches!(mode, 0..=5 | 8 | 9) {
         return Err(unsupported());
     }
     let input = object(reader, records)?;
-    let second = if matches!(mode, 1..=3 | 9) {
+    let second = if matches!(mode, 1..=3 | 5 | 9) {
         Some(object(reader, records)?)
     } else {
         None
@@ -153,12 +161,20 @@ pub(crate) fn read_statement(
     let output = object(reader, records)?;
     Ok(match mode {
         0 => SeriesStatement::Truncate { input, output },
-        1 | 3 => {
+        1 | 3 | 5 => {
             let right = second.ok_or_else(invalid)?;
             let order = reader.index()?;
             let default_order = reader.boolean()?;
             if mode == 1 {
                 SeriesStatement::Add {
+                    left: input,
+                    right,
+                    output,
+                    order,
+                    default_order,
+                }
+            } else if mode == 5 {
+                SeriesStatement::Compose {
                     left: input,
                     right,
                     output,
@@ -261,6 +277,29 @@ pub(crate) fn certificate(value: &SeriesCertificate, out: &mut Encoder<'_>) -> R
                 }
             }
         }
+        SeriesCertificate::Compose {
+            order,
+            default_order,
+            zero,
+            seed,
+            powers,
+            sums,
+            ..
+        } => {
+            crate::wire::index(*order, out)?;
+            out.byte(u8::from(*default_order))?;
+            out.number(zero)?;
+            crate::split_wire::numbers(seed, out)?;
+            out.count(powers.len())?;
+            for power in powers {
+                crate::wire::index(power.exponent, out)?;
+                product_row(&power.row, out)?;
+            }
+            out.count(sums.len())?;
+            for row in sums {
+                product_row(row, out)?;
+            }
+        }
         SeriesCertificate::Coefficient { index, value, .. } => {
             crate::wire::index(*index, out)?;
             out.number(value)?;
@@ -312,7 +351,7 @@ pub(crate) fn read_certificate(reader: &mut Reader<'_, '_>) -> Result<SeriesCert
             units,
         }));
     }
-    if !matches!(mode, 0..=4 | 8 | 9) || form != 0 {
+    if !matches!(mode, 0..=5 | 8 | 9) || form != 0 {
         return Err(unsupported());
     }
     Ok(match mode {
@@ -364,6 +403,39 @@ pub(crate) fn read_certificate(reader: &mut Reader<'_, '_>) -> Result<SeriesCert
             index: reader.index()?,
             value: reader.rational()?,
         },
+        5 => {
+            let order = reader.index()?;
+            let default_order = reader.boolean()?;
+            let zero = reader.rational()?;
+            let seed = read_coefficients(reader)?;
+            let count = reader.count(BudgetKind::JetEntries, 52, 320)?;
+            let mut powers = Vec::new();
+            powers
+                .try_reserve_exact(count)
+                .map_err(|_| Fault::allocation(AT))?;
+            for _ in 0..count {
+                powers.push(super::SeriesPowerRow {
+                    exponent: reader.index()?,
+                    row: read_product(reader)?,
+                });
+            }
+            let count = reader.count(BudgetKind::JetEntries, 48, 256)?;
+            let mut sums = Vec::new();
+            sums.try_reserve_exact(count)
+                .map_err(|_| Fault::allocation(AT))?;
+            for _ in 0..count {
+                sums.push(read_product(reader)?);
+            }
+            SeriesCertificate::Compose {
+                form,
+                order,
+                default_order,
+                zero,
+                seed,
+                powers,
+                sums,
+            }
+        }
         8 => {
             let count = reader.count(BudgetKind::JetEntries, 31, 192)?;
             let mut rows = Vec::new();
@@ -428,6 +500,13 @@ pub(crate) fn measure(value: &SeriesCertificate, budget: &mut Budget) -> Result<
         SeriesCertificate::Truncate { coefficients, .. } => coefficients.len(),
         SeriesCertificate::Add { rows, .. } | SeriesCertificate::Scale { rows, .. } => rows.len(),
         SeriesCertificate::Mul { rows, .. } => rows.len(),
+        SeriesCertificate::Compose {
+            seed, powers, sums, ..
+        } => seed
+            .len()
+            .checked_add(powers.len())
+            .and_then(|n| n.checked_add(sums.len()))
+            .ok_or_else(invalid)?,
         SeriesCertificate::Coefficient { .. } => 1,
         SeriesCertificate::Derive { rows, .. } => rows.len(),
         SeriesCertificate::Integrate { rows, .. } => rows.len(),
@@ -454,4 +533,28 @@ fn read_coefficients(reader: &mut Reader<'_, '_>) -> Result<Vec<crate::number::R
         values.push(reader.rational()?);
     }
     Ok(values)
+}
+
+/// Exact ordered fields of a composition multiplication and partial sum.
+fn product_row(row: &SeriesProductRow, out: &mut Encoder<'_>) -> Result<(), Fault> {
+    crate::wire::index(row.degree, out)?;
+    crate::wire::index(row.left_index, out)?;
+    crate::wire::index(row.right_index, out)?;
+    for value in [&row.left, &row.right, &row.product, &row.sum] {
+        out.number(value)?;
+    }
+    Ok(())
+}
+
+/// Decode one row after its enclosing vector has been prepaid.
+fn read_product(reader: &mut Reader<'_, '_>) -> Result<SeriesProductRow, Fault> {
+    Ok(SeriesProductRow {
+        degree: reader.index()?,
+        left_index: reader.index()?,
+        right_index: reader.index()?,
+        left: reader.rational()?,
+        right: reader.rational()?,
+        product: reader.rational()?,
+        sum: reader.rational()?,
+    })
 }

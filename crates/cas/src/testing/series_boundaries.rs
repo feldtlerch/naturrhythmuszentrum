@@ -29,17 +29,28 @@ pub(crate) const KINDS: [BudgetKind; 18] = [
     BudgetKind::IntermediateBits,
 ];
 
-/// Every retry reconstructs the exact original store, prior usage and reuse state.
-#[expect(
-    clippy::too_many_lines,
-    reason = "Each complete resource attempt retains its setup, call and rollback assertion together"
-)]
+/// Preserve the established compact measurement interface.
 pub(crate) fn attempt(
     mode: usize,
     kind: usize,
     dimension: BudgetKind,
     amount: u64,
 ) -> TestResult<(bool, u64)> {
+    let (success, work, _) = attempt_detail(mode, kind, dimension, amount)?;
+    Ok((success, work))
+}
+
+/// Every retry reconstructs the exact original store, prior usage and reuse state.
+#[expect(
+    clippy::too_many_lines,
+    reason = "Each complete resource attempt retains its setup, call and rollback assertion together"
+)]
+pub(crate) fn attempt_detail(
+    mode: usize,
+    kind: usize,
+    dimension: BudgetKind,
+    amount: u64,
+) -> TestResult<(bool, u64, Option<crate::test_api::Fault>)> {
     let mut limits = ceiling(dimension, amount);
     match dimension {
         BudgetKind::JetOrder => limits.jet_order = amount,
@@ -57,7 +68,7 @@ pub(crate) fn attempt(
                 .kind,
             FaultKind::Invalid(crate::test_api::InvalidCode::Policy)
         );
-        return Ok((false, 0));
+        return Ok((false, 0, None));
     }
     let mut budget = Budget::new(limits)?;
     let at = Location::new("formal series complete boundary");
@@ -135,14 +146,14 @@ pub(crate) fn attempt(
         }
     };
     match result {
-        Ok(()) => Ok((true, budget.usage().work)),
+        Ok(()) => Ok((true, budget.usage().work, None)),
         Err(fault) => {
             assert!(
                 matches!(fault.kind,FaultKind::Exhausted {budget:actual,..} if actual==dimension || (dimension==BudgetKind::IntermediateBits && actual==BudgetKind::ComponentBits)),
                 "mode {mode} kind {kind} {dimension:?} {amount}: {fault:?}"
             );
             assert!(unchanged, "complete refusal rollback");
-            Ok((false, budget.usage().work))
+            Ok((false, budget.usage().work, Some(fault)))
         }
     }
 }

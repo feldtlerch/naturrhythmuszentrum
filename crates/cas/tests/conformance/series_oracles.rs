@@ -66,11 +66,11 @@ fn series_small_polynomial_oracles() -> TestResult {
 /// ´test:integration:series-every-output-position-refused´
 #[test]
 fn series_every_output_position_refused() -> TestResult {
-    for kind in 0..12 {
+    for kind in 0..16 {
         let count = match kind {
-            0 | 5 | 6 | 8 => 1,
-            4 | 7 => 2,
-            10 => 4,
+            0 | 5 | 6 | 8 | 12 | 15 => 1,
+            4 | 7 | 14 => 2,
+            10 | 13 => 4,
             _ => 3,
         };
         for index in 0..count {
@@ -86,6 +86,7 @@ fn series_every_output_position_refused() -> TestResult {
                 | S::Scale { output, .. }
                 | S::Derive { output, .. }
                 | S::Integrate { output, .. }
+                | S::Compose { output, .. }
                 | S::Mul { output, .. } => output,
                 S::Coefficient { value, .. } => value,
             }
@@ -142,6 +143,7 @@ fn series_every_output_position_refused() -> TestResult {
                 | S::Scale { output, .. }
                 | S::Derive { output, .. }
                 | S::Integrate { output, .. }
+                | S::Compose { output, .. }
                 | S::Mul { output, .. } => *output = replacement,
                 S::Coefficient { value, .. } => *value = replacement,
             }

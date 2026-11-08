@@ -284,13 +284,13 @@ fn parsed_grammar_exclusions() -> TestResult {
 /// ´test:integration:parsed-declaration-refusals´
 #[test]
 fn parsed_declaration_refusals() -> TestResult {
-    for &(text, failure, span) in DECLARATION_ERRORS {
+    for &(text, ref failure, span) in DECLARATION_ERRORS {
         let (mut cas, header) = store(declared())?;
         let before = cas.canonical_snapshot(&mut default_budget()?)?;
         let error = parse_original(&mut cas, "names", text, &header, &mut default_budget()?)
             .err()
             .ok_or("expected a declaration refusal")?;
-        assert_eq!(error.failure, failure);
+        assert_eq!(&error.failure, failure);
         assert_eq!(error.span, span);
         assert_eq!(cas.canonical_snapshot(&mut default_budget()?)?, before);
     }

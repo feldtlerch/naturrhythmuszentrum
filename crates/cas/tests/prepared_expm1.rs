@@ -141,6 +141,7 @@ fn prepared(f: &mut Fixture, r: &Request) -> TestResult<Prepared> {
 }
 fn invalid(fault: Fault, code: InvalidCode) {
     assert_eq!(fault.kind, FaultKind::Invalid(code));
+    drop(fault);
 }
 
 /// Distinct unsorted original points include zero, the boundary and a subnormal image.

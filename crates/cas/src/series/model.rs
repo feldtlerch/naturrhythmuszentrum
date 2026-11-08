@@ -68,6 +68,19 @@ pub enum SeriesStatement {
         /// Require the recorded order to be the minimum available input order.
         default_order: bool,
     },
+    /// Compose two original objects at an explicitly recorded common order.
+    Compose {
+        /// Original first object.
+        left: Handle,
+        /// Original second object.
+        right: Handle,
+        /// Proposed common-order composition; left is outer and right is inner.
+        output: Handle,
+        /// Positive coefficient count shared by the restricted inputs and output.
+        order: u32,
+        /// Require the recorded order to be the minimum available input order.
+        default_order: bool,
+    },
     /// Extract a coefficient without asserting a source value or derivative.
     Coefficient {
         /// Original object with its complete available order.
@@ -109,6 +122,15 @@ pub struct SeriesProductRow {
     pub product: Rational,
     /// Proposed partial sum, starting from zero for each output degree.
     pub sum: Rational,
+}
+
+/// One complete power-convolution row, retaining its outer exponent.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SeriesPowerRow {
+    /// Positive exponent of the power being reconstructed.
+    pub exponent: u32,
+    /// Exact pair and partial sum in this power.
+    pub row: SeriesProductRow,
 }
 
 /// One derivative coefficient and its independently reconstructed positive integer multiplier.
@@ -194,6 +216,23 @@ pub enum SeriesCertificate {
         /// Complete finite convolution rows, including zero-valued products.
         rows: Vec<SeriesProductRow>,
     },
+    /// Mode five, complete powers followed by coefficient accumulations.
+    Compose {
+        /// Only object form zero is executable.
+        form: u8,
+        /// Recorded common coefficient count.
+        order: u32,
+        /// Whether the common order is the minimum input order.
+        default_order: bool,
+        /// Exact inner coefficient at index zero, checked against zero in Q.
+        zero: Rational,
+        /// Complete length-order zeroth power.
+        seed: Vec<Rational>,
+        /// Rows in exponent, degree and first-index order.
+        powers: Vec<SeriesPowerRow>,
+        /// Rows in output-degree and outer-exponent order.
+        sums: Vec<SeriesProductRow>,
+    },
     /// Mode four, selecting exactly one available coefficient.
     Coefficient {
         /// Only object form zero is executable.
@@ -217,6 +256,7 @@ impl SeriesStatement {
             Self::Add { .. } => Primitive::SeriesAdd,
             Self::Scale { .. } => Primitive::SeriesScale,
             Self::Mul { .. } => Primitive::SeriesMul,
+            Self::Compose { .. } => Primitive::SeriesCompose,
             Self::Coefficient { .. } => Primitive::SeriesCoefficient,
         }
     }
@@ -234,6 +274,12 @@ impl SeriesStatement {
                 output,
             } => vec![input, constant, output],
             Self::Add {
+                left,
+                right,
+                output,
+                ..
+            }
+            | Self::Compose {
                 left,
                 right,
                 output,
@@ -263,7 +309,7 @@ impl SeriesStatement {
             | Self::Integrate { input, .. }
             | Self::Scale { input, .. }
             | Self::Coefficient { input, .. } => input,
-            Self::Add { left, .. } | Self::Mul { left, .. } => left,
+            Self::Add { left, .. } | Self::Compose { left, .. } | Self::Mul { left, .. } => left,
         }
     }
 }
@@ -280,6 +326,7 @@ impl SeriesCertificate {
             Self::Add { .. } => 1,
             Self::Scale { .. } => 2,
             Self::Mul { .. } => 3,
+            Self::Compose { .. } => 5,
             Self::Coefficient { .. } => 4,
         }
     }
@@ -295,6 +342,7 @@ impl SeriesCertificate {
             | Self::Add { form, .. }
             | Self::Scale { form, .. }
             | Self::Mul { form, .. }
+            | Self::Compose { form, .. }
             | Self::Coefficient { form, .. } => *form,
         }
     }

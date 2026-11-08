@@ -232,6 +232,9 @@ pub(crate) fn conditioned_integral(residual: bool, reordered: bool) -> TestResul
 /// Build only original syntax and required evidence, independently of the expected result store.
 pub(crate) fn production(kind: usize) -> TestResult<Production> {
     use crate::test_api::series::SeriesOperation as O;
+    if kind >= 13 {
+        return super::series_compose::production(kind);
+    }
     if kind >= 7 {
         return super::series_calculus::production(kind);
     }
@@ -431,6 +434,9 @@ fn binary(values: &[(&str, &str, &str)]) -> TestResult<Vec<SeriesBinaryRow>> {
     reason = "Independent hand fixtures state every endpoint and arithmetic row explicitly"
 )]
 pub(crate) fn fixture(kind: usize, reordered: bool) -> TestResult<Fixture> {
+    if kind >= 13 {
+        return super::series_compose::fixture_kind(kind, reordered);
+    }
     if kind >= 7 {
         return super::series_calculus::fixture(kind, reordered);
     }

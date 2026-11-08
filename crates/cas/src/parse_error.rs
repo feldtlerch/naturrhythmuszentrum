@@ -21,7 +21,7 @@ pub enum SyntaxCode {
 }
 
 /// A syntax, declaration or checked-construction refusal.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ParseFailure<'a> {
     /// Invalid expression syntax, independent of resource exhaustion.
     Syntax(SyntaxCode),
@@ -52,7 +52,7 @@ pub enum ParseFailure<'a> {
 ///
 /// Borrowing keeps even a zero-budget refusal allocation-free. No graph prefix is
 /// published on failure; the caller's work ledger still records consumed work.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ParseError<'a> {
     /// Caller source identity, including when the source could not be admitted.
     pub source_key: &'a str,
@@ -66,7 +66,7 @@ pub struct ParseError<'a> {
 
 impl fmt::Display for ParseError<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let reason = match self.failure {
+        let reason = match &self.failure {
             ParseFailure::Syntax(code) => {
                 return write!(
                     formatter,

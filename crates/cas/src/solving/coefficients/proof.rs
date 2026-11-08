@@ -13,9 +13,9 @@ use crate::solving::{
 };
 
 /// Resource failures keep their exact counter and location across checker boundaries.
-pub(crate) const fn fault(error: &CoefficientFailure) -> Fault {
+pub(crate) fn fault(error: &CoefficientFailure) -> Fault {
     match error {
-        CoefficientFailure::Fault(fault) => *fault,
+        CoefficientFailure::Fault(fault) => fault.clone(),
         CoefficientFailure::Unsupported(_) => invalid(),
     }
 }

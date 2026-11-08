@@ -290,7 +290,10 @@ mod search;
 mod service;
 mod shortcut;
 
-pub use error::{Exhaustion, Fault, FaultKind, InvalidCode, Location};
+pub use error::{
+    Exhaustion, Fault, FaultKind, InvalidCode, Location, SeriesConstantEvidence,
+    SeriesDiagnosticIdentity, SeriesRefusalEvidence,
+};
 pub use exact_constant::{
     ConstantIdentity, ConstantIdentityKind, ExactConstant, PositiveConstant, PreparedConstant,
 };

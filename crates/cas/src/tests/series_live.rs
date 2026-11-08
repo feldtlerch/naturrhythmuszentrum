@@ -14,6 +14,85 @@ struct Fixture {
     field: Handle,
 }
 
+/// Every ordered owned restriction slot is prepaid, including identical supplied handles.
+/// ´test:crate:compose-multiple-slot-reservation´
+#[test]
+fn compose_multiple_slot_reservation() -> TestResult {
+    let (source, original) = large()?;
+    let bytes = source
+        .base
+        .cas
+        .export_witness(&original, &mut default_budget()?)?;
+    let mut f = fixture(false)?;
+    let proof = f
+        .base
+        .cas
+        .inspect(&bytes, &mut default_budget()?)?
+        .proof()
+        .clone();
+    let input = object(&mut f.base, &f.field, &["0", "1"])?;
+    let payload = crate::proof_view::application_bytes(
+        &f.base.cas,
+        proof.logical_id(),
+        &mut default_budget()?,
+    )?;
+    let mut probe = default_budget()?;
+    let outer = probe.limits().staged_payload_bytes;
+    let effective = f
+        .base
+        .cas
+        .transaction(&mut probe, |_, b| Ok(b.limits().staged_payload_bytes))?;
+    let enclosing = outer - effective;
+    // At n=1, two evidence rows plus one output, one-bit coefficients and eight scope bytes.
+    let workspace = 3 * ((4 + 8) * 16 + 512) + 8 * 4;
+    let needed = workspace + 2 * payload;
+    let allowance = enclosing + needed - 1;
+    assert!(workspace + payload < needed);
+    let before = f.base.cas.canonical_snapshot(&mut default_budget()?)?;
+    let mut b = Budget::new(Limits {
+        staged_payload_bytes: allowance,
+        ..default_budget()?.limits().clone()
+    })?;
+    let fault = f
+        .base
+        .cas
+        .compute_series(
+            &O::Compose {
+                left: input.clone(),
+                right: input,
+                order: Some(1),
+            },
+            &[proof.clone(), proof],
+            &mut b,
+        )
+        .expect_err("both owned slots must be reserved");
+    assert_eq!(
+        (
+            enclosing,
+            workspace,
+            payload,
+            allowance,
+            needed,
+            b.usage().work
+        ),
+        (640, 2144, 30_612, 64_007, 63_368, 179_407)
+    );
+    assert_eq!(
+        fault,
+        crate::Fault::exhausted(
+            BudgetKind::StagedPayloadBytes,
+            needed - 1,
+            needed,
+            crate::Location::new("formal series arithmetic")
+        )
+    );
+    assert_eq!(
+        before,
+        f.base.cas.canonical_snapshot(&mut default_budget()?)?
+    );
+    Ok(())
+}
+
 /// The complete seed certificate remains reserved through publication at order one.
 /// ´test:crate:series-source-seed-publication-reservation´
 #[test]

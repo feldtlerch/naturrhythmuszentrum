@@ -92,7 +92,8 @@ fn series_source_wire_mutations() -> TestResult {
     // The first companion coefficient is exactly +1/1; its sign is independent of sine's output.
     assert_eq!(&bytes[row..row + 11], &[0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 1]);
     mutations.push((byte(&bytes, row, 0, 1), InvalidCode::Rule));
-    for mode in [5, 6, 7, 11, 255] {
+    super::series_compose_golden::payload_control()?;
+    for mode in [6, 7, 11, 255] {
         mutations.push((
             byte(&bytes, cursor, 10, mode),
             InvalidCode::SeriesUnsupported,
@@ -472,7 +473,9 @@ fn series_source_quotient_wire_refused() -> TestResult {
     assert_eq!(*tag, 3);
     let quotient = byte(&bytes, source.start + 22, 5, 8);
     let mut mutations = vec![(quotient, InvalidCode::Rule)];
-    for mode in [5, 6, 7, 11] {
+    mutations.push((byte(&bytes, cursor, 1, 5), InvalidCode::SeriesUnsupported));
+    super::series_compose_golden::payload_control()?;
+    for mode in [6, 7, 11] {
         mutations.push((
             byte(&bytes, cursor, 1, mode),
             InvalidCode::SeriesUnsupported,

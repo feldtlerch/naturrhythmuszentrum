@@ -12,6 +12,7 @@ pub(crate) mod check;
     reason = "finite codecs remain kernel-private"
 )]
 pub(crate) mod codec;
+mod compose;
 mod model;
 mod produce;
 mod source;
@@ -23,8 +24,8 @@ pub use source::{SourceCertificate, SourceClause, SourceRequest, SourceStatement
 )]
 pub(crate) mod portable;
 pub use model::{
-    SeriesBinaryRow, SeriesCertificate, SeriesDerivativeRow, SeriesIntegralRow, SeriesProductRow,
-    SeriesStatement,
+    SeriesBinaryRow, SeriesCertificate, SeriesDerivativeRow, SeriesIntegralRow, SeriesPowerRow,
+    SeriesProductRow, SeriesStatement,
 };
 
 use crate::budget::{Budget, BudgetKind};
