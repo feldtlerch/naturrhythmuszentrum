@@ -76,7 +76,9 @@
     {
       "build_dependencies": [],
       "description": "Typed descriptor heap with owned numerical regions and bound companions",
-      "development_dependencies": [],
+      "development_dependencies": [
+        "nrz-docgen"
+      ],
       "has_readme_template": true,
       "name": "nrz-matrix",
       "normal_dependencies": [

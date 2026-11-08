@@ -62,5 +62,6 @@ may_cite = [
   { owner = "DOCGEN", target = "CAS" },
   { owner = "MATRIX", target = "ACCURACY" },
   { owner = "MATRIX", target = "BINDINGS" },
+  { owner = "MATRIX", target = "DOCGEN" },
   { owner = "MATRIX", target = "SCALAR" },
 ]

@@ -126,6 +126,34 @@ impl Clone for ConstantLemma {
 }
 
 impl Cas {
+    /// Reserve this graph once beside the ledger's other live owners for a callback.
+    ///
+    /// An existing registration supplies this graph's judgment payload; otherwise
+    /// that payload stays in the scoped reservation. Other owners and caller
+    /// reservations remain additive. No caller can replace the graph's byte count.
+    /// Limits are restored on successful and error returns, without refunding Work.
+    /// # Errors
+    /// Preserves typed registration, Work and payload failures before the callback,
+    /// and the callback's own error through `From<Fault>`.
+    pub fn with_retained_graph<T, E>(
+        &self,
+        budget: &mut Budget,
+        operation: impl FnOnce(&mut Budget) -> Result<T, E>,
+    ) -> Result<T, E>
+    where
+        E: From<Fault>,
+    {
+        let at = Location::new("retained graph");
+        let judgments = self.retained_judgment_bytes();
+        let unregistered = self.judgment_reservation(judgments, budget, at)?;
+        let bytes = self
+            .counts()
+            .payload_bytes
+            .saturating_sub(judgments)
+            .saturating_add(unregistered);
+        budget.with_retained_payload(bytes, at, operation)
+    }
+
     /// Number of retained anonymous judgment nodes, including older namespace evidence.
     #[must_use]
     pub const fn retained_judgment_count(&self) -> usize {

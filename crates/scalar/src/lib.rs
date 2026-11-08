@@ -15,6 +15,7 @@ mod kernel;
 )]
 mod literal;
 mod pi;
+mod prepared_expm1;
 #[expect(
     clippy::redundant_pub_crate,
     reason = "rounded primitives are shared only between private arithmetic modules"
@@ -34,6 +35,7 @@ pub use kernel::{
 };
 pub use literal::{DecodedLiteral, LiteralLimits, NumericLiteral};
 pub use pi::{PiBounds, PiBudget, PiEnclosure, PiError, PiLimits, PiUsage};
+pub use prepared_expm1::{Expm1Failure, Expm1Input, Expm1Output, Expm1Parameters, Expm1Program};
 pub use reduction::{dot, norm_upper, sum};
 
 #[cfg(any(doc, doctest))]

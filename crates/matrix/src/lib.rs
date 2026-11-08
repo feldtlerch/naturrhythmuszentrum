@@ -48,6 +48,8 @@ mod loan;
 pub use loan::*;
 
 mod lc_relation;
+mod prepared_expm1;
+pub use prepared_expm1::{Expm1Evaluation, PreparedExpm1, PreparedExpm1Error};
 mod quantity;
 pub use lc_relation::{
     LcAliasProjection, LcCapacitanceProjection, LcClockProjection, LcForwardProjection,

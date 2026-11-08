@@ -662,6 +662,7 @@ dependencies = [
  "faer",
  "nrz-accuracy",
  "nrz-bindings",
+ "nrz-docgen",
  "nrz-scalar",
  "thiserror 2.0.21",
  "tracing",

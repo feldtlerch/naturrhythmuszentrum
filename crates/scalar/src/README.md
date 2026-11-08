@@ -17,3 +17,4 @@ The scalar and finite wrappers preserve canonical positive zero as the additive 
 |Test|Area|Claim|
 |----|----|-----|
 |(`test:unit:environment-admission-refuses`)|scalar|Private admission cannot bypass either target or environment refusal.|
+|(`test:unit:prepared-expm1-program-admission`)|scalar|Structural admission, coefficient capacity and environment checks precede any zero result. # Panics Panics if an invalid inventory or environment reaches native evaluation.|
