@@ -265,3 +265,11 @@ requires = []
 [[document]]
 output = "docs/design/matrix-loans-design.md"
 requires = []
+
+[[document]]
+output = "docs/design/prepared-binary64-oracle-schema.md"
+requires = []
+
+[[document]]
+output = "tools/docgen/src/oracle/README.md"
+requires = []

@@ -60,7 +60,7 @@ fingerprint = "af25fd69955bb04b"
 
 [[source_versions]]
 path = "tools/docgen/src/error.rs"
-fingerprint = "9bf70a7b3959bbc2"
+fingerprint = "88068b38670771c5"
 
 [[kernels]]
 id = "scalar-addition"
@@ -843,3 +843,231 @@ date = "2026-10-22"
 commit = "c9cd0b2ac48b6fc92b9eecb59f2b8cb6d38daede"
 command = "orchestration-linter coverage"
 source = "diagnostic 5 on the host; same seed and diagnostic patch; seed 51105aeb4927f5e2d0bb76a607d87aae1d40c00b; diag-5.patch SHA-256 fd6f0bf7144ac9d808bd2bf3503d40812c9ec37842c508acee660c9f22247668"
+
+[[source_versions]]
+path = "tools/docgen/src/oracle.rs"
+fingerprint = "d76622e2b1c1dcbc"
+
+[[refusals]]
+owner = "DOCGEN"
+type_name = "Error"
+variant = "Oracle"
+category = "failure"
+meaning = "A bounded oracle input failed; its path and original typed oracle cause are retained."
+source = "tools/docgen/src/error.rs"
+
+[[refusals]]
+owner = "DOCGEN"
+type_name = "oracle::Error"
+variant = "Invalid"
+category = "failure"
+meaning = "An oracle structure or explicit parser ceiling failed, with a closed Cause and JSON location."
+source = "tools/docgen/src/oracle.rs"
+
+[[refusals]]
+owner = "DOCGEN"
+type_name = "oracle::Error"
+variant = "Arithmetic"
+category = "failure"
+meaning = "The exact engine refused arithmetic; its original Fault and caller-owned cumulative ledger are preserved."
+source = "tools/docgen/src/oracle.rs"
+
+[[refusals]]
+owner = "DOCGEN"
+type_name = "oracle::Error"
+variant = "Io"
+category = "failure"
+meaning = "Reading the bounded input stream failed."
+source = "tools/docgen/src/oracle.rs"
+
+[[refusals]]
+owner = "DOCGEN"
+type_name = "oracle::Cause"
+variant = "Json"
+category = "failure"
+meaning = "Invalid JSON or a duplicate object member."
+source = "tools/docgen/src/oracle.rs"
+
+[[refusals]]
+owner = "DOCGEN"
+type_name = "oracle::Cause"
+variant = "Fields"
+category = "failure"
+meaning = "An object has missing, extra or wrongly typed fields."
+source = "tools/docgen/src/oracle.rs"
+
+[[refusals]]
+owner = "DOCGEN"
+type_name = "oracle::Cause"
+variant = "Namespace"
+category = "failure"
+meaning = "The namespace is not the prepared-binary64 namespace."
+source = "tools/docgen/src/oracle.rs"
+
+[[refusals]]
+owner = "DOCGEN"
+type_name = "oracle::Cause"
+variant = "Version"
+category = "failure"
+meaning = "Only the exact version triple is admitted."
+source = "tools/docgen/src/oracle.rs"
+
+[[refusals]]
+owner = "DOCGEN"
+type_name = "oracle::Cause"
+variant = "Envelope"
+category = "failure"
+meaning = "The owner, license, sources or labels are invalid."
+source = "tools/docgen/src/oracle.rs"
+
+[[refusals]]
+owner = "DOCGEN"
+type_name = "oracle::Cause"
+variant = "RouteKind"
+category = "failure"
+meaning = "A route kind is outside the closed pair."
+source = "tools/docgen/src/oracle.rs"
+
+[[refusals]]
+owner = "DOCGEN"
+type_name = "oracle::Cause"
+variant = "Routes"
+category = "failure"
+meaning = "Route metadata or ordered references are invalid."
+source = "tools/docgen/src/oracle.rs"
+
+[[refusals]]
+owner = "DOCGEN"
+type_name = "oracle::Cause"
+variant = "EntryId"
+category = "failure"
+meaning = "Entry identifiers are empty or repeated."
+source = "tools/docgen/src/oracle.rs"
+
+[[refusals]]
+owner = "DOCGEN"
+type_name = "oracle::Cause"
+variant = "Operation"
+category = "failure"
+meaning = "The operation is not one of the five laws."
+source = "tools/docgen/src/oracle.rs"
+
+[[refusals]]
+owner = "DOCGEN"
+type_name = "oracle::Cause"
+variant = "Target"
+category = "failure"
+meaning = "A target does not match its operation."
+source = "tools/docgen/src/oracle.rs"
+
+[[refusals]]
+owner = "DOCGEN"
+type_name = "oracle::Cause"
+variant = "Expected"
+category = "failure"
+meaning = "The expected-result form or refusal reason is unknown or operation-incompatible."
+source = "tools/docgen/src/oracle.rs"
+
+[[refusals]]
+owner = "DOCGEN"
+type_name = "oracle::Cause"
+variant = "Rational"
+category = "failure"
+meaning = "A number is not a canonical reduced rational string."
+source = "tools/docgen/src/oracle.rs"
+
+[[refusals]]
+owner = "DOCGEN"
+type_name = "oracle::Cause"
+variant = "Ordering"
+category = "failure"
+meaning = "An input or oracle interval has reversed endpoints."
+source = "tools/docgen/src/oracle.rs"
+
+[[refusals]]
+owner = "DOCGEN"
+type_name = "oracle::Cause"
+variant = "Association"
+category = "failure"
+meaning = "Evidence is missing, repeated, stray, reordered or bound to another input."
+source = "tools/docgen/src/oracle.rs"
+
+[[refusals]]
+owner = "DOCGEN"
+type_name = "oracle::Cause"
+variant = "EmptyIntersection"
+category = "failure"
+meaning = "The two route intervals are disjoint."
+source = "tools/docgen/src/oracle.rs"
+
+[[refusals]]
+owner = "DOCGEN"
+type_name = "oracle::Cause"
+variant = "Intersection"
+category = "failure"
+meaning = "The published interval differs from the exact intersection."
+source = "tools/docgen/src/oracle.rs"
+
+[[refusals]]
+owner = "DOCGEN"
+type_name = "oracle::Cause"
+variant = "Width"
+category = "failure"
+meaning = "The published endpoint interval exceeds the width ceiling."
+source = "tools/docgen/src/oracle.rs"
+
+[[refusals]]
+owner = "DOCGEN"
+type_name = "oracle::Cause"
+variant = "Exact"
+category = "failure"
+meaning = "A promised exact result is not the required singleton."
+source = "tools/docgen/src/oracle.rs"
+
+[[refusals]]
+owner = "DOCGEN"
+type_name = "oracle::Cause"
+variant = "Bytes"
+category = "resource"
+meaning = "The byte ceiling was exceeded before parsing."
+source = "tools/docgen/src/oracle.rs"
+
+[[refusals]]
+owner = "DOCGEN"
+type_name = "oracle::Cause"
+variant = "Entries"
+category = "resource"
+meaning = "The entry ceiling was exceeded before JSON tree allocation."
+source = "tools/docgen/src/oracle.rs"
+
+[[refusals]]
+owner = "DOCGEN"
+type_name = "oracle::Cause"
+variant = "Literal"
+category = "resource"
+meaning = "A decoded rational spelling exceeds its ceiling before JSON tree allocation."
+source = "tools/docgen/src/oracle.rs"
+
+[[refusals]]
+owner = "DOCGEN"
+type_name = "oracle::Cause"
+variant = "TargetBits"
+category = "resource"
+meaning = "Target precision exceeds the declared encoding ceiling."
+source = "tools/docgen/src/oracle.rs"
+
+[[refusals]]
+owner = "DOCGEN"
+type_name = "oracle::Cause"
+variant = "Depth"
+category = "resource"
+meaning = "JSON nesting exceeds the declared ceiling or the hard maximum."
+source = "tools/docgen/src/oracle.rs"
+
+[[refusals]]
+owner = "DOCGEN"
+type_name = "oracle::Cause"
+variant = "Exponent"
+category = "failure"
+meaning = "A power exponent is incompatible with its expected outcome."
+source = "tools/docgen/src/oracle.rs"

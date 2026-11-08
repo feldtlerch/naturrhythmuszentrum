@@ -7,6 +7,15 @@ use thiserror::Error;
 /// A path-specific failure in documentation generation.
 #[derive(Debug, Error)]
 pub enum Error {
+    /// An authored oracle payload failed the shared bounded checker.
+    #[error("oracle dataset {path}: {source}")]
+    Oracle {
+        /// Input path.
+        path: String,
+        /// Original typed oracle failure.
+        #[source]
+        source: crate::oracle::Error,
+    },
     /// A tracked text file or path contains an ordinal schedule code.
     #[error("ordinal-step-code at {path}:{line}: {matched}")]
     OrdinalCode {
