@@ -559,7 +559,7 @@ fn golden_check_precedes_tracked_read() -> Result<(), Box<dyn std::error::Error>
     fixture(root)?;
     fs::create_dir_all(root.join("data/golden"))?;
     let path = root.join("data/golden/oversized.json");
-    let mut bytes = include_bytes!("../../../data/golden/prepared-binary64.json").to_vec();
+    let mut bytes = include_bytes!("support/prepared-binary64-golden-seven.json").to_vec();
     // The ordinal trap makes the old ordering observably fail without a giant allocation.
     let sentinel = format!("\nStage {}{}", "3", "a");
     bytes.extend_from_slice(sentinel.as_bytes());

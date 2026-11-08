@@ -14,7 +14,7 @@ mod bounds;
 /// Panics only if the committed fixture is not JSON, which the fixture gate rejects.
 fn fixture() -> Value {
     serde_json::from_str(include_str!(
-        "../../../../data/golden/prepared-binary64.json"
+        "../../tests/support/prepared-binary64-golden-seven.json"
     ))
     .expect("committed JSON fixture")
 }
