@@ -615,8 +615,8 @@ pub static HYPOTHESIS_SCHEMAS: [LemmaSchema; 54] = [
         label: "assum:cas:hyp-series-evidence",
         version: 1,
         standing: crate::proof::Standing::Hypothesis,
-        statement: "The exact finite object computation, source congruence or complete polynomial seed holds at its recorded order.",
-        premises: "Original metadata and domains; closed ordered source/object/ordinary-domain premise vectors for lifted inference, polynomial seeds and the three admitted origin laws; classification supplies no proof.",
+        statement: "The exact finite object computation, including zero-constant composition powers and accumulations, source congruence or complete polynomial seed holds at its recorded order.",
+        premises: "Original metadata and domains; exact zero witness and ordered composition restrictions; closed ordered source/object/ordinary-domain premise vectors for lifted inference, polynomial seeds and the three admitted origin laws; classification supplies no proof.",
     },
 ];
 

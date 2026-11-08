@@ -11,8 +11,8 @@ use nrz_scalar::{ArithmeticContext, Scalar};
 #[test]
 fn lc_spectral_batch_literal_boundaries() -> TestResult {
     let fixture = Fixture::new(["5", "1/10", "1/2000"])?;
-    boundaries::<f32>(&fixture, [494, 5632, 3136, 4792])?;
-    boundaries::<f64>(&fixture, [494, 5968, 3248, 4904])
+    boundaries::<f32>(&fixture, [494, 5656, 3160, 4816])?;
+    boundaries::<f64>(&fixture, [494, 5992, 3272, 4928])
 }
 
 fn boundaries<P: Scalar + 'static>(fixture: &Fixture, profile: [u64; 4]) -> TestResult {
@@ -159,4 +159,49 @@ fn limited(kind: usize, available: u64) -> TestResult<Budget> {
         _ => limits.output_bytes = available,
     }
     Ok(Budget::new(limits)?)
+}
+
+/// Measure complete scheduler and result-lookup boundaries after owned fault layout changes.
+/// ´test:integration:lc-spectral-batch-owned-fault-measurement´
+#[test]
+#[ignore = "development measurement of owned fault resource boundaries"]
+fn lc_spectral_batch_owned_fault_measurement() -> TestResult {
+    let fixture = Fixture::new(["5", "1/10", "1/2000"])?;
+    measure_owned::<f32>(&fixture)?;
+    measure_owned::<f64>(&fixture)
+}
+
+#[expect(
+    clippy::print_stdout,
+    reason = "Explicit resource measurement emits its finite profile"
+)]
+fn measure_owned<P: Scalar + 'static>(fixture: &Fixture) -> TestResult {
+    let schema = schema(fixture)?;
+    let context = ArithmeticContext::new()?;
+    let case = case::<P>(fixture, &schema, 0)?;
+    let batch = schedule(&schema, &case, &context, &mut ledger()?)?;
+    let mut profile = [0; 4];
+    for (kind, value) in profile.iter_mut().enumerate() {
+        let mut low = 0;
+        let mut high = 20_000;
+        while low < high {
+            let middle = low + (high - low) / 2;
+            let success = if kind == 3 {
+                batch
+                    .result(0, &case.heap, &context, &mut limited(1, middle)?)
+                    .is_ok()
+            } else {
+                schedule(&schema, &case, &context, &mut limited(kind, middle)?)
+                    .is_ok_and(|batch| batch.status(3) == Some(Status::Successful))
+            };
+            if success {
+                high = middle;
+            } else {
+                low = middle + 1;
+            }
+        }
+        *value = low;
+    }
+    println!("OWNED-FAULT-SPECTRAL {:?} {profile:?}", P::PRECISION);
+    boundaries::<P>(fixture, profile)
 }

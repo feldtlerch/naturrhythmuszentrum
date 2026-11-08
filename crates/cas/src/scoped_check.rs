@@ -33,6 +33,9 @@ fn preflight(cas: &Cas, steps: &[ApplicationDraft], budget: &mut Budget) -> Resu
                 continue;
             }
             let step = steps.get(index).ok_or_else(invalid)?;
+            if let Statement::Series(value) = &step.conclusion {
+                crate::series::check::precision(cas, value, budget)?;
+            }
             if let Statement::Series(value) = &step.conclusion
                 && let crate::series::SeriesStatement::Source(value) = value.as_ref()
                 && step.premises.len() != value.clause.arity()
@@ -167,6 +170,7 @@ fn rule_conditions(
         | Primitive::SeriesSource
         | Primitive::SeriesIntegrate
         | Primitive::SeriesMul
+        | Primitive::SeriesCompose
         | Primitive::SeriesCoefficient => {
             crate::series::check::check(cas, draft, premises, budget)?
         }

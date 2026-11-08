@@ -18,7 +18,7 @@ use nrz_bindings::{
 #[test]
 fn full_ladder_symbolic_work_has_explicit_boundary() -> ResultOf {
     let baseline = lower(16_000_000, 16_000_000)?.jacobian().work();
-    let needed = 4_916_619;
+    let needed = 4_916_621;
     assert_eq!(
         lower(needed, 16_000_000)?.jacobian().work().requests,
         baseline.requests
@@ -46,7 +46,7 @@ fn full_ladder_symbolic_work_has_explicit_boundary() -> ResultOf {
             baseline.generation,
             baseline.replay
         ),
-        (4_916_619, 1_703_795, 4_922_179, 2_174_460)
+        (4_916_621, 1_703_795, 4_922_211, 2_174_460)
     );
     Ok(())
 }
@@ -66,7 +66,7 @@ fn refusal(error: Box<dyn std::error::Error>, cap: u64) -> ResultOf<Fault> {
     assert!(
         matches!(fault.kind, FaultKind::Exhausted { budget: BudgetKind::Work, limit, .. } if limit == cap)
     );
-    Ok(*fault)
+    Ok(fault.clone())
 }
 
 /// Rebuild all 35 ordered symbols through public declarations without cross-crate fixtures.

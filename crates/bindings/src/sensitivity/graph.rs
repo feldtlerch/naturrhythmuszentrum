@@ -326,7 +326,7 @@ impl<'a> Graph<'a> {
             && let nrz_cas::request::Outcome::Exhausted { fault, .. } = &outcome
         {
             return Err(SensitivityError::Exhausted {
-                fault: *fault,
+                fault: fault.clone(),
                 outcome: Box::new(outcome),
             });
         }

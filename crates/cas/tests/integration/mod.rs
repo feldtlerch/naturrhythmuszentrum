@@ -14,6 +14,17 @@ mod contexts;
 mod endpoint_hypotheses;
 mod scalar_transport;
 mod series;
+mod series_compose_golden;
+mod series_compose_limits;
+
+/// Share the independently authored refused import with its public conformance control.
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "Sibling conformance tests need crate visibility; public visibility violates unreachable_pub in this private suite"
+)]
+pub(super) fn nonzero_compose_import() -> crate::testing::common::TestResult<Vec<u8>> {
+    series_compose_golden::nonzero_import()
+}
 mod series_exclusions;
 mod series_golden;
 mod series_limits;

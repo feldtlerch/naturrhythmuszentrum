@@ -34,6 +34,7 @@ fn reference(bytes: &[u8], offset: usize, new: u32) -> TestResult<Vec<u8>> {
     reason = "Each asserted wire offset stays beside its full-witness positive and rollback controls"
 )]
 fn series_portable_mutation_controls() -> TestResult {
+    super::series_compose_golden::payload_control()?;
     let mut sender = fixture(2, false)?;
     let witness =
         sender
@@ -160,7 +161,7 @@ fn series_portable_mutation_controls() -> TestResult {
         ),
         (
             "deferred mode",
-            byte(&bytes, certificate.start + 19, 2, 5),
+            byte(&bytes, certificate.start + 19, 2, 6),
             Some(InvalidCode::SeriesUnsupported),
         ),
         (
@@ -435,7 +436,7 @@ fn series_calculus_portable_mutations() -> TestResult {
 /// ´test:integration:series-independent-wrong-expectation´
 #[test]
 fn series_independent_wrong_expectation() -> TestResult {
-    for kind in [0, 2, 3, 5, 7, 9, 10] {
+    for kind in [0, 2, 3, 5, 7, 9, 10, 13, 14, 15] {
         let mut source = fixture(kind, false)?;
         let witness = source.base.cas.check_proof(
             &source.base.context,
@@ -465,6 +466,9 @@ fn series_independent_wrong_expectation() -> TestResult {
                 }
                 nrz_cas::series::SeriesStatement::Coefficient { value, .. } => {
                     *value = receiver.base.zero.clone();
+                }
+                nrz_cas::series::SeriesStatement::Compose { right, output, .. } => {
+                    *output = right.clone();
                 }
                 nrz_cas::series::SeriesStatement::Add { .. } => return Err("fixture".into()),
             }

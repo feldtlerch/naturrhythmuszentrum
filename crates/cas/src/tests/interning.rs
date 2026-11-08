@@ -144,7 +144,7 @@ fn interning_comparisons_survive_outer_rollback() -> TestResult {
                 compared_bytes: 44,
             }
         );
-        Err(refusal)
+        Err(refusal.clone())
     });
     assert_eq!(result, Err(refusal));
     assert_eq!(

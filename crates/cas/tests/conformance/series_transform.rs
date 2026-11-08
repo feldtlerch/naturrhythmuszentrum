@@ -102,6 +102,100 @@ fn fixture_with_twins(twins: bool) -> TestResult<(Cas, Handle, Handle, Handle, H
     Ok((cas, header, object, nodes[3].clone(), nodes[4].clone()))
 }
 
+/// Equal-spelled declarations stay distinct, while explicit capture-safe substitution moves all objects.
+/// ´test:integration:compose-coordinate-substitution´
+#[test]
+fn compose_coordinate_substitution() -> TestResult {
+    use nrz_cas::proof::{ApplicationDraft, Certificate, Statement};
+    use nrz_cas::series::{SeriesOperation as O, SeriesStatement as S};
+    let (mut cas, _, input, _, y) = fixture_with_twins(true)?;
+    let original = cas.series_object(&input)?.clone();
+    let inner = admit(
+        &mut cas,
+        Draft::SeriesObject(SeriesObject {
+            field: Reference::Existing(original.field.clone()),
+            centre: Reference::Existing(original.centre.clone()),
+            variable: Reference::Existing(y.clone()),
+            scope: original.scope.clone(),
+            context: Reference::Existing(original.context.clone()),
+            order: 3,
+            coefficients: vec![
+                Reference::Existing(original.coefficients[1].clone()),
+                Reference::Existing(original.coefficients[0].clone()),
+                Reference::Existing(original.coefficients[1].clone()),
+            ],
+        }),
+        &mut default_budget()?,
+    )?;
+    let moved = cas.substitute(
+        &input,
+        &[Substitution {
+            key: "x".into(),
+            replacement: y,
+        }],
+        &mut default_budget()?,
+    )?;
+    for transported in [false, true] {
+        let left = if transported {
+            moved.clone()
+        } else {
+            input.clone()
+        };
+        let statement = S::Compose {
+            left: left.clone(),
+            right: inner.clone(),
+            output: left.clone(),
+            order: 3,
+            default_order: true,
+        };
+        let draft = ApplicationDraft {
+            rule: statement.primitive(),
+            context: original.context.clone(),
+            conclusion: Statement::Series(Box::new(statement)),
+            premises: Vec::new(),
+            substitutions: Vec::new(),
+            certificate: Certificate::Series(Box::new(
+                crate::testing::series_compose::certificate(
+                    &["1", "0", "1"],
+                    &["0", "1", "0"],
+                    3,
+                    true,
+                )?,
+            )),
+        };
+        for production in [false, true] {
+            let before = cas.canonical_snapshot(&mut default_budget()?)?;
+            let result = if production {
+                cas.compute_series(
+                    &O::Compose {
+                        left: left.clone(),
+                        right: inner.clone(),
+                        order: None,
+                    },
+                    &[],
+                    &mut default_budget()?,
+                )
+            } else {
+                cas.check_proof(
+                    &original.context,
+                    std::slice::from_ref(&draft),
+                    &mut default_budget()?,
+                )
+            };
+            if transported {
+                result?;
+            } else {
+                assert_eq!(
+                    result.expect_err("coordinate twin").kind,
+                    nrz_cas::FaultKind::Invalid(nrz_cas::InvalidCode::Rule)
+                );
+                assert_eq!(before, cas.canonical_snapshot(&mut default_budget()?)?);
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Equal-spelled declarations remain distinct through calculus and capture-safe object substitution.
 /// ´test:integration:series-calculus-coordinate-twins´
 #[test]

@@ -26,6 +26,7 @@ fn series_arithmetic_hand_fixtures() -> TestResult {
                         | nrz_cas::series::SeriesStatement::Integrate { input, .. }
                         | nrz_cas::series::SeriesStatement::Coefficient { input, .. } => input,
                         nrz_cas::series::SeriesStatement::Add { left, .. }
+                        | nrz_cas::series::SeriesStatement::Compose { left, .. }
                         | nrz_cas::series::SeriesStatement::Mul { left, .. } => left,
                     },
                     _ => return Err("series".into()),
@@ -68,6 +69,7 @@ fn series_arithmetic_row_mutations() -> TestResult {
             C::Source(_) => return Err("object fixture".into()),
             C::Truncate { coefficients, .. } => coefficients[0] = rational("9")?,
             C::Add { rows, .. } | C::Scale { rows, .. } => rows[0].result = rational("9")?,
+            C::Compose { sums, .. } => sums[0].product = rational("9")?,
             C::Mul { rows, .. } => {
                 rows.pop();
             }
@@ -111,7 +113,7 @@ fn series_arithmetic_deferred_forms() -> TestResult {
         &seed.proofs,
         &mut default_budget()?,
     )?;
-    for kind in 0..12 {
+    for kind in 0..16 {
         for form in [1, 2] {
             let mut f = fixture(kind, false)?;
             let root = f.steps.last_mut().ok_or("root")?;
@@ -125,6 +127,7 @@ fn series_arithmetic_deferred_forms() -> TestResult {
                 | C::Scale { form: slot, .. }
                 | C::Derive { form: slot, .. }
                 | C::Integrate { form: slot, .. }
+                | C::Compose { form: slot, .. }
                 | C::Mul { form: slot, .. }
                 | C::Coefficient { form: slot, .. } => *slot = form,
             }
@@ -144,8 +147,13 @@ fn series_arithmetic_deferred_forms() -> TestResult {
             );
         }
     }
+    assert!(
+        nrz_cas::proof::PRIMITIVES
+            .iter()
+            .any(|rule| rule.specification().key == "series.compose"
+                && rule.specification().version == 1)
+    );
     for key in [
-        "series.compose",
         "series.reciprocal",
         "series.divide",
         "series.invert",

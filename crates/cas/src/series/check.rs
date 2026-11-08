@@ -25,6 +25,21 @@ pub(crate) const fn unsupported() -> Fault {
     Fault::invalid(InvalidCode::SeriesUnsupported, AT)
 }
 
+/// Precision is checked before arity or workspace sizing can misclassify an unavailable request.
+pub(crate) fn precision(cas: &Cas, value: &S, budget: &mut Budget) -> Result<(), Fault> {
+    if let S::Compose {
+        left, right, order, ..
+    } = value
+    {
+        let outer = cas.series_object(left)?.order;
+        let inner = cas.series_object(right)?.order;
+        if *order == 0 || *order > outer.min(inner) {
+            return Err(super::compose::precision(outer, inner, *order, budget)?);
+        }
+    }
+    Ok(())
+}
+
 /// Borrow an exact admitted coefficient without any input-sized copy.
 pub(crate) fn number<'a>(cas: &'a Cas, handle: &Handle) -> Result<&'a Rational, Fault> {
     let expression = cas.state.expression(cas.checked(handle)?)?;
@@ -44,6 +59,9 @@ pub(crate) fn premise_count(cas: &Cas, value: &S) -> Result<usize, Fault> {
         S::Truncate { .. } | S::Coefficient { .. } | S::Derive { .. } => Ok(0),
         S::Scale { .. } | S::Integrate { .. } => Ok(1),
         S::Add {
+            left, right, order, ..
+        }
+        | S::Compose {
             left, right, order, ..
         }
         | S::Mul {
@@ -113,6 +131,7 @@ pub(super) fn constant(
 
 /// Validate typed roles even when the payload is only a caller's expected judgment.
 pub(crate) fn roles(cas: &Cas, value: &S, budget: &mut Budget) -> Result<(), Fault> {
+    precision(cas, value, budget)?;
     if let S::Source(value) = value {
         return super::source::roles(cas, value, budget);
     }
@@ -131,7 +150,9 @@ pub(crate) fn roles(cas: &Cas, value: &S, budget: &mut Budget) -> Result<(), Fau
             constant(cas, input, value, budget)?;
             compatible(input, cas.series_object(output)?, budget)?;
         }
-        S::Add { right, output, .. } | S::Mul { right, output, .. } => {
+        S::Compose { right, output, .. }
+        | S::Add { right, output, .. }
+        | S::Mul { right, output, .. } => {
             compatible(input, cas.series_object(right)?, budget)?;
             compatible(input, cas.series_object(output)?, budget)?;
         }
@@ -288,7 +309,7 @@ fn arithmetic_workspace(cas: &Cas, value: &S, budget: &mut Budget) -> Result<u64
     let input = cas.series_object(value.input())?;
     let mut bits = 1_u64;
     let other = match value {
-        S::Add { right, .. } | S::Mul { right, .. } => Some(right),
+        S::Compose { right, .. } | S::Add { right, .. } | S::Mul { right, .. } => Some(right),
         _ => None,
     };
     for handle in std::iter::once(value.input()).chain(other) {
@@ -311,6 +332,9 @@ fn arithmetic_workspace(cas: &Cas, value: &S, budget: &mut Budget) -> Result<u64
     if matches!(value, S::Derive { .. } | S::Integrate { .. }) {
         bits = bits.max(u64::from(input.order.bit_width()));
     }
+    if let S::Compose { order, .. } = value {
+        return super::compose::workspace(*order, bits);
+    }
     bits.checked_mul(u64::from(input.order))
         .and_then(|v| v.checked_mul(64))
         .and_then(|v| v.checked_add(1024))
@@ -327,6 +351,9 @@ fn arithmetic(
 ) -> Result<(), Fault> {
     let input = cas.series_object(value.input())?;
     match (value, certificate) {
+        (S::Compose { .. }, _) => {
+            return super::compose::check(cas, value, certificate, premises, budget);
+        }
         (S::Derive { .. } | S::Integrate { .. }, _) => {
             return super::calculus::check(cas, value, certificate, premises, budget);
         }
@@ -514,7 +541,7 @@ type BinaryObjects<'a> = (
 );
 
 /// Record the min-order default and require explicit truncation proofs for each larger input.
-fn binary<'a>(
+pub(super) fn binary<'a>(
     cas: &'a Cas,
     objects: [&Handle; 3],
     order: u32,

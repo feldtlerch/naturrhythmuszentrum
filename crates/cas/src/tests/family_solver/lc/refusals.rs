@@ -117,7 +117,7 @@ fn lc_root_replay_retains_original_premises() -> TestResult {
                 &mut super::ledger()?,
             )
             .err(),
-            Some(fault),
+            Some(fault.clone()),
         );
         let mut oracle_budget = super::ledger()?;
         let oracle = crate::testing::exclusion_oracle::run(|| {

@@ -246,6 +246,7 @@ fn assert_work(fault: Fault) {
             ..
         }
     ));
+    drop(fault);
 }
 
 /// Every closed fixture shares checked sign and identity results without a second traversal.
@@ -347,7 +348,7 @@ fn refused<T>(result: &Result<T, Fault>, expectation: &str) -> Fault {
     let Err(fault) = result else {
         panic!("{expectation}");
     };
-    *fault
+    fault.clone()
 }
 
 /// Cached retention is bounded at literal N/N−1 on every hit and before miss publication.

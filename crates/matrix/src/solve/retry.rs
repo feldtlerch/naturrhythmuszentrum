@@ -153,6 +153,10 @@ impl Heap {
     /// Returns binding, numerical, conversion or budget refusal with available history.
     /// Converted inputs may remain published after a later solve refusal; no failed
     /// candidate becomes a solution handle.
+    #[expect(
+        clippy::result_large_err,
+        reason = "Retain owned CAS refusal evidence without allocating on the recovery failure path"
+    )]
     pub fn solve_recovering(
         &mut self,
         binding: Binding<f32>,
@@ -225,6 +229,10 @@ const fn retryable(cause: &OperationError) -> bool {
     )
 }
 /// Keep cumulative allowances through widening, then install the remaining budget on a fresh solve.
+#[expect(
+    clippy::result_large_err,
+    reason = "Retain owned CAS refusal evidence without allocating on the recovery failure path"
+)]
 fn promote(
     heap: &mut Heap,
     mut operation: CheckedOperation,
@@ -279,6 +287,10 @@ fn promote(
     }
 }
 /// Explicit conversion uses the same complete target/parameter transaction as ordinary callers.
+#[expect(
+    clippy::result_large_err,
+    reason = "Retain owned CAS refusal evidence without allocating on the recovery failure path"
+)]
 fn widen(
     heap: &mut Heap,
     operation: &CheckedOperation,

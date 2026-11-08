@@ -607,7 +607,7 @@ impl Runner<'_> {
 }
 
 /// Undecided cover evidence and other missing premises stay distinct from mathematical refutations.
-const fn classify(fault: Fault, task: &Task) -> Fault {
+fn classify(fault: Fault, task: &Task) -> Fault {
     if crate::case_obligations::unknown(&fault) {
         let code = if matches!(task, Task::Coverage { .. }) {
             InvalidCode::UnknownTotality

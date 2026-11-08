@@ -489,6 +489,7 @@ fn outcome(
                 InvalidCode::DistributionPointValue
                 | InvalidCode::DistributionProductUndefined
                 | InvalidCode::TestSpaceMismatch
+                | InvalidCode::SeriesNonzeroConstant
                 | InvalidCode::RefutedDomain
                 | InvalidCode::EmptyDomain
                 | InvalidCode::OverlapConflict
@@ -498,7 +499,7 @@ fn outcome(
                 | InvalidCode::PullbackIncompleteZeros
                 | InvalidCode::PullbackMapMismatch,
             ) => Outcome::Refused {
-                reason: crate::distribution_search::refusal(fault),
+                reason: crate::distribution_search::refusal(&fault),
                 request: record,
                 fault,
                 usage: *usage,
@@ -611,6 +612,242 @@ fn completed_outcome(record: Handle, result: Option<SearchResult>, usage: &Budge
             blocker: None,
             usage: *usage,
         },
+    }
+}
+
+#[cfg(test)]
+mod compose_outcomes {
+    use super::*;
+    use crate::graph::{Draft, Reference};
+    use crate::proof_model::{ApplicationDraft, Certificate, Statement};
+    use crate::request_model::CoveredInput;
+    use crate::series::{
+        SeriesCertificate as C, SeriesObject, SeriesOperation as O, SeriesProductRow,
+        SeriesStatement as S,
+    };
+    use crate::task::Task;
+    use crate::testing::common::TestResult;
+    use crate::testing::native::{Fixture, admit, budget};
+
+    /// Actual producer and supplied-candidate faults preserve the public mathematical split.
+    /// ´test:unit:compose-public-outcome-evidence´
+    #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "Each actual fault retains its request, evidence and rollback classification together"
+    )]
+    fn compose_public_outcome_evidence() -> TestResult {
+        for production in [false, true] {
+            for kind in 0..4 {
+                let mut f = Fixture::new()?;
+                let field = admit(
+                    &mut f.cas,
+                    Draft::Solve(crate::solving::SolveDraft::CoefficientDomain(
+                        crate::solving::CoefficientDomainData::Rational,
+                    )),
+                )?;
+                let mut objects = Vec::new();
+                for coefficient in [&f.one, if kind == 0 { &f.one } else { &f.zero }] {
+                    objects.push(admit(
+                        &mut f.cas,
+                        Draft::SeriesObject(SeriesObject {
+                            field: Reference::Existing(field.clone()),
+                            centre: Reference::Existing(f.zero.clone()),
+                            variable: Reference::Existing(f.x.clone()),
+                            scope: Vec::new(),
+                            context: Reference::Existing(f.context.clone()),
+                            order: 1,
+                            coefficients: vec![Reference::Existing(coefficient.clone())],
+                        }),
+                    )?);
+                }
+                let left = objects[0].clone();
+                let right = objects[1].clone();
+                let prior_field = admit(
+                    &mut f.cas,
+                    Draft::Solve(crate::solving::SolveDraft::CoefficientDomain(
+                        crate::solving::CoefficientDomainData::Rational,
+                    )),
+                )?;
+                let prior_input = admit(
+                    &mut f.cas,
+                    Draft::SeriesObject(SeriesObject {
+                        field: Reference::Existing(prior_field),
+                        centre: Reference::Existing(f.zero.clone()),
+                        variable: Reference::Existing(f.x.clone()),
+                        scope: Vec::new(),
+                        context: Reference::Existing(f.context.clone()),
+                        order: 1,
+                        coefficients: vec![Reference::Existing(f.one.clone())],
+                    }),
+                )?;
+                let prior = f.cas.compute_series(
+                    &O::Truncate {
+                        input: prior_input,
+                        order: 1,
+                    },
+                    &[],
+                    &mut budget()?,
+                )?;
+                let unavailable_field = admit(
+                    &mut f.cas,
+                    Draft::Solve(crate::solving::SolveDraft::CoefficientDomain(
+                        crate::solving::CoefficientDomainData::Gaussian,
+                    )),
+                )?;
+                let mut ledger = budget()?;
+                ledger.work(37, Location::new("composition outcome prior spend"))?;
+                let root = f.cas.materialize_derived(&f.one, &f.one, &mut budget()?)?;
+                let receipt = f.cas.walk_derived(&root, &mut budget()?)?.receipt;
+                let request = Request {
+                    task: Task::Simplify,
+                    context: f.context.clone(),
+                    inputs: vec![CoveredInput { root, receipt }],
+                    premises: Vec::new(),
+                    limits: crate::budget::LimitsOverride::default(),
+                };
+                let limits = ledger.limits().clone();
+                let (record, unsupported) = f.cas.prepare_execution(
+                    &request,
+                    &SearchPolicy::default(),
+                    &limits,
+                    &mut ledger,
+                )?;
+                assert!(!unsupported);
+                let before = f.cas.canonical_snapshot(&mut budget()?)?;
+                let order = if kind == 3 { 2 } else { 1 };
+                let certificate = C::Compose {
+                    form: 0,
+                    order,
+                    default_order: false,
+                    zero: if kind == 1 {
+                        crate::Rational::one()
+                    } else {
+                        crate::Rational::zero()
+                    },
+                    seed: vec![crate::Rational::one()],
+                    powers: Vec::new(),
+                    sums: vec![SeriesProductRow {
+                        degree: 0,
+                        left_index: 0,
+                        right_index: 0,
+                        left: crate::Rational::one(),
+                        right: crate::Rational::one(),
+                        product: crate::Rational::one(),
+                        sum: crate::Rational::one(),
+                    }],
+                };
+                let statement = S::Compose {
+                    left: left.clone(),
+                    right: right.clone(),
+                    output: left.clone(),
+                    order,
+                    default_order: false,
+                };
+                let draft = ApplicationDraft {
+                    rule: statement.primitive(),
+                    context: f.context.clone(),
+                    conclusion: Statement::Series(Box::new(statement)),
+                    premises: Vec::new(),
+                    substitutions: Vec::new(),
+                    certificate: Certificate::Series(Box::new(certificate)),
+                };
+                // Production owns its zero row; its malformed-evidence control supplies an extra
+                // restriction instead. The supplied-candidate path mutates the zero witness.
+                let proofs = if kind == 1 {
+                    vec![prior.proof().clone()]
+                } else {
+                    Vec::new()
+                };
+                let fault = if kind == 2 {
+                    // Both entry routes first admit their input objects. Unsupported fields
+                    // stop at that shared boundary; no unavailable object can enter the store.
+                    f.cas
+                        .admit(
+                            &[Draft::SeriesObject(SeriesObject {
+                                field: Reference::Existing(unavailable_field),
+                                centre: Reference::Existing(f.zero.clone()),
+                                variable: Reference::Existing(f.x.clone()),
+                                scope: Vec::new(),
+                                context: Reference::Existing(f.context.clone()),
+                                order: 1,
+                                coefficients: vec![Reference::Existing(f.zero.clone())],
+                            })],
+                            &mut ledger,
+                        )
+                        .map(|_| ())
+                } else if production {
+                    f.cas
+                        .compute_series(
+                            &O::Compose {
+                                left,
+                                right,
+                                order: Some(order),
+                            },
+                            &proofs,
+                            &mut ledger,
+                        )
+                        .map(|_| ())
+                } else {
+                    f.cas
+                        .check_proof(&f.context, &[draft], &mut ledger)
+                        .map(|_| ())
+                }
+                .expect_err("composition refusal");
+                let code = match kind {
+                    0 => InvalidCode::SeriesNonzeroConstant,
+                    1 => InvalidCode::Rule,
+                    _ => InvalidCode::SeriesUnsupported,
+                };
+                assert_eq!(fault.kind, FaultKind::Invalid(code));
+                assert_eq!(before, f.cas.canonical_snapshot(&mut budget()?)?);
+                assert!(ledger.usage().work > 37);
+                if kind == 0 {
+                    assert_eq!(
+                        fault
+                            .series_constant()
+                            .as_ref()
+                            .ok_or("exact coefficient")?
+                            .value,
+                        crate::Rational::one()
+                    );
+                }
+                if kind == 3 {
+                    assert_eq!(fault.series_precision(), Some([1, 1, 2]));
+                }
+                let result = outcome(
+                    record,
+                    Execution {
+                        result: None,
+                        fault: Some(fault.clone()),
+                    },
+                    &ledger.usage(),
+                    &BudgetUsage::default(),
+                );
+                match result {
+                    Outcome::Refused {
+                        reason,
+                        fault: actual,
+                        ..
+                    } if kind == 0 => {
+                        assert_eq!(
+                            reason,
+                            crate::request_model::RefusalReason::SeriesNonzeroConstant
+                        );
+                        assert_eq!(actual, fault);
+                    }
+                    Outcome::Invalid { fault: actual, .. } if kind == 1 => {
+                        assert_eq!(actual, fault);
+                    }
+                    Outcome::Unresolved {
+                        blocker: Some(actual),
+                        ..
+                    } if kind >= 2 => assert_eq!(actual, fault),
+                    other => return Err(format!("composition classification: {other:?}").into()),
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -831,7 +1068,7 @@ mod tests {
                 record.clone(),
                 Execution {
                     result: None,
-                    fault: Some(fault),
+                    fault: Some(fault.clone()),
                 },
                 &ledger.usage(),
                 &BudgetUsage::default(),
@@ -966,7 +1203,7 @@ mod tests {
                 record.clone(),
                 Execution {
                     result: None,
-                    fault: Some(fault),
+                    fault: Some(fault.clone()),
                 },
                 &ledger.usage(),
                 &BudgetUsage::default(),
@@ -1052,7 +1289,7 @@ mod tests {
                 .expect_err("missing typed premise");
             assert_eq!(fault.kind, FaultKind::Invalid(InvalidCode::Rule));
             assert!(
-                matches!(outcome(record,Execution{result:None,fault:Some(fault)},&ledger.usage(),&BudgetUsage::default()),Outcome::Invalid{fault:actual,..} if actual==fault)
+                matches!(outcome(record,Execution{result:None,fault:Some(fault.clone())},&ledger.usage(),&BudgetUsage::default()),Outcome::Invalid{fault:actual,..} if actual==fault)
             );
             assert_eq!(f.cas.canonical_snapshot(&mut budget()?)?, before);
         }
@@ -1122,7 +1359,7 @@ mod tests {
                 FaultKind::Invalid(InvalidCode::SeriesUnsupported)
             );
             assert!(
-                matches!(outcome(record.clone(),Execution{result:None,fault:Some(fault)},&ledger.usage(),&BudgetUsage::default()),Outcome::Unresolved{request,blocker,..} if request==record && blocker==Some(fault))
+                matches!(outcome(record.clone(),Execution{result:None,fault:Some(fault.clone())},&ledger.usage(),&BudgetUsage::default()),Outcome::Unresolved{request,blocker,..} if request==record && blocker==Some(fault))
             );
             assert_eq!(f.cas.canonical_snapshot(&mut budget()?)?, before);
         }

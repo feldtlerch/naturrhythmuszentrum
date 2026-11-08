@@ -34,6 +34,17 @@ pub(crate) fn attempt_values(
     amount: u64,
     values: &[&str],
 ) -> TestResult<(bool, u64)> {
+    let (success, work, _) = attempt_values_detail(warm, kind, amount, values)?;
+    Ok((success, work))
+}
+
+/// Expose the exact exhausted figures without weakening the canonical rollback control.
+pub(crate) fn attempt_values_detail(
+    warm: bool,
+    kind: BudgetKind,
+    amount: u64,
+    values: &[&str],
+) -> TestResult<(bool, u64, Option<crate::test_api::Fault>)> {
     let (mut f, value) = fixture(values)?;
     if warm {
         admit(&mut f, value.clone())?;
@@ -52,14 +63,14 @@ pub(crate) fn attempt_values(
         f.cas.admit(&[Draft::SeriesObject(value)], budget)
     });
     match result {
-        Ok(_) => Ok((true, budget.usage().work)),
+        Ok(_) => Ok((true, budget.usage().work, None)),
         Err(fault) => {
             assert!(
                 matches!(fault.kind, FaultKind::Exhausted { budget: actual, .. } if actual == kind),
                 "{fault:?}"
             );
             assert_eq!(f.cas.canonical_snapshot(&mut default_budget()?)?, snapshot);
-            Ok((false, budget.usage().work))
+            Ok((false, budget.usage().work, Some(fault)))
         }
     }
 }

@@ -235,6 +235,6 @@ fn normalization_resource_measurements() -> TestResult {
         keys.usage().work,
         u64::try_from(key.as_bytes().len())?,
     ];
-    assert_eq!(row, [573_160, 683_997, 1_882, 158_082, 4_077]);
+    assert_eq!(row, [573_160, 683_997, 1_882, 158_168, 4_099]);
     Ok(())
 }

@@ -125,7 +125,10 @@ fn explore(
             .visits
             .saturating_add(u64::try_from(queue.visits.len()).unwrap_or(u64::MAX));
         result.statistics.dominated = completed.dominated;
-        if failure.is_some_and(|fault| !matches!(fault.kind, FaultKind::Exhausted { .. })) {
+        if failure
+            .as_ref()
+            .is_some_and(|fault| !matches!(fault.kind, FaultKind::Exhausted { .. }))
+        {
             failure = None;
         }
     }

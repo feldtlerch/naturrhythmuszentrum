@@ -1012,8 +1012,8 @@ mod tests {
             position: 0,
         };
         let fault = Fault::invalid(InvalidCode::SourceConflict, Location::new("source"));
-        let wrapped = input.fault(fault);
-        assert_eq!(wrapped.failure, ParseFailure::Fault(fault));
+        let wrapped = input.fault(fault.clone());
+        assert_eq!(wrapped.failure, ParseFailure::Fault(fault.clone()));
         assert_eq!(
             wrapped.source().map(ToString::to_string),
             Some(fault.to_string())
