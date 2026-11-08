@@ -6,24 +6,18 @@ use crate::binding::{
     live::{LiveBindingError, ReadingBinding, invalidation::Invalidations},
     symbols::RegionCover,
 };
-use crate::heap::{
-    identity::Key,
-    records::{Location, Meaning},
-};
+use crate::heap::records::{Location, Meaning};
 use crate::storage::{Format, PreparedStorage, Region};
 use crate::{Heap, HeapError};
 use nrz_bindings::{Budget, readings::algebra::limits::BudgetKind};
 use nrz_scalar::Scalar;
-
-/// Prepared occupation, numerical location and exact successor target revision.
-type PublishedLocation = (Key, Region, crate::ValueStamp);
 
 /// Every location, cover and successor target has been checked before this exists.
 pub(super) struct Prepared {
     /// Private replacement allocations and the complete old allocation retirement set.
     storage: PreparedStorage,
     /// New numerical locations in value/total/error order per bundle.
-    locations: Vec<PublishedLocation>,
+    locations: Vec<Region>,
     /// Replacement entry revisions and matching native sponsor target revisions.
     covers: Vec<RegionCover>,
 }
@@ -66,6 +60,44 @@ pub(super) fn reservation<P: Scalar>(
     Ok(bytes)
 }
 
+/// Admit all three raw copies and replacement slabs before exporting the first channel.
+pub(super) fn resource_permit<P: Scalar + 'static>(
+    heap: &Heap,
+    schedule: &[Bundle],
+    policy: crate::heap::resources::ResourcePolicy,
+) -> Result<crate::heap::resources::ResourcePermit, HeapError> {
+    for key in schedule.iter().flat_map(|item| item.keys) {
+        if !matches!(heap.descriptors.get(key)?.location, Location::Owned(_)) {
+            return Err(HeapError::InvalidLayout);
+        }
+    }
+    let mut regions = schedule
+        .iter()
+        .flat_map(|item| item.keys)
+        .filter_map(|key| match heap.descriptors.get(key).ok()?.location {
+            Location::Owned(region) => Some(region),
+            Location::Alias => None,
+        });
+    let count = schedule.len().checked_mul(3).ok_or(HeapError::Capacity)?;
+    let mut plan =
+        heap.storage_plan::<P>(regions.clone().map(|region| region.length), regions.clone())?;
+    let copies = regions.try_fold(0_usize, |bytes, region| {
+        crate::heap::resources::add(
+            bytes,
+            region
+                .length
+                .checked_mul(size_of::<P>())
+                .ok_or(HeapError::Capacity)?,
+        )
+    })?;
+    let headers = count
+        .checked_mul(size_of::<Vec<P>>() + size_of::<Region>())
+        .ok_or(HeapError::Capacity)?;
+    plan.scratch =
+        crate::heap::resources::add(plan.scratch, crate::heap::resources::add(copies, headers)?)?;
+    heap.preflight_resources(plan.bytes_only(), policy)
+}
+
 /// One checked byte calculation serves every simultaneously retained allocation.
 fn add(bytes: u64, length: usize, width: usize) -> Result<u64, LiveBindingError> {
     count(length)?
@@ -83,6 +115,8 @@ pub(super) fn payloads<P: Scalar + 'static>(
 ) -> Result<Vec<Vec<P>>, LiveBindingError> {
     let mut result =
         crate::binding::buffer(schedule.len().checked_mul(3).ok_or(HeapError::Capacity)?)?;
+    #[cfg(test)]
+    crate::loan::fault::entered_write_buffer(result.capacity() * size_of::<Vec<P>>());
     for item in schedule {
         for key in item.keys {
             result.push(
@@ -148,8 +182,11 @@ pub(super) fn prepare<P: Scalar + 'static>(
     heap: &mut Heap,
     schedule: &[Bundle],
     payloads: &[Vec<P>],
+    permit: &crate::heap::resources::ResourcePermit,
 ) -> Result<Prepared, LiveBindingError> {
     let mut retired = crate::binding::buffer(payloads.len())?;
+    #[cfg(test)]
+    crate::loan::fault::entered_write_buffer(retired.capacity() * size_of::<Region>());
     let mut covers = crate::binding::buffer(payloads.len())?;
     for item in schedule {
         for key in item.keys {
@@ -171,67 +208,60 @@ pub(super) fn prepare<P: Scalar + 'static>(
             covers.push(cover);
         }
     }
-    let slices = payloads.iter().map(Vec::as_slice).collect::<Vec<_>>();
-    let storage = heap.storage.prepare(&slices, &retired, heap.limits)?;
-    let locations = locations::<P>(schedule, payloads, &storage)?;
+    let storage =
+        heap.prepare_storage_iter(payloads.iter().map(Vec::as_slice), &retired, permit)?;
+    locate::<P>(schedule, payloads, &storage, &mut retired)?;
     Ok(Prepared {
         storage,
-        locations,
+        locations: retired,
         covers,
     })
 }
 
 /// Match the complete allocation result before any numerical or validity publication.
-fn locations<P: Scalar + 'static>(
+fn locate<P: Scalar + 'static>(
     schedule: &[Bundle],
     payloads: &[Vec<P>],
     storage: &PreparedStorage,
-) -> Result<Vec<PublishedLocation>, HeapError> {
+    locations: &mut [Region],
+) -> Result<(), HeapError> {
     if storage.keys().len() != payloads.len()
         || schedule.len().checked_mul(3) != Some(payloads.len())
+        || locations.len() != payloads.len()
     {
         return Err(HeapError::LengthMismatch);
     }
-    let mut result = crate::binding::buffer(payloads.len())?;
-    for ((item, &arena), payload) in schedule
-        .iter()
-        .flat_map(|item| item.keys.iter().map(move |&key| (item, key)))
-        .zip(storage.keys())
-        .zip(payloads)
-    {
-        result.push((
-            item.1,
-            Region {
-                arena,
-                epoch: storage.epoch(),
-                format: Format::of::<P>(),
-                offset: 0,
-                length: payload.len(),
-            },
-            item.0.stamp,
-        ));
+    for ((location, &arena), payload) in locations.iter_mut().zip(storage.keys()).zip(payloads) {
+        *location = Region {
+            arena,
+            epoch: storage.epoch(),
+            format: Format::of::<P>(),
+            offset: 0,
+            length: payload.len(),
+        };
     }
-    Ok(result)
+    Ok(())
 }
 
 /// The exclusive lease preserves all prechecked keys; no allocation or callback occurs here.
-pub(super) fn publish(heap: &mut Heap, prepared: Prepared) {
+pub(super) fn publish(heap: &mut Heap, prepared: Prepared, schedule: &[Bundle]) {
     heap.storage.publish(prepared.storage);
     for (key, record) in heap.descriptors.iter_mut() {
-        if let Some((_, region, next)) = prepared
-            .locations
+        if let Some(((item, _), region)) = schedule
             .iter()
-            .find(|(actual, _, _)| *actual == key)
+            .flat_map(|item| item.keys.iter().map(move |actual| (item, actual)))
+            .zip(&prepared.locations)
+            .find(|((_, actual), _)| **actual == key)
         {
             record.location = Location::Owned(*region);
             match &mut record.meaning {
                 Meaning::Value {
                     stamp, coverage, ..
                 } => {
-                    *stamp = *next;
+                    *stamp = item.stamp;
                     *coverage = crate::Coverage::DeclaredBounds;
                 }
-                Meaning::Bound { stamp, .. } => *stamp = *next,
+                Meaning::Bound { stamp, .. } => *stamp = item.stamp,
                 Meaning::Alias { .. } | Meaning::Statistical => {}
             }
         }

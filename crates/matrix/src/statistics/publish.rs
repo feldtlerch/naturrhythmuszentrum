@@ -64,7 +64,11 @@ pub(crate) fn prepare<P: Scalar + 'static, Q: Scalar + 'static>(
         });
     }
     let context = ArithmeticContext::new()?;
-    let mut regions = Vec::new();
+    let count = bound
+        .statistics
+        .parameter_lengths(&bound.operation)?
+        .count();
+    let mut regions = super::resources::owner_buffer(count)?;
     let mut pending = Vec::new();
     for (slot, payload) in candidate.statistics.iter().enumerate() {
         let target = outputs
@@ -87,7 +91,7 @@ pub(crate) fn prepare<P: Scalar + 'static, Q: Scalar + 'static>(
         .records
         .try_reserve(pending.len())
         .map_err(|_| StatisticsError::ResourceLimit)?;
-    let keys = super::allocation::append(bound, candidate, &regions)?;
+    let prefix = super::allocation::append(bound, candidate, &regions)?;
     drop(regions);
     let run = bound
         .statistics
@@ -101,9 +105,15 @@ pub(crate) fn prepare<P: Scalar + 'static, Q: Scalar + 'static>(
         .as_ref()
         .ok_or(StatisticsError::Contract)?
         .complete(&bound.statistics, candidate)?;
+    let keys = bound
+        .reservations
+        .records
+        .keys()
+        .get(prefix..)
+        .ok_or(StatisticsError::Contract)?;
     let records = pending
         .into_iter()
-        .map(|draft| finish(draft, &keys, std::rc::Rc::clone(&inventory)))
+        .map(|draft| finish(draft, keys, std::rc::Rc::clone(&inventory)))
         .collect::<Result<_, _>>()?;
     Ok(PreparedMoments { records })
 }

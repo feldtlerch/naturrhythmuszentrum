@@ -564,3 +564,126 @@ fn live_result_declaration_resource_boundaries() -> TestResult {
         Ok(budget.usage().work)
     })
 }
+
+/// Reading imports combine descriptor and arena growth before either table changes.
+/// ´test:unit:loan-reading-import-combined-ceiling´
+#[test]
+fn loan_reading_import_combined_ceiling() -> TestResult {
+    let mut heap = Heap::new(HeapLimits::new(8192, 1_048_576, 4096))?;
+    let extent = Extent::new(1, 1)?;
+    let quantity = nrz_bindings::Descriptor::ratio();
+    let first = heap
+        .import_represented(extent, &quantity, &[1.0_f64])?
+        .value();
+    for _ in 1..4096 {
+        heap.import_represented(extent, &quantity, &[1.0_f64])?;
+    }
+    let (graph, coverage) = state()?;
+    let region = ReadingRegion {
+        extent: Extent::new(2, 1)?,
+        values: vec![1.0_f64; 2],
+    };
+    let before = [
+        heap.descriptors.slots.owned_bytes()?,
+        heap.storage.owned_bytes()?,
+    ];
+    let injection = crate::loan::fault::Injection::after(0);
+    let result = heap.import_readings(
+        graph,
+        coverage,
+        Vec::new(),
+        std::slice::from_ref(&region),
+        DependencyPolicy::Entries,
+        &mut ledger()?,
+    );
+    assert!(
+        matches!(
+            result,
+            Err(LiveBindingError::Heap(HeapError::ResourceBytes {
+                staged: false,
+                used: 1_310_784,
+                limit: 1_048_576
+            }))
+        ),
+        "{result:?}"
+    );
+    assert_eq!(crate::loan::fault::Injection::attempts(), 0);
+    drop(injection);
+    assert_eq!(
+        [
+            heap.descriptors.slots.owned_bytes()?,
+            heap.storage.owned_bytes()?
+        ],
+        before
+    );
+    heap.retire(first)?;
+    let (graph, coverage) = state()?;
+    let imported = heap.import_readings(
+        graph,
+        coverage,
+        Vec::new(),
+        &[region],
+        DependencyPolicy::Entries,
+        &mut ledger()?,
+    )?;
+    assert_eq!(imported.bindings().len(), 3);
+    Ok(())
+}
+
+/// A represented reading's full raw base copy joins its replacement slab before export.
+fn raw_copy_boundaries<P: Scalar + 'static>() -> TestResult {
+    for succeeds in [false, true] {
+        let (mut heap, imported) = imported::<P>(DependencyPolicy::Entries)?;
+        let binding = imported.bindings().first().ok_or("reading")?;
+        let staged = 2 * 64
+            + size_of::<faer::Mat<P>>()
+            + 3 * size_of::<crate::heap::identity::Key>()
+            // Replacement owns key, old region, raw-copy/indices headers and successor version.
+            + size_of::<crate::heap::identity::Key>()
+            + 2 * size_of::<crate::storage::Region>()
+            + 2 * size_of::<Vec<usize>>()
+            + size_of::<crate::ValueVersion>()
+            + 2 * size_of::<P>();
+        let limit = staged - usize::from(!succeeds);
+        let injection = crate::loan::fault::Injection::after(if succeeds { usize::MAX } else { 0 });
+        let result = crate::binding::live::write::replace_with_policy(
+            &mut heap,
+            &binding.group,
+            binding.adapter().entries(),
+            &[P::from_u8(3), P::from_u8(4)],
+            &mut ledger()?,
+            crate::heap::resources::ResourcePolicy {
+                output: 64,
+                staged: u64::try_from(limit)?,
+            },
+        );
+        match result {
+            Ok(()) => {
+                assert!(succeeds);
+                assert_eq!(crate::loan::fault::Injection::raw_copies(), 1);
+                assert_eq!(crate::loan::fault::Injection::write_buffers(), [2, 168]);
+            }
+            Err(error) => {
+                assert!(!succeeds, "{error:?}");
+                assert!(
+                    matches!(error, LiveBindingError::Heap(HeapError::ResourceBytes { staged: true, used, limit: ceiling })
+                    if used == u64::try_from(staged)? && ceiling == u64::try_from(limit)?),
+                    "{error:?}"
+                );
+                assert_eq!(crate::loan::fault::Injection::raw_copies(), 0);
+                assert_eq!(crate::loan::fault::Injection::write_buffers(), [0; 2]);
+                assert_eq!(crate::loan::fault::Injection::attempts(), 0);
+            }
+        }
+        drop(injection);
+    }
+    Ok(())
+}
+
+/// Both formats refuse before the actual raw exporter and succeed at its complete staging boundary.
+/// ´test:unit:loan-reading-write-raw-copy-byte-neighbours´
+#[test]
+fn loan_reading_write_raw_copy_byte_neighbours() -> TestResult {
+    raw_copy_boundaries::<f32>()?;
+    raw_copy_boundaries::<f64>()
+}

@@ -2,7 +2,6 @@
 //! Fill reserved private faer slabs; every check runs before the no-fail commit.
 
 use super::Payload;
-use crate::binding::buffer;
 use crate::storage::PreparedStorage;
 use crate::{HeapError, OperationError};
 use nrz_scalar::Scalar;
@@ -13,22 +12,13 @@ pub(super) fn fill<P: Scalar + 'static>(
     storage: &mut PreparedStorage,
     outputs: &[Payload<P>],
 ) -> Result<(), OperationError> {
-    let mut slices = buffer(storage.keys().len())?;
-    for output in outputs {
-        slices.push(output.centers.as_slice());
-        if let Some(bounds) = &output.bounds {
-            slices.push(bounds.as_slice());
-        }
-        if let Some(evaluation) = &output.evaluation {
-            slices.push(evaluation.as_slice());
-        }
-        if let Some(contributions) = &output.contributions {
-            for region in contributions {
-                slices.push(region.as_slice());
-            }
-        }
-    }
-    if slices.len() != storage.keys().len() {
+    let slices = outputs.iter().flat_map(|output| {
+        std::iter::once(output.centers.as_slice())
+            .chain(output.bounds.as_deref())
+            .chain(output.evaluation.as_deref())
+            .chain(output.contributions.iter().flatten().map(Vec::as_slice))
+    });
+    if slices.clone().count() != storage.keys().len() {
         return Err(OperationError::CandidateContract);
     }
     match storage {

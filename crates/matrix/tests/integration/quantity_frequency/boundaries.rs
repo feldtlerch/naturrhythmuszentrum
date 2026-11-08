@@ -9,7 +9,7 @@ use nrz_scalar::Scalar;
 /// ´test:integration:quantity-frequency-resource-boundaries´
 #[test]
 fn quantity_frequency_resource_boundaries() -> TestResult {
-    boundaries::<f32>(82_168, 168, 96_412)?;
+    boundaries::<f32>(82_168, 176, 96_412)?;
     boundaries::<f64>(82_232, 184, 3)
 }
 

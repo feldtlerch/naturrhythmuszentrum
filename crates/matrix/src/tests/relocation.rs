@@ -37,7 +37,12 @@ fn compaction_densifies_arena_indirection() -> Result<(), HeapError> {
 #[test]
 fn relocation_epoch_refuses_cached_physical_region() -> Result<(), HeapError> {
     let mut storage = Storage::new();
-    let prepared = storage.prepare::<f64>(&[&[1.0]], &[], HeapLimits::default())?;
+    let prepared = storage.prepare::<f64>(
+        &[&[1.0]],
+        &[],
+        HeapLimits::default(),
+        &crate::heap::resources::ResourcePermit::testing(storage.epoch()),
+    )?;
     let arena = *prepared.keys().first().ok_or(HeapError::Capacity)?;
     storage.publish(prepared);
     let old = Region {
@@ -48,7 +53,12 @@ fn relocation_epoch_refuses_cached_physical_region() -> Result<(), HeapError> {
         length: 1,
     };
     let mut replacement = storage.replacement()?;
-    let prepared = replacement.prepare::<f64>(&[&[2.0]], &[], HeapLimits::default())?;
+    let prepared = replacement.prepare::<f64>(
+        &[&[2.0]],
+        &[],
+        HeapLimits::default(),
+        &crate::heap::resources::ResourcePermit::testing(replacement.epoch()),
+    )?;
     assert_eq!(prepared.keys().first(), Some(&arena));
     replacement.publish(prepared);
     assert!(matches!(
@@ -77,7 +87,12 @@ fn relocation_epoch_refuses_cached_physical_region() -> Result<(), HeapError> {
 #[test]
 fn output_proof_respects_region_offsets() -> Result<(), HeapError> {
     let mut storage = Storage::new();
-    let prepared = storage.prepare::<f64>(&[&[1.0; 6]], &[], HeapLimits::default())?;
+    let prepared = storage.prepare::<f64>(
+        &[&[1.0; 6]],
+        &[],
+        HeapLimits::default(),
+        &crate::heap::resources::ResourcePermit::testing(storage.epoch()),
+    )?;
     let arena = *prepared.keys().first().ok_or(HeapError::Capacity)?;
     storage.publish(prepared);
     let left = Region {

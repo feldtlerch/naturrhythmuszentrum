@@ -32,11 +32,32 @@ impl Heap {
         errors: &[P],
         budget: &mut Budget,
     ) -> Result<(), LiveBindingError> {
+        self.replace_reading_bundle_with_policy(
+            binding,
+            centers,
+            totals,
+            errors,
+            budget,
+            crate::heap::resources::ResourcePolicy::compatibility(),
+        )
+    }
+
+    /// Private policy seam exercises the complete raw-copy and storage transaction.
+    pub(super) fn replace_reading_bundle_with_policy<P: Scalar + 'static>(
+        &mut self,
+        binding: &ReadingBinding<P>,
+        centers: &[P],
+        totals: &[P],
+        errors: &[P],
+        budget: &mut Budget,
+        policy: crate::heap::resources::ResourcePolicy,
+    ) -> Result<(), LiveBindingError> {
         self.validate_reading(binding)?;
         let channels = [centers, totals, errors];
         plan::check(binding, channels, budget)?;
         let schedule = plan::prepare(self, binding, budget)?;
         let retained = storage::reservation::<P>(self, &schedule, budget)?;
+        let permit = storage::resource_permit::<P>(self, &schedule, policy)?;
         budget.with_retained_payload(retained, AT, |budget| {
             let payloads = storage::payloads(self, binding, &schedule, channels)?;
             let writes = schedule
@@ -45,8 +66,8 @@ impl Heap {
                 .collect::<Vec<_>>();
             let mut invalidated = super::invalidation::prepare(self, &writes, budget)?;
             storage::invalidate_native(&mut invalidated, &schedule, budget)?;
-            let prepared = storage::prepare(self, &schedule, &payloads)?;
-            storage::publish(self, prepared);
+            let prepared = storage::prepare(self, &schedule, &payloads, &permit)?;
+            storage::publish(self, prepared, &schedule);
             super::invalidation::publish(invalidated);
             Ok(())
         })

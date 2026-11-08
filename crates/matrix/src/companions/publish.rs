@@ -179,7 +179,7 @@ fn region_records<P: Scalar + 'static>(
     arenas: &[Key],
     epoch: u64,
 ) -> Result<Vec<Record>, JointError> {
-    let mut records = Vec::new();
+    let mut records = crate::binding::buffer(schemas.len())?;
     for ((&schema, &extent), &arena) in schemas.iter().zip(extents).zip(arenas) {
         records.push(Record {
             schema,
@@ -230,16 +230,22 @@ fn prepare_regions<P: Scalar + 'static>(
             [dense.centers(), dense.errors()],
         ),
     };
-    let mut extents = extents.to_vec();
-    let mut payloads = payloads.to_vec();
-    let mut quantities = vec![None; 2];
+    let count = if means.is_some() { 4 } else { 2 };
+    let mut all_extents = [extents[0]; 4];
+    all_extents[..2].copy_from_slice(&extents);
+    let mut all_payloads: [&[P]; 4] = [&[]; 4];
+    all_payloads[..2].copy_from_slice(&payloads);
+    let mut quantities = [None, None, None, None];
     if let Some(means) = means {
-        for (errors, descriptor) in means.errors.iter().zip(&means.descriptors) {
-            extents.push(Extent::new(errors.len(), 1)?);
-            payloads.push(errors.as_slice());
-            quantities.push(Some(descriptor.clone()));
+        for (side, (errors, descriptor)) in means.errors.iter().zip(&means.descriptors).enumerate()
+        {
+            all_extents[2 + side] = Extent::new(errors.len(), 1)?;
+            all_payloads[2 + side] = errors.as_slice();
+            quantities[2 + side] = Some(descriptor.clone());
         }
     }
+    let extents = &all_extents[..count];
+    let payloads = &all_payloads[..count];
     let mut schemas = Vec::new();
     let mut indices = Vec::new();
     for (&extent, quantity) in extents.iter().zip(quantities) {
@@ -251,9 +257,13 @@ fn prepare_regions<P: Scalar + 'static>(
         )?);
     }
     crate::binding::schema::reserve(heap, schemas.len())?;
-    let plan = heap
-        .descriptors
-        .prepare(payloads.len(), heap.limits.descriptors)?;
+    let resources =
+        heap.legacy_plan::<P>(payloads.iter().map(|values| values.len()), None, &[], &[])?;
+    let permit = heap.preflight_resources(
+        resources.bytes_only(),
+        crate::heap::resources::ResourcePolicy::compatibility(),
+    )?;
+    let plan = heap.change_descriptors(payloads.len(), None, &[], &permit)?;
     let keys = plan.keys().to_vec();
     let mut covers = Vec::new();
     if keys.len() != declarations.len() {
@@ -266,8 +276,8 @@ fn prepare_regions<P: Scalar + 'static>(
             heap.limits.descriptors,
         )?);
     }
-    let storage = heap.storage.prepare(&payloads, &[], heap.limits)?;
-    let records = region_records::<P>(&indices, &extents, storage.keys(), storage.epoch())?;
+    let storage = heap.prepare_storage(payloads, &[], &permit)?;
+    let records = region_records::<P>(&indices, extents, storage.keys(), storage.epoch())?;
     let records = plan.bind(records)?;
     Ok(PreparedRegions {
         storage,

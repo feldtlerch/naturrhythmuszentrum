@@ -189,6 +189,8 @@ fn decode<P: Scalar + 'static>(
     allocations: &Run,
     stage: ReciprocalStage,
 ) -> Result<Buffer<DecodedLiteral<P>>, OperationError> {
+    #[cfg(test)]
+    crate::loan::fault::entered_kernel_allocation(true);
     let mut result = allocations.buffer(stage)?;
     for text in values {
         let work = u64::try_from(text.len())

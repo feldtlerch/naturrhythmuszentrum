@@ -135,6 +135,36 @@ impl ConstantCache {
         u64::try_from(self.entries.len() + 1).map_err(|_| ConversionError::ResourceLimit)
     }
 
+    /// Cold lowering retains one shared coefficient owner and exact cache backing growth.
+    /// Existing rational or certified owners remain borrowed, outside the new call's bytes.
+    pub(super) fn physical_growth<P: Scalar>(&self) -> Result<[usize; 2], ConversionError> {
+        if self.contains::<P>() {
+            return Ok([0; 2]);
+        }
+        let next = self
+            .entries
+            .len()
+            .checked_add(1)
+            .ok_or(ConversionError::ResourceLimit)?;
+        if next > 2 {
+            return Err(ConversionError::ResourceLimit);
+        }
+        let old = self.entries.capacity();
+        let growth = next.saturating_sub(old);
+        let owner = size_of::<LoweredMap<P>>() + 2 * size_of::<usize>();
+        let retained = growth
+            .checked_mul(size_of::<Lowered>())
+            .and_then(|bytes| bytes.checked_add(owner))
+            .ok_or(ConversionError::ResourceLimit)?;
+        let scratch = if growth == 0 {
+            0
+        } else {
+            old.checked_mul(2 * size_of::<Lowered>())
+                .ok_or(ConversionError::ResourceLimit)?
+        };
+        Ok([retained, scratch])
+    }
+
     /// Logical bytes of one retained cache slot.
     pub(crate) const fn entry_bytes() -> usize {
         size_of::<Lowered>()

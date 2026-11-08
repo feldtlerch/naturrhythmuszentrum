@@ -11,6 +11,8 @@ use std::rc::Rc;
 enum Authority<T> {
     /// Executors outside the covered schedules retain their existing ordinary allocations.
     Untracked,
+    /// Legacy scratch keeps a residence debit without claiming a typed allocation ticket.
+    Residence(crate::execution::Trace, usize),
     /// Reciprocal declarations identify each ordered heterogeneous component.
     Reciprocal(Permit<T>),
     /// Deterministic solve stages retain original source and output bindings.
@@ -27,6 +29,26 @@ pub(crate) struct Buffer<T> {
     values: Vec<T>,
 }
 impl<T> Buffer<T> {
+    /// Register ordinary scratch before it can escape its binding, without counting it twice.
+    pub(crate) fn retain_residence(
+        &mut self,
+        trace: &crate::execution::Trace,
+        companions: usize,
+    ) -> Result<(), OperationError> {
+        if matches!(self.permit, Authority::Untracked) {
+            let bytes = self
+                .values
+                .capacity()
+                .checked_mul(size_of::<T>())
+                .and_then(|bytes| bytes.checked_add(companions))
+                .ok_or(OperationError::ResourceLimit)?;
+            trace.retain_residence(bytes)?;
+            self.permit = Authority::Residence(trace.clone(), bytes);
+        } else if companions != 0 {
+            return Err(OperationError::CandidateContract);
+        }
+        Ok(())
+    }
     /// Only a successfully drawn typed ticket can enter the covered numerical allocator.
     pub(super) fn allocate(permit: Permit<T>) -> Result<Self, OperationError> {
         let slot = permit.slot;
@@ -68,6 +90,8 @@ impl<T> Buffer<T> {
     pub(crate) fn allocate_statistics(
         permit: crate::statistics::inventory::Permit,
     ) -> Result<Self, OperationError> {
+        #[cfg(test)]
+        crate::loan::fault::before().map_err(|_| OperationError::ResourceLimit)?;
         let values = crate::binding::buffer(permit.entries())?;
         let bytes = values
             .capacity()
@@ -82,7 +106,9 @@ impl<T> Buffer<T> {
     /// Initialize a planned element without permitting vector growth or a hidden allocation.
     pub(crate) fn push(&mut self, value: T) -> Result<(), OperationError> {
         let count = match &self.permit {
-            Authority::Untracked => return Err(Error::UnticketedBuffer.into()),
+            Authority::Untracked | Authority::Residence(..) => {
+                return Err(Error::UnticketedBuffer.into());
+            }
             Authority::Reciprocal(permit) => permit
                 .plan
                 .specifications
@@ -102,7 +128,9 @@ impl<T> Buffer<T> {
     /// Preserve both the initialized owner and its permit when entering a private candidate.
     pub(crate) fn into_candidate(self) -> Result<Self, OperationError> {
         match &self.permit {
-            Authority::Untracked => return Err(Error::UnticketedBuffer.into()),
+            Authority::Untracked | Authority::Residence(..) => {
+                return Err(Error::UnticketedBuffer.into());
+            }
             Authority::Reciprocal(permit) => {
                 let entry = permit
                     .plan
@@ -204,6 +232,7 @@ impl<T> Drop for Buffer<T> {
             }
             Authority::Solve(permit) => permit.release(self.values.len()),
             Authority::Statistics(permit) => permit.release(self.values.len()),
+            Authority::Residence(trace, bytes) => trace.release_residence(*bytes),
             Authority::Untracked => {}
         }
     }

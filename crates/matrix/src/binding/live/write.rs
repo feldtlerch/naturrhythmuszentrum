@@ -69,25 +69,119 @@ pub(super) fn replace<P: Scalar + 'static>(
     values: &[P],
     budget: &mut Budget,
 ) -> Result<(), LiveBindingError> {
+    replace_with_policy(
+        heap,
+        group,
+        entries,
+        values,
+        budget,
+        crate::heap::resources::ResourcePolicy::compatibility(),
+    )
+}
+
+/// The full numerical change is admitted before any affected base is exported.
+pub(super) fn replace_with_policy<P: Scalar + 'static>(
+    heap: &mut Heap,
+    group: &super::Group,
+    entries: &[crate::EntryTicket<usize>],
+    values: &[P],
+    budget: &mut Budget,
+    policy: crate::heap::resources::ResourcePolicy,
+) -> Result<(), LiveBindingError> {
     charge::<P>(values.len(), budget)?;
-    let replacements = prepare(heap, group, entries, values, budget)?;
+    let (permit, count) = resource_permit::<P>(heap, group, entries, policy)?;
+    let replacements = prepare(heap, group, entries, values, budget, count)?;
     let writes = replacements
         .iter()
         .map(|item| (item.key, item.indices.clone()))
         .collect::<Vec<_>>();
     let invalidated = super::invalidation::prepare(heap, &writes, budget)?;
-    let payloads = replacements
-        .iter()
-        .map(|item| item.values.as_slice())
-        .collect::<Vec<_>>();
-    let retired = replacements.iter().map(|item| item.old).collect::<Vec<_>>();
-    let storage = heap.storage.prepare(&payloads, &retired, heap.limits)?;
-    let locations = locations::<P>(&replacements, storage.keys(), storage.epoch())?;
+    let payloads = replacements.iter().map(|item| item.values.as_slice());
+    let mut locations = crate::binding::buffer(count)?;
+    #[cfg(test)]
+    crate::loan::fault::entered_write_buffer(locations.capacity() * size_of::<Region>());
+    locations.extend(replacements.iter().map(|item| item.old));
+    let storage = heap.prepare_storage_iter(payloads, &locations, &permit)?;
+    locate::<P>(
+        &mut locations,
+        &replacements,
+        storage.keys(),
+        storage.epoch(),
+    )?;
     heap.storage.publish(storage);
     advance_entries(heap, &replacements);
     commit(heap, &replacements, &locations);
     super::invalidation::publish(invalidated);
     Ok(())
+}
+
+/// Enumerate distinct whole-base replacements from authenticated entry metadata only.
+fn resource_permit<P: Scalar + 'static>(
+    heap: &Heap,
+    group: &super::Group,
+    entries: &[crate::EntryTicket<usize>],
+    policy: crate::heap::resources::ResourcePolicy,
+) -> Result<(crate::heap::resources::ResourcePermit, usize), HeapError> {
+    let mut regions = regions(heap, group, entries)?;
+    let count = regions.clone().count();
+    let mut plan =
+        heap.storage_plan::<P>(regions.clone().map(|region| region.length), regions.clone())?;
+    let copies = regions.try_fold(0_usize, |bytes, region| {
+        crate::heap::resources::add(
+            bytes,
+            region
+                .length
+                .checked_mul(size_of::<P>())
+                .ok_or(HeapError::Capacity)?,
+        )
+    })?;
+    // One exact Replacement backing owns raw-copy headers. One Region backing is reused
+    // from retirement through destination publication; no payload-reference vector is built.
+    let headers = count
+        .checked_mul(size_of::<Replacement<P>>() + size_of::<Region>())
+        .ok_or(HeapError::Capacity)?;
+    plan.scratch =
+        crate::heap::resources::add(plan.scratch, crate::heap::resources::add(copies, headers)?)?;
+    Ok((heap.preflight_resources(plan.bytes_only(), policy)?, count))
+}
+
+/// Authenticate every entry, then enumerate distinct bases without a pre-admission vector.
+fn regions<'a>(
+    heap: &'a Heap,
+    group: &'a super::Group,
+    entries: &'a [crate::EntryTicket<usize>],
+) -> Result<impl Iterator<Item = Region> + Clone + 'a, HeapError> {
+    for entry in entries {
+        let ticket = group
+            .tickets
+            .get(entry.region)
+            .ok_or(HeapError::InvalidLayout)?;
+        if !matches!(
+            heap.descriptors.get(ticket.key)?.location,
+            Location::Owned(_)
+        ) {
+            return Err(HeapError::InvalidLayout);
+        }
+    }
+    Ok(entries
+        .iter()
+        .enumerate()
+        .filter_map(move |(position, entry)| {
+            let ticket = group.tickets.get(entry.region)?;
+            let repeated = entries[..position].iter().any(|earlier| {
+                group
+                    .tickets
+                    .get(earlier.region)
+                    .is_some_and(|previous| previous.key == ticket.key)
+            });
+            if repeated {
+                return None;
+            }
+            match heap.descriptors.get(ticket.key).ok()?.location {
+                Location::Owned(region) => Some(region),
+                Location::Alias => None,
+            }
+        }))
 }
 
 /// Copy only affected bases; reject every invalid element before any publication.
@@ -97,8 +191,11 @@ fn prepare<P: Scalar + 'static>(
     entries: &[crate::EntryTicket<usize>],
     values: &[P],
     budget: &mut Budget,
+    count: usize,
 ) -> Result<Vec<Replacement<P>>, LiveBindingError> {
-    let mut replacements: Vec<Replacement<P>> = Vec::new();
+    let mut replacements: Vec<Replacement<P>> = crate::binding::buffer(count)?;
+    #[cfg(test)]
+    crate::loan::fault::entered_write_buffer(replacements.capacity() * size_of::<Replacement<P>>());
     for (entry, &value) in entries.iter().zip(values) {
         let index = usize::try_from(entry.index).map_err(|_| HeapError::InvalidLayout)?;
         if !value.is_finite() {
@@ -195,25 +292,25 @@ fn advance_entries<P: Scalar>(heap: &Heap, replacements: &[Replacement<P>]) {
 }
 
 /// Match all allocated region keys before entering the allocation-free commit.
-fn locations<P: Scalar + 'static>(
+fn locate<P: Scalar + 'static>(
+    locations: &mut [Region],
     replacements: &[Replacement<P>],
     arenas: &[Key],
     epoch: u64,
-) -> Result<Vec<Region>, HeapError> {
-    if replacements.len() != arenas.len() {
+) -> Result<(), HeapError> {
+    if replacements.len() != arenas.len() || locations.len() != arenas.len() {
         return Err(HeapError::LengthMismatch);
     }
-    Ok(replacements
-        .iter()
-        .zip(arenas)
-        .map(|(item, &arena)| Region {
+    for ((location, item), &arena) in locations.iter_mut().zip(replacements).zip(arenas) {
+        *location = Region {
             arena,
             epoch,
             format: Format::of::<P>(),
             offset: 0,
             length: item.values.len(),
-        })
-        .collect())
+        };
+    }
+    Ok(())
 }
 
 /// All mutable records were resolved under the same uninterrupted exclusive heap lease.

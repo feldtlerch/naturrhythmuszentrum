@@ -3,10 +3,7 @@
 
 use super::StatisticsError;
 use crate::binding::schema::{BindingSchema, intern};
-use crate::heap::{
-    identity::Key,
-    records::{Location, Meaning, Record},
-};
+use crate::heap::records::{Location, Meaning, Record};
 use crate::storage::{Format, Region};
 use crate::{Bound, Candidate, Extent, OperationError};
 use nrz_bindings::Descriptor;
@@ -30,14 +27,22 @@ pub(crate) fn append<P: Scalar + 'static, Q: Scalar + 'static>(
     bound: &mut Bound<'_, P, Q>,
     candidate: &Candidate<Q>,
     regions: &[RegionData<Q>],
-) -> Result<Vec<Key>, OperationError> {
-    let mut payloads = ordinary(candidate);
-    let prefix = payloads.len();
-    payloads.extend(regions.iter().map(|region| region.values.as_slice()));
+) -> Result<usize, OperationError> {
+    let ordinary = ordinary(candidate);
+    let prefix = ordinary.clone().count();
+    let payloads = ordinary.chain(regions.iter().map(|region| region.values.as_slice()));
+    let count = prefix
+        .checked_add(regions.len())
+        .ok_or(crate::HeapError::Capacity)?;
+    let mut elements = [0_usize; 2];
+    elements[Format::of::<Q>().index()] = payloads.clone().try_fold(0_usize, |sum, payload| {
+        sum.checked_add(payload.len())
+            .ok_or(crate::HeapError::Capacity)
+    })?;
+    bound.heap.preflight_elements(elements, [0; 2])?;
     let plan = bound
         .heap
-        .descriptors
-        .prepare(payloads.len(), bound.heap.limits.descriptors)?;
+        .change_descriptors(count, None, &[], &bound.resource_permit)?;
     if plan.keys().get(..prefix) != Some(bound.reservations.records.keys()) {
         return Err(StatisticsError::Contract.into());
     }
@@ -51,14 +56,24 @@ pub(crate) fn append<P: Scalar + 'static, Q: Scalar + 'static>(
                 bound.heap.limits.descriptors,
             )?);
     }
-    let storage = bound
-        .heap
-        .storage
-        .prepare(&payloads, &[], bound.heap.limits)?;
+    // The original route's permit includes every parameter channel and both reserved slab sets.
+    // Publication consumes that admission without substituting compatibility ceilings.
+    let storage = bound.heap.storage.prepare_iter(
+        payloads,
+        &[],
+        bound.heap.limits,
+        &bound.resource_permit,
+    )?;
     if storage.keys().get(..prefix) != Some(bound.reservations.storage.keys()) {
         return Err(StatisticsError::Contract.into());
     }
-    let mut appended = crate::binding::buffer(regions.len())?;
+    let mut records = std::mem::take(&mut bound.reservations.records.values);
+    records
+        .try_reserve_exact(regions.len())
+        .map_err(|_| StatisticsError::ResourceLimit)?;
+    if records.capacity() > count {
+        return Err(StatisticsError::ResourceLimit.into());
+    }
     for (index, region) in regions.iter().enumerate() {
         let schema = intern(
             &bound.heap.meanings,
@@ -73,7 +88,7 @@ pub(crate) fn append<P: Scalar + 'static, Q: Scalar + 'static>(
             .keys()
             .get(prefix + index)
             .ok_or(StatisticsError::Contract)?;
-        appended.push(Record {
+        records.push(Record {
             schema,
             layout: crate::Layout::contiguous(region.extent)?,
             location: Location::Owned(Region {
@@ -87,33 +102,19 @@ pub(crate) fn append<P: Scalar + 'static, Q: Scalar + 'static>(
         });
     }
     crate::binding::schema::reserve(bound.heap, bound.reservations.schemas.len())?;
-    let keys = plan
-        .keys()
-        .get(prefix..)
-        .ok_or(StatisticsError::Contract)?
-        .to_vec();
-    let mut records = std::mem::take(&mut bound.reservations.records.values);
-    records
-        .try_reserve(appended.len())
-        .map_err(|_| StatisticsError::ResourceLimit)?;
-    records.extend(appended);
     bound.reservations.records = plan.bind(records)?;
     bound.reservations.storage = storage;
-    Ok(keys)
+    Ok(prefix)
 }
 
 /// Numerical region order remains exactly the existing deterministic transaction order.
-fn ordinary<P: Scalar>(candidate: &Candidate<P>) -> Vec<&[P]> {
-    let mut result = Vec::new();
-    for output in &candidate.outputs {
-        result.push(output.centers.as_slice());
-        result.extend(output.bounds.as_deref());
-        result.extend(output.evaluation.as_deref());
-        if let Some(parts) = &output.contributions {
-            result.extend(parts.iter().map(Vec::as_slice));
-        }
-    }
-    result
+fn ordinary<P: Scalar>(candidate: &Candidate<P>) -> impl Iterator<Item = &[P]> + Clone {
+    candidate.outputs.iter().flat_map(|output| {
+        std::iter::once(output.centers.as_slice())
+            .chain(output.bounds.as_deref())
+            .chain(output.evaluation.as_deref())
+            .chain(output.contributions.iter().flatten().map(Vec::as_slice))
+    })
 }
 
 /// All fallible allocation is finished before a standalone cross-block publication.
@@ -131,14 +132,10 @@ pub(crate) struct Standalone {
 pub(crate) fn standalone<P: Scalar + 'static>(
     heap: &mut crate::Heap,
     regions: &[RegionData<P>],
+    permit: &crate::heap::resources::ResourcePermit,
 ) -> Result<Standalone, OperationError> {
-    let payloads = regions
-        .iter()
-        .map(|region| region.values.as_slice())
-        .collect::<Vec<_>>();
-    let plan = heap
-        .descriptors
-        .prepare(regions.len(), heap.limits.descriptors)?;
+    let payloads = regions.iter().map(|region| region.values.as_slice());
+    let plan = heap.change_descriptors(regions.len(), None, &[], permit)?;
     let mut covers = Vec::new();
     for (&key, region) in plan.keys().iter().zip(regions) {
         covers.push(heap.symbols.prepare_parameter(
@@ -147,7 +144,7 @@ pub(crate) fn standalone<P: Scalar + 'static>(
             heap.limits.descriptors,
         )?);
     }
-    let storage = heap.storage.prepare(&payloads, &[], heap.limits)?;
+    let storage = heap.prepare_storage_iter(payloads, &[], permit)?;
     let mut schemas = Vec::new();
     let mut records = crate::binding::buffer(regions.len())?;
     for (region, &arena) in regions.iter().zip(storage.keys()) {

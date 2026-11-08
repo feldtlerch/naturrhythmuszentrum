@@ -164,6 +164,14 @@ impl<P: Scalar + 'static, Q: Scalar + 'static> crate::Bound<'_, P, Q> {
         outputs.push(payload);
         evidence.push(claim);
         let statistics = self.statistics.evaluate(&self.operation, token)?;
+        for output in &mut outputs {
+            output.retain_residence(&self.resources.trace)?;
+        }
+        let residence = crate::publication::CandidateResidence::new::<Q>(
+            &self.resources.trace,
+            outputs.capacity(),
+            statistics.capacity(),
+        )?;
         self.issued.set(Some(token));
         Ok(crate::Candidate {
             execution: self.execution,
@@ -173,6 +181,7 @@ impl<P: Scalar + 'static, Q: Scalar + 'static> crate::Bound<'_, P, Q> {
             evidence: evidence.clone(),
             statistics,
             private,
+            _residence: residence,
         })
     }
 }

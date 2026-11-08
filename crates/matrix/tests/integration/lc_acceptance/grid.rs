@@ -222,6 +222,6 @@ fn lc_grid_consumer_resource_owners() -> TestResult {
             inventory.backend_allowance_bytes(),
         ]);
     }
-    assert_eq!(profiles, [[1536, 11, 224, 64, 240, 12_288]; 3]);
+    assert_eq!(profiles, [[1536, 11, 224, 64, 248, 12_288]; 3]);
     Ok(())
 }

@@ -72,6 +72,8 @@ pub(crate) fn same_format<P: nrz_scalar::Scalar + 'static, Q: nrz_scalar::Scalar
 }
 
 mod cache;
+mod resources;
+pub(crate) use resources::physical_bytes;
 
 mod definitions;
 mod schema;

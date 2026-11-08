@@ -222,3 +222,109 @@ fn mask_shared_ledger_boundary_receipts() -> TestResult {
         },
     )
 }
+
+/// Owned-loan phases retain one original ledger and prepaid cancellation emits zero new Work.
+/// ´test:unit:loan-original-ledger-observation-does-not-change-work´
+#[test]
+fn loan_original_ledger_observation_does_not_change_work() -> TestResult {
+    let _guard = DISPATCHERS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let (mut heap, mut account, declaration) = loan_fixture()?;
+    let state = Arc::new(Mutex::new(State::default()));
+    let subscriber = Observer(Arc::clone(&state));
+    let observed = tracing::subscriber::with_default(subscriber, || {
+        loan_phases(&mut heap, &mut account, declaration)
+    })?;
+    let state = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    assert!(!state.lost);
+    assert_eq!(state.active, []);
+    assert_eq!(state.receipts.len(), 5);
+    let ledger = state
+        .receipts
+        .first()
+        .ok_or("missing receipt")?
+        .fields
+        .ledger;
+    assert_ne!(ledger, 0);
+    for receipt in &state.receipts {
+        assert_eq!(receipt.fields.family, "matrix.loan");
+        assert_eq!(receipt.fields.ledger, ledger);
+    }
+    let cancellation = state.receipts.last().ok_or("cancellation receipt")?;
+    assert_eq!(cancellation.fields.operation, "prepaid cancellation");
+    assert_eq!(cancellation.before, cancellation.after);
+    assert_eq!(
+        state
+            .receipts
+            .iter()
+            .map(|receipt| receipt.after - receipt.before)
+            .sum::<u64>(),
+        observed
+    );
+    drop(state);
+    tracing::subscriber::with_default(
+        tracing::subscriber::NoSubscriber::default(),
+        || -> TestResult {
+            let (mut heap, mut account, declaration) = loan_fixture()?;
+            assert_eq!(loan_phases(&mut heap, &mut account, declaration)?, observed);
+            let identity_is_unassigned =
+                format!("{account:?}").contains("observation: Identity { generation: 0 }");
+            assert!(identity_is_unassigned);
+            Ok(())
+        },
+    )
+}
+/// Exact declaration work precedes observation of native ownership phases.
+fn loan_fixture() -> TestResult<(
+    crate::Heap,
+    crate::ExecutionAccount,
+    crate::HostTileDeclaration<f64>,
+)> {
+    let heap = crate::Heap::new(crate::HeapLimits::default())?;
+    let mut declarations = Budget::new(Limits::default())?;
+    let symbols = nrz_bindings::BindingSymbols::declare(
+        &nrz_bindings::Descriptor::ratio(),
+        [1, 1],
+        [false, false],
+        &mut declarations,
+    )?;
+    let axis = heap.create_cell_axis(1, &mut declarations)?;
+    let mut budget = Budget::new(Limits::default())?;
+    budget.work(
+        3,
+        nrz_bindings::readings::algebra::Location::new("loan receipt prior usage"),
+    )?;
+    let mut account = crate::ExecutionAccount::new(budget)?;
+    let declaration = crate::HostTileDeclaration::check(
+        symbols,
+        axis,
+        crate::Coverage::RepresentedInputs,
+        &mut account,
+    )?;
+    Ok((heap, account, declaration))
+}
+/// Payload refusal retains the same owner for prepaid cancellation without constructing a child budget.
+fn loan_phases(
+    heap: &mut crate::Heap,
+    account: &mut crate::ExecutionAccount,
+    declaration: crate::HostTileDeclaration<f64>,
+) -> TestResult<u64> {
+    let before = account.usage().work;
+    let mut loan = match heap.request_loan(declaration, account) {
+        crate::LoanRequest::Granted(loan) => loan,
+        other @ crate::LoanRequest::Refused(_) => return Err(format!("{other:?}").into()),
+    };
+    loan.write_cell(crate::HostChannel::Center, 0, &[f64::NAN], account)?;
+    let loan = match heap.handback(loan, account) {
+        crate::HandbackOutcome::Repair(crate::LoanError::InvalidPayload { .. }, loan) => loan,
+        other => return Err(format!("{other:?}").into()),
+    };
+    assert!(matches!(
+        heap.cancel_loan(loan, account),
+        crate::CancelOutcome::Cancelled(_)
+    ));
+    Ok(account.usage().work - before)
+}

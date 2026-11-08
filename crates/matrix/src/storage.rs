@@ -20,6 +20,14 @@ pub(crate) enum Format {
 }
 
 impl Format {
+    /// Stable per-precision inventory index.
+    pub(crate) const fn index(self) -> usize {
+        match self {
+            Self::Binary32 => 0,
+            Self::Binary64 => 1,
+        }
+    }
+
     /// Resolve the sealed primitive format without inspecting any numerical value.
     pub(crate) fn of<P: Scalar + 'static>() -> Self {
         if TypeId::of::<P>() == TypeId::of::<f32>() {
@@ -69,6 +77,89 @@ impl Storage {
         }
     }
 
+    /// Addressable legacy elements, independently bounded in each precision.
+    pub(crate) const fn elements(&self) -> [usize; 2] {
+        self.elements
+    }
+
+    /// Occupied numerical owners remain resident even when an individual extent is empty.
+    pub(crate) fn has_owners(&self) -> bool {
+        (self.single.iter().count() + self.double.iter().count()) != 0
+    }
+    /// Native arena inventory visits every occupied or vacant slot once.
+    pub(crate) const fn scan_work(&self) -> usize {
+        self.single.scan_work() + self.double.scan_work()
+    }
+
+    /// Actual observable backend row capacities and complete slot buffers.
+    pub(crate) fn owned_bytes(&self) -> Result<usize, HeapError> {
+        let mut bytes = self
+            .single
+            .owned_bytes()?
+            .checked_add(self.double.owned_bytes()?)
+            .ok_or(HeapError::Capacity)?;
+        for (_, matrix) in self.single.iter() {
+            bytes = bytes
+                .checked_add(
+                    matrix
+                        .col_stride()
+                        .unsigned_abs()
+                        .checked_mul(size_of::<f32>())
+                        .ok_or(HeapError::Capacity)?,
+                )
+                .ok_or(HeapError::Capacity)?;
+        }
+        for (_, matrix) in self.double.iter() {
+            bytes = bytes
+                .checked_add(
+                    matrix
+                        .col_stride()
+                        .unsigned_abs()
+                        .checked_mul(size_of::<f64>())
+                        .ok_or(HeapError::Capacity)?,
+                )
+                .ok_or(HeapError::Capacity)?;
+        }
+        Ok(bytes)
+    }
+
+    /// Plan amortized table growth after same-call retirement reuse, before slab allocation.
+    pub(crate) fn growth_bytes<P: Scalar + 'static>(
+        &self,
+        count: usize,
+        retired: &(impl Iterator<Item = Region> + Clone),
+    ) -> Result<(usize, usize), HeapError> {
+        let reuses = |key| (*retired).clone().any(|region| region.arena == key);
+        match Format::of::<P>() {
+            Format::Binary32 => self.single.growth_bytes_for(count, None, reuses),
+            Format::Binary64 => self.double.growth_bytes_for(count, None, reuses),
+        }
+    }
+
+    /// Statistical publication replaces an unpublished reservation after its initial growth.
+    pub(crate) fn growth_bytes_sequence<P: Scalar + 'static>(
+        &self,
+        first: usize,
+        last: usize,
+    ) -> Result<(usize, usize), HeapError> {
+        match Format::of::<P>() {
+            Format::Binary32 => self.single.growth_bytes_sequence(first, last),
+            Format::Binary64 => self.double.growth_bytes_sequence(first, last),
+        }
+    }
+
+    /// Dense relocation inserts one owner at a time into the matching empty arena.
+    pub(crate) fn dense_backing_bytes(
+        format: Format,
+        old: usize,
+        count: usize,
+    ) -> Result<usize, HeapError> {
+        match format {
+            Format::Binary32 => Slots::<Mat<f32>>::dense_backing_bytes(old, count),
+            Format::Binary64 => Slots::<Mat<f64>>::dense_backing_bytes(old, count),
+        }
+    }
+
     /// Current physical-layout epoch; it advances only on complete relocation.
     pub(crate) const fn epoch(&self) -> u64 {
         self.epoch
@@ -92,16 +183,30 @@ impl Storage {
         payloads: &[&[P]],
         retired: &[Region],
         limits: HeapLimits,
+        permit: &crate::heap::resources::ResourcePermit,
     ) -> Result<PreparedStorage, HeapError> {
-        let (elements, retired_keys) = self.preflight::<P>(payloads, retired, limits)?;
+        self.prepare_iter(payloads.iter().copied(), retired, limits, permit)
+    }
+
+    /// Borrow payload slices directly from their owners without allocating a reference vector.
+    pub(crate) fn prepare_iter<'a, P: Scalar + 'static>(
+        &mut self,
+        payloads: impl Iterator<Item = &'a [P]> + Clone,
+        retired: &[Region],
+        limits: HeapLimits,
+        permit: &crate::heap::resources::ResourcePermit,
+    ) -> Result<PreparedStorage, HeapError> {
+        let count = payloads.clone().count();
+        permit.storage(self.epoch)?;
+        let (elements, retired_keys) = self.preflight::<P>(payloads.clone(), retired, limits)?;
         match Format::of::<P>() {
             Format::Binary32 => {
-                let plan =
-                    self.single
-                        .change(payloads.len(), None, &retired_keys, limits.descriptors)?;
+                let plan = self
+                    .single
+                    .change(count, None, &retired_keys, limits.descriptors)?;
                 let mut matrices = Vec::new();
                 matrices
-                    .try_reserve_exact(payloads.len())
+                    .try_reserve_exact(count)
                     .map_err(|_| HeapError::Capacity)?;
                 for values in payloads {
                     matrices.push(pack_single(values)?);
@@ -113,12 +218,12 @@ impl Storage {
                 })
             }
             Format::Binary64 => {
-                let plan =
-                    self.double
-                        .change(payloads.len(), None, &retired_keys, limits.descriptors)?;
+                let plan = self
+                    .double
+                    .change(count, None, &retired_keys, limits.descriptors)?;
                 let mut matrices = Vec::new();
                 matrices
-                    .try_reserve_exact(payloads.len())
+                    .try_reserve_exact(count)
                     .map_err(|_| HeapError::Capacity)?;
                 for values in payloads {
                     matrices.push(pack_double(values)?);
@@ -133,9 +238,9 @@ impl Storage {
     }
 
     /// Validate old allocations and account for the complete future live set.
-    fn preflight<P: Scalar + 'static>(
+    fn preflight<'a, P: Scalar + 'static>(
         &self,
-        payloads: &[&[P]],
+        payloads: impl Iterator<Item = &'a [P]>,
         retired: &[Region],
         limits: HeapLimits,
     ) -> Result<(usize, Vec<Key>), HeapError> {
@@ -216,7 +321,9 @@ impl Storage {
 }
 
 /// Check scalar address arithmetic for every scratch allocation before entering faer.
-fn payload_size<P: Scalar>(payloads: &[&[P]]) -> Result<usize, HeapError> {
+fn payload_size<'a, P: Scalar + 'a>(
+    payloads: impl Iterator<Item = &'a [P]>,
+) -> Result<usize, HeapError> {
     let mut amount = 0_usize;
     for values in payloads {
         let bytes = values
@@ -345,7 +452,14 @@ mod tests {
     fn layout_epoch_exhaustion_never_wraps() -> Result<(), HeapError> {
         let mut storage = Storage::new();
         storage.epoch = u64::MAX;
-        let prepared = storage.prepare::<f64>(&[&[7.0]], &[], HeapLimits::default())?;
+        let permit = crate::heap::resources::ResourcePermit {
+            scope: 0,
+            account: None,
+            epoch: u64::MAX,
+            retained: 0,
+            peak: 0,
+        };
+        let prepared = storage.prepare::<f64>(&[&[7.0]], &[], HeapLimits::default(), &permit)?;
         let arena = *prepared.keys().first().ok_or(HeapError::Capacity)?;
         storage.publish(prepared);
         let region = Region {

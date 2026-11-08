@@ -240,3 +240,63 @@ fn bounded_reading_storage_refusal_is_atomic() -> TestResult {
     );
     unchanged(&heap, &readings, handle, before)
 }
+
+/// Three old slabs, three new slabs and three complete raw copies coexist during replacement.
+fn physical_boundaries<P: Scalar + 'static>() -> TestResult {
+    for succeeds in [false, true] {
+        let (mut heap, readings, handle, _) = fixture::<P>()?;
+        let before = heap.value(handle)?.stamp();
+        let staged = 6 * 64
+            + 3 * size_of::<faer::Mat<P>>()
+            + 9 * size_of::<crate::heap::identity::Key>()
+            + 3 * size_of::<Vec<P>>()
+            + 3 * size_of::<crate::storage::Region>()
+            + 6 * size_of::<P>();
+        let limit = staged - usize::from(!succeeds);
+        let injection = crate::loan::fault::Injection::after(if succeeds { usize::MAX } else { 0 });
+        let result = heap.replace_reading_bundle_with_policy(
+            &readings[1],
+            &[P::from_u8(3)],
+            &[P::from_u8(2)],
+            &[P::ONE],
+            &mut ledger()?,
+            crate::heap::resources::ResourcePolicy {
+                output: 192,
+                staged: u64::try_from(limit)?,
+            },
+        );
+        match result {
+            Ok(()) => {
+                assert!(succeeds);
+                assert_eq!(crate::loan::fault::Injection::raw_copies(), 3);
+                assert_eq!(crate::loan::fault::Injection::write_buffers(), [2, 216]);
+                assert_eq!(
+                    heap.value(handle)?.stamp().version().number(),
+                    before.version().number() + 1
+                );
+            }
+            Err(error) => {
+                assert!(!succeeds, "{error:?}");
+                assert!(
+                    matches!(error, LiveBindingError::Heap(HeapError::ResourceBytes { staged: true, used, limit: ceiling })
+                    if used == u64::try_from(staged)? && ceiling == u64::try_from(limit)?),
+                    "{error:?}"
+                );
+                assert_eq!(crate::loan::fault::Injection::raw_copies(), 0);
+                assert_eq!(crate::loan::fault::Injection::write_buffers(), [0; 2]);
+                assert_eq!(crate::loan::fault::Injection::attempts(), 0);
+                assert_eq!(heap.value(handle)?.stamp(), before);
+            }
+        }
+        drop(injection);
+    }
+    Ok(())
+}
+
+/// Bounded writes admit their whole-base copies before the first exporter in either precision.
+/// ´test:unit:loan-bounded-reading-raw-copy-byte-neighbours´
+#[test]
+fn loan_bounded_reading_raw_copy_byte_neighbours() -> TestResult {
+    physical_boundaries::<f32>()?;
+    physical_boundaries::<f64>()
+}

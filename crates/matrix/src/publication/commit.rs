@@ -45,6 +45,7 @@ impl<P: Scalar + 'static, Q: Scalar + 'static> Bound<'_, P, Q> {
         ),
         OperationError,
     > {
+        self.resource_permit.storage(self.heap.storage.epoch())?;
         if candidate.execution != self.execution || self.issued.get() != Some(candidate.token) {
             return Err(OperationError::ForeignCandidate);
         }

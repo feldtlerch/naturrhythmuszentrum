@@ -10,6 +10,17 @@ pub(crate) fn validate_outputs(
     destinations: &[(Region, &Layout)],
     work_limit: usize,
 ) -> Result<(), HeapError> {
+    if let [(region, layout)] = destinations
+        && let Some((start, end)) = layout.dense_range()?
+    {
+        if start != end {
+            region
+                .offset
+                .checked_add(end)
+                .ok_or(HeapError::ExtentOverflow)?;
+        }
+        return Ok(());
+    }
     if dense_disjoint(destinations)? {
         return Ok(());
     }

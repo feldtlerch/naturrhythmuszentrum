@@ -343,3 +343,49 @@ fn statistical_inventory_refuses_replaced_bound_lineage() -> TestResult {
     ));
     Ok(())
 }
+
+/// Independent four-source copy oracle: 35 requests, one binding, and three shared headers.
+/// The common columns, selected rows, lineage columns/root and model sources have fixed lengths.
+/// This uses only type layouts and fixture counts, never a prepared plan or its byte estimate.
+pub(crate) const fn copy_fixture_metadata_bytes() -> usize {
+    use super::plan::{Plan, RcLayout, Specification};
+    use crate::statistics::{capture::InputBinding, store::Lineage};
+    size_of::<RcLayout<Plan>>()
+        + size_of::<RcLayout<super::StatisticsInventory>>()
+        + 35 * (size_of::<Specification>() + size_of::<super::StatisticsAllocation>())
+        + size_of::<InputBinding>()
+        + size_of::<RcLayout<Lineage>>()
+        + (4 + 4 + 4 + 1) * size_of::<usize>()
+        + 4 * size_of::<crate::SourceId>()
+}
+
+/// Independent addition oracle: 39 requests, two bindings, and two newly captured lineages.
+/// Each declared operand owns its own lineage header, columns, root and model source vector.
+/// The merged common columns retain capacity eight after deduplicating the repeated four columns.
+pub(crate) const fn addition_fixture_metadata_bytes() -> usize {
+    use super::plan::{Plan, RcLayout, Specification};
+    use crate::statistics::{capture::InputBinding, store::Lineage};
+    size_of::<RcLayout<Plan>>()
+        + size_of::<RcLayout<super::StatisticsInventory>>()
+        + 39 * (size_of::<Specification>() + size_of::<super::StatisticsAllocation>())
+        + 2 * size_of::<InputBinding>()
+        + 2 * size_of::<RcLayout<Lineage>>()
+        + (8 + 8 + 2 * (4 + 1)) * size_of::<usize>()
+        + 2 * 4 * size_of::<crate::SourceId>()
+}
+
+/// Independent two-output affine oracle: 66 requests and the addition fixture's input owners.
+pub(crate) const fn affine_fixture_metadata_bytes() -> usize {
+    use super::plan::Specification;
+    addition_fixture_metadata_bytes()
+        + (66 - 39) * (size_of::<Specification>() + size_of::<super::StatisticsAllocation>())
+}
+
+/// Independent standalone four-source oracle: 22 requests, the two input owners and its own Trace.
+pub(crate) const fn cross_fixture_metadata_bytes() -> usize {
+    use super::plan::Specification;
+    addition_fixture_metadata_bytes()
+        - (39 - 22) * (size_of::<Specification>() + size_of::<super::StatisticsAllocation>())
+        + size_of::<crate::ExecutionId>()
+        + 7 * size_of::<usize>()
+}

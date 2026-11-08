@@ -64,9 +64,13 @@ impl Heap {
     ) -> Result<ReadingImport<P>, LiveBindingError> {
         super::companions::check(&coverage, &companions, regions, budget)?;
         let copies = super::admission::universe(&graph, &coverage, &companions, regions, budget)?;
-        let plan = self
-            .descriptors
-            .prepare(regions.len(), self.limits.descriptors)?;
+        let payloads = regions.iter().map(|region| region.values.as_slice());
+        let resources = self.legacy_plan::<P>(payloads.clone().map(<[P]>::len), None, &[], &[])?;
+        let permit = self.preflight_resources(
+            resources.bytes_only(),
+            crate::heap::resources::ResourcePolicy::compatibility(),
+        )?;
+        let plan = self.change_descriptors(regions.len(), None, &[], &permit)?;
         let (schemas, indices) = schemas(self, regions)?;
         let tickets = tickets::<P>(self.scope, plan.keys(), regions, &indices)?;
         let retained = super::copies::bytes(copies.capacity())?;
@@ -104,11 +108,7 @@ impl Heap {
                 self.limits.descriptors,
             )?);
         }
-        let payloads = regions
-            .iter()
-            .map(|region| region.values.as_slice())
-            .collect::<Vec<_>>();
-        let storage = self.storage.prepare(&payloads, &[], self.limits)?;
+        let storage = self.prepare_storage_iter(payloads, &[], &permit)?;
         let records = records::<P>(&group.tickets, &indices, storage.keys(), storage.epoch())?;
         let records = plan.bind(records)?;
         let bindings = super::bindings(&group);

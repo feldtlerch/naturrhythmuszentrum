@@ -108,14 +108,21 @@ fn corrected_candidate(bound: &crate::Bound<'_, f32>) -> TestResult<Candidate<f3
     let crate::binding::NativeRecipe::Solve(contract) = &bound.operation.recipe else {
         return Err("contract".into());
     };
+    let outputs = vec![restored.payload(reservation, &run)?];
+    let residence = crate::publication::CandidateResidence::new::<f32>(
+        &bound.resources.trace,
+        outputs.capacity(),
+        0,
+    )?;
     let candidate = Candidate {
         execution: bound.execution(),
         token,
         revision: bound.operation.revision(),
-        outputs: vec![restored.payload(reservation, &run)?],
+        outputs,
         evidence,
         statistics: Vec::new(),
         private: None,
+        _residence: residence,
     };
     bound.retain_consumer(&factor, contract, token)?;
     bound.issued.set(Some(token));

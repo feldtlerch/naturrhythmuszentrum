@@ -9,6 +9,7 @@ use nrz_scalar::Scalar;
 
 use super::identity::Key;
 use super::records::{Location, Meaning, Record};
+use super::resources::{ResourcePlan, ResourcePolicy, add, slab_bytes};
 use super::{Companion, Handle, Heap, HeapError, Value};
 use crate::HeapLimits;
 use crate::storage::{Format, Region, Storage};
@@ -35,11 +36,83 @@ impl Heap {
     /// Work counts copied entries in both precisions plus every gathered-map entry.
     /// Every refusal leaves all published locations, epochs and values unchanged.
     pub fn compact(&mut self) -> Result<(), HeapError> {
+        self.compact_with_policy(ResourcePolicy::compatibility())
+    }
+
+    /// Private policy seam keeps exact-byte controls on the public compaction path.
+    fn compact_with_policy(&mut self, policy: ResourcePolicy) -> Result<(), HeapError> {
         self.preflight_relocation()?;
-        let prepared = self.prepare_relocation()?;
+        let plan = self.relocation_plan()?;
+        let mut permit = self.preflight_resources(plan, policy)?;
+        permit.epoch = self
+            .storage
+            .epoch()
+            .checked_add(1)
+            .ok_or(HeapError::CounterExhausted)?;
+        let prepared = self.prepare_relocation(&permit)?;
         self.validate_relocation(&prepared)?;
         self.publish_relocation(prepared);
         Ok(())
+    }
+
+    /// Retain only dense new owners; stage the old storage and each actual copy/growth phase.
+    fn relocation_plan(&self) -> Result<ResourcePlan, HeapError> {
+        let mut counts = [0_usize; 2];
+        let mut tables = [0_usize; 2];
+        let mut retained = 0;
+        let mut peak = 0;
+        for (_, record) in self.descriptors.iter() {
+            let Location::Owned(region) = record.location else {
+                continue;
+            };
+            let index = region.format.index();
+            counts[index] = add(counts[index], 1)?;
+            let next = Storage::dense_backing_bytes(region.format, tables[index], counts[index])?;
+            let (width, slab, header) = match region.format {
+                Format::Binary32 => (
+                    size_of::<f32>(),
+                    slab_bytes::<f32>(region.length)?,
+                    size_of::<faer::Mat<f32>>(),
+                ),
+                Format::Binary64 => (
+                    size_of::<f64>(),
+                    slab_bytes::<f64>(region.length)?,
+                    size_of::<faer::Mat<f64>>(),
+                ),
+            };
+            let copy = region
+                .length
+                .checked_mul(width)
+                .ok_or(HeapError::Capacity)?;
+            let private = add(copy, size_of::<Key>())?;
+            if next > tables[index] {
+                // The old replacement backing is part of retained until this allocation drops it.
+                peak = peak.max(add(add(retained, next)?, private)?);
+            }
+            retained = add(
+                retained,
+                next.checked_sub(tables[index]).ok_or(HeapError::Capacity)?,
+            )?;
+            retained = add(retained, slab)?;
+            tables[index] = next;
+            // Slab packing follows table replacement, with one Mat header and raw copy still live.
+            peak = peak.max(add(retained, add(private, header)?)?);
+        }
+        let locations = self
+            .descriptors
+            .iter()
+            .count()
+            .checked_mul(size_of::<(Key, Region)>())
+            .ok_or(HeapError::Capacity)?;
+        let scratch = add(
+            add(self.storage.owned_bytes()?, locations)?,
+            peak.checked_sub(retained).ok_or(HeapError::Capacity)?,
+        )?;
+        Ok(ResourcePlan {
+            retained,
+            scratch,
+            ..ResourcePlan::default()
+        })
     }
 
     /// Validate current evidence and the complete copy/map work budget before backend entry.
@@ -85,7 +158,10 @@ impl Heap {
     }
 
     /// Finish all typed copies in an independent owner; visible heap storage stays untouched.
-    fn prepare_relocation(&self) -> Result<Relocation, HeapError> {
+    fn prepare_relocation(
+        &self,
+        permit: &super::resources::ResourcePermit,
+    ) -> Result<Relocation, HeapError> {
         let mut storage = self.storage.replacement()?;
         let mut locations = Vec::new();
         locations
@@ -95,10 +171,10 @@ impl Heap {
             if let Location::Owned(region) = record.location {
                 let moved = match region.format {
                     Format::Binary32 => {
-                        copy_owner::<f32>(&self.storage, region, &mut storage, self.limits)?
+                        copy_owner::<f32>(&self.storage, region, &mut storage, self.limits, permit)?
                     }
                     Format::Binary64 => {
-                        copy_owner::<f64>(&self.storage, region, &mut storage, self.limits)?
+                        copy_owner::<f64>(&self.storage, region, &mut storage, self.limits, permit)?
                     }
                 };
                 locations.push((key, moved));
@@ -156,6 +232,7 @@ fn copy_owner<P: Scalar + 'static>(
     region: Region,
     replacement: &mut Storage,
     limits: HeapLimits,
+    permit: &super::resources::ResourcePermit,
 ) -> Result<Region, HeapError> {
     let slab = source.resolve(region)?;
     let mut entries = Vec::new();
@@ -170,7 +247,7 @@ fn copy_owner<P: Scalar + 'static>(
         entries.push(slab.entry::<P>(address)?);
     }
     let payload = entries.as_slice();
-    let prepared = replacement.prepare(std::slice::from_ref(&payload), &[], limits)?;
+    let prepared = replacement.prepare(std::slice::from_ref(&payload), &[], limits, permit)?;
     let arena = *prepared.keys().first().ok_or(HeapError::Capacity)?;
     let moved = Region {
         epoch: prepared.epoch(),
@@ -189,6 +266,82 @@ mod tests {
 
     use super::{Heap, HeapError, HeapLimits};
     use crate::{Extent, Layout};
+
+    /// Historical arena vacancies belong to staging, while the dense result owns only 32 rows.
+    /// ´test:unit:loan-compaction-dense-replacement-byte-neighbours´
+    #[test]
+    fn loan_compaction_dense_replacement_byte_neighbours() -> Result<(), HeapError> {
+        let mut heap = Heap::new(HeapLimits::default())?;
+        let mut handles = Vec::new();
+        for _ in 0..4096 {
+            handles.push(
+                heap.import_represented(Extent::new(1, 1)?, &Descriptor::ratio(), &[1.0_f64])?
+                    .value(),
+            );
+        }
+        for handle in handles {
+            heap.retire(handle)?;
+        }
+        let mut handles = Vec::new();
+        let values = vec![1.0_f64; 4000];
+        for _ in 0..25 {
+            handles.push(
+                heap.import_represented(Extent::new(4000, 1)?, &Descriptor::ratio(), &values)?
+                    .value(),
+            );
+        }
+        let handle = *handles.first().ok_or(HeapError::Capacity)?;
+        let stamp = heap.value(handle)?.stamp();
+        let epoch = heap.storage.epoch();
+        let row = size_of::<(u64, Option<faer::Mat<f64>>)>();
+        let old = 25 * 4000 * size_of::<f64>() + 4096 * row;
+        let retained = 25 * 4000 * size_of::<f64>() + 32 * row;
+        let staged = old
+            + retained
+            + 25 * size_of::<(super::Key, crate::storage::Region)>()
+            + 4000 * size_of::<f64>()
+            + size_of::<super::Key>()
+            + size_of::<faer::Mat<f64>>();
+        assert_eq!(old, 1_062_144);
+        assert_eq!(retained, 802_048);
+        assert_eq!(heap.storage.owned_bytes()?, old);
+        for (is_staged, needed) in [(false, retained), (true, staged)] {
+            let mut policy = super::ResourcePolicy::compatibility();
+            let limit = u64::try_from(needed - 1).map_err(|_| HeapError::Capacity)?;
+            if is_staged {
+                policy.staged = limit;
+            } else {
+                policy.output = limit;
+            }
+            let injection = crate::loan::fault::Injection::after(0);
+            assert_eq!(
+                heap.compact_with_policy(policy),
+                Err(HeapError::ResourceBytes {
+                    staged: is_staged,
+                    used: u64::try_from(needed).map_err(|_| HeapError::Capacity)?,
+                    limit,
+                })
+            );
+            assert_eq!(crate::loan::fault::Injection::attempts(), 0);
+            drop(injection);
+            assert_eq!(heap.storage.epoch(), epoch);
+            assert_eq!(heap.storage.owned_bytes()?, old);
+        }
+        heap.compact_with_policy(super::ResourcePolicy {
+            output: u64::try_from(retained).map_err(|_| HeapError::Capacity)?,
+            staged: u64::try_from(staged).map_err(|_| HeapError::Capacity)?,
+        })?;
+        assert_eq!(heap.storage.owned_bytes()?, retained);
+        assert_eq!(heap.storage.epoch(), epoch + 1);
+        assert_eq!(heap.value(handle)?.stamp(), stamp);
+        assert_eq!(
+            heap.value(handle)?.region().get(3999, 0)?.to_bits(),
+            1.0_f64.to_bits()
+        );
+        heap.compact()?;
+        assert_eq!(heap.storage.owned_bytes()?, retained);
+        Ok(())
+    }
 
     /// An invalid alias prevents all relocation, even when its base and other maps are valid.
     /// ´test:unit:compaction-revalidates-every-alias-map´
@@ -224,7 +377,9 @@ mod tests {
         let base = heap.import_represented(Extent::new(1, 1)?, &Descriptor::ratio(), &[7.0_f64])?;
         let stamp = heap.value(base.value())?.stamp();
         let epoch = heap.value(base.value())?.region().layout_epoch();
-        let mut prepared = heap.prepare_relocation()?;
+        let mut prepared = heap.prepare_relocation(
+            &crate::heap::resources::ResourcePermit::testing(heap.storage.epoch() + 1),
+        )?;
         let (_, region) = prepared
             .locations
             .first_mut()

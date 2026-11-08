@@ -16,6 +16,8 @@ pub(crate) fn evaluate<P: Scalar + 'static>(
     input: &NormalizedView<'_, P>,
     context: &ArithmeticContext,
 ) -> Result<Vec<Entry<P>>, OperationError> {
+    #[cfg(test)]
+    crate::loan::fault::entered_kernel_allocation(false);
     let mut coefficients = buffer(map.coefficients.len())?;
     for (definition, zero) in map.coefficients.iter().zip(&map.zeros) {
         let coefficient = lower(definition, map.literals, context)?;

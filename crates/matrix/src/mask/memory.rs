@@ -3,7 +3,7 @@
 
 use super::{
     AT, MaskError, charge, count,
-    storage::{LayoutRecord, MaskRecord, Store},
+    storage::{LayoutRecord, MaskRecord, Native},
 };
 use crate::heap::identity::Key;
 use nrz_bindings::{Budget, readings::algebra::limits::BudgetKind};
@@ -11,52 +11,81 @@ use nrz_bindings::{Budget, readings::algebra::limits::BudgetKind};
 /// Pre-allocation ceilings include table capacity, payload and temporary publication vectors.
 #[derive(Clone, Copy, Debug)]
 pub(super) struct Reservation {
-    /// Simultaneously retained owners, including vacant table capacity.
+    /// Newly retained owners and actual table capacity increases.
     retained: usize,
-    /// Retained owners plus prepared keys, retired keys and unpublished owner records.
+    /// Per-call retained owners, replacement peak and temporary publication vectors.
     staged: usize,
 }
 
 impl Reservation {
     /// Plan exact growth while all previous allocations remain alive.
     pub(super) fn new(
-        store: &Store,
+        heap: &crate::Heap,
         layout_bytes: Option<usize>,
         words: Option<usize>,
         map_entries: usize,
-        retired: [usize; 2],
+        retired: [&[Key]; 2],
         budget: &mut Budget,
     ) -> Result<Self, MaskError> {
+        let store = &heap.masks;
         let layouts = usize::from(layout_bytes.is_some());
         let masks = usize::from(words.is_some());
-        let mut retained = store.owned_bytes(budget)?;
-        retained = add(
-            retained,
-            store
-                .layouts
-                .reserved_bytes(layouts)?
-                .checked_sub(store.layouts.owned_bytes()?)
-                .ok_or(MaskError::ByteOverflow)?,
-        )?;
-        retained = add(
-            retained,
-            store
-                .masks
-                .reserved_bytes(masks)?
-                .checked_sub(store.masks.owned_bytes()?)
-                .ok_or(MaskError::ByteOverflow)?,
-        )?;
+        store.owned_bytes(budget)?;
+        let layout_growth = store.layouts.growth_bytes_replacing(layouts, retired[0])?;
+        let mask_growth = store.masks.growth_bytes_replacing(masks, retired[1])?;
+        let mut retained = add(layout_growth.0, mask_growth.0)?;
         retained = add(retained, layout_bytes.unwrap_or(0))?;
         retained = add(retained, bytes::<u64>(words.unwrap_or(0))?)?;
         retained = add(retained, bytes::<usize>(map_entries)?)?;
-        let keys = add(add(layouts, masks)?, add(retired[0], retired[1])?)?;
-        let scratch = add(
-            bytes::<Key>(keys)?,
-            add(bytes::<LayoutRecord>(layouts)?, bytes::<MaskRecord>(masks)?)?,
+        retained = add(retained, layouts * crate::loan::rc_bytes::<LayoutRecord>())?;
+        retained = add(retained, masks * crate::loan::rc_bytes::<MaskRecord>())?;
+        let keys = add(
+            add(layouts, masks)?,
+            add(retired[0].len(), retired[1].len())?,
         )?;
-        Ok(Self {
+        let old_tables = add(layout_growth.1, mask_growth.1)?;
+        let mut scratch = add(
+            add(old_tables, old_tables)?,
+            add(
+                bytes::<Key>(keys)?,
+                add(
+                    bytes::<Native<LayoutRecord>>(layouts)?,
+                    bytes::<Native<MaskRecord>>(masks)?,
+                )?,
+            )?,
+        )?;
+        if layouts != 0 {
+            // Only replaced owners coexist with new payloads; pure retirement stages only keys.
+            // This preserves the per-call scope of ``rule:nrz:matrix-loans-legacy-preflight``.
+            for &key in retired[0] {
+                scratch = add(scratch, store.layouts.get(key)?.owner()?.owned_bytes()?)?;
+            }
+        }
+        let plan = crate::heap::resources::ResourcePlan {
             retained,
-            staged: add(retained, scratch)?,
+            scratch,
+            ..crate::heap::resources::ResourcePlan::default()
+        };
+        heap.preflight_resources(
+            plan,
+            crate::heap::resources::ResourcePolicy::from_budget(budget),
+        )
+        .map_err(|error| {
+            if let crate::HeapError::ResourceBytes { staged, used, .. } = error {
+                let kind = if staged {
+                    BudgetKind::StagedPayloadBytes
+                } else {
+                    BudgetKind::OutputBytes
+                };
+                if let Err(fault) = budget.check(kind, used, AT) {
+                    return MaskError::Budget(fault);
+                }
+            }
+            MaskError::Heap(error)
+        })?;
+        Ok(Self {
+            retained: plan.retained,
+            staged: add(plan.retained, plan.scratch)?,
         })
     }
 

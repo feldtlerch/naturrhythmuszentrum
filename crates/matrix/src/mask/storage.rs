@@ -7,34 +7,49 @@ use super::{
 };
 use crate::{Heap, HeapError, Layout, heap::slots::Slots};
 use nrz_bindings::Budget;
+use std::rc::Rc;
 
 /// One immutable native cell-to-component address rule.
 #[derive(Debug)]
-pub(super) struct LayoutRecord {
+pub(crate) struct LayoutRecord {
     /// Logical cells and original ordered axis association.
-    pub(super) axis: CellAxis,
+    pub(crate) axis: CellAxis,
     /// Row is cell, column is component; both strides belong to this version.
-    pub(super) components: Layout,
+    pub(crate) components: Layout,
     /// Original cell associations belong to the layout shared by all selection masks.
-    pub(super) gather: Option<CellGather>,
+    pub(crate) gather: Option<CellGather>,
+}
+
+impl LayoutRecord {
+    /// Component and gather capacities remain owned until the final layout header is destroyed.
+    pub(super) fn owned_bytes(&self) -> Result<usize, MaskError> {
+        let bytes = memory::add(
+            crate::loan::rc_bytes::<Self>(),
+            self.components.owned_bytes(),
+        )?;
+        memory::add(
+            bytes,
+            memory::bytes::<usize>(self.gather.as_ref().map_or(0, |map| map.indices.capacity()))?,
+        )
+    }
 }
 
 /// A separately owned packed allocation naming immutable layout metadata.
 #[derive(Debug)]
-pub(super) struct MaskRecord {
+pub(crate) struct MaskRecord {
     /// Layout occupation captured by the published version.
-    pub(super) layout: CellLayoutVersion,
+    pub(crate) layout: CellLayoutVersion,
     /// Zero-initialized, fixed-capacity native storage.
-    pub(super) words: Vec<u64>,
+    pub(crate) words: Vec<u64>,
 }
 
 /// Mask storage belongs to the existing heap and uses its owner identity and limits.
 #[derive(Debug)]
 pub(crate) struct Store {
     /// Immutable native cell layouts, with nonwrapping occupation generations.
-    pub(super) layouts: Slots<LayoutRecord>,
+    pub(crate) layouts: Slots<Native<LayoutRecord>>,
     /// Immutable bit allocations; changed bits require a new occupation.
-    pub(super) masks: Slots<MaskRecord>,
+    pub(crate) masks: Slots<Native<MaskRecord>>,
 }
 
 impl Store {
@@ -47,27 +62,44 @@ impl Store {
     }
 
     /// Account actual payload capacities, owner headers and retained table vacancies.
-    pub(super) fn owned_bytes(&self, budget: &mut Budget) -> Result<usize, MaskError> {
+    pub(crate) fn owned_bytes(&self, budget: &mut Budget) -> Result<usize, MaskError> {
         charge(
             budget,
             memory::add(self.layouts.scan_work(), self.masks.scan_work())?,
         )?;
+        self.inventory_bytes()
+    }
+
+    /// Common inventory counts shared native owners once at their registry roots.
+    pub(crate) fn inventory_bytes(&self) -> Result<usize, MaskError> {
         let mut bytes = memory::add(size_of::<Self>(), self.layouts.owned_bytes()?)?;
         bytes = memory::add(bytes, self.masks.owned_bytes()?)?;
-        for (_, layout) in self.layouts.iter() {
-            bytes = memory::add(bytes, layout.components.owned_bytes())?;
-            if let Some(gather) = &layout.gather {
-                bytes = memory::add(bytes, memory::bytes::<usize>(gather.indices.capacity())?)?;
-            }
+        for (_, entry) in self.layouts.iter() {
+            let Native::Published {
+                owner: layout,
+                managed: false,
+            } = entry
+            else {
+                continue;
+            };
+            bytes = memory::add(bytes, layout.owned_bytes()?)?;
         }
-        for (_, mask) in self.masks.iter() {
+        for (_, entry) in self.masks.iter() {
+            let Native::Published {
+                owner: mask,
+                managed: false,
+            } = entry
+            else {
+                continue;
+            };
+            bytes = memory::add(bytes, crate::loan::rc_bytes::<MaskRecord>())?;
             bytes = memory::add(bytes, memory::bytes::<u64>(mask.words.capacity())?)?;
         }
         Ok(bytes)
     }
 
     /// Check the owner before the ordinary slot/generation resolution.
-    pub(super) fn layout(
+    pub(crate) fn layout(
         &self,
         scope: u64,
         version: CellLayoutVersion,
@@ -75,11 +107,11 @@ impl Store {
         if version.scope != scope {
             return Err(HeapError::ForeignHandle.into());
         }
-        Ok(self.layouts.get(version.key)?)
+        self.layouts.get(version.key)?.owner().map(Rc::as_ref)
     }
 
     /// All bit readers require the exact original layout and allocation occupations.
-    pub(super) fn resolve(
+    pub(crate) fn resolve(
         &self,
         scope: u64,
         version: MaskVersion,
@@ -88,7 +120,7 @@ impl Store {
         if version.scope != scope {
             return Err(HeapError::ForeignHandle.into());
         }
-        let record = self.masks.get(version.key)?;
+        let record = self.masks.get(version.key)?.owner()?;
         let cells = self.layout(scope, version.layout)?;
         self.layout(scope, layout)?;
         if version.layout != layout || record.layout != layout {
@@ -103,7 +135,7 @@ impl Store {
     }
 
     /// Prepare the complete owner record before the no-fail slot publication.
-    pub(super) fn publish_mask(
+    pub(crate) fn publish_mask(
         &mut self,
         scope: u64,
         record: MaskRecord,
@@ -119,7 +151,7 @@ impl Store {
             layout: record.layout,
         };
         let mut records = memory::vector(1)?;
-        records.push(record);
+        records.push(Native::from(record));
         let prepared = plan.bind(records)?;
         self.masks.publish(prepared);
         Ok(version)
@@ -171,11 +203,11 @@ impl Heap {
                 .as_ref()
                 .map_or(capacity, |map| map.indices.len());
             let reservation = memory::Reservation::new(
-                &self.masks,
+                self,
                 None,
                 Some(word_count(capacity)),
                 0,
-                [0, 0],
+                [&[], &[]],
                 budget,
             )?;
             reservation.run(budget, |budget| {
@@ -216,15 +248,16 @@ impl Heap {
             if version.scope != self.scope {
                 return Err(HeapError::ForeignHandle.into());
             }
-            self.masks.masks.get(version.key)?;
-            let reservation = memory::Reservation::new(&self.masks, None, None, 0, [0, 1], budget)?;
+            self.masks.masks.get(version.key)?.unprotected()?;
+            let reservation =
+                memory::Reservation::new(self, None, None, 0, [&[], &[version.key]], budget)?;
             reservation.run(budget, |budget| {
                 charge(budget, self.masks.masks.scan_work())?;
                 let plan =
                     self.masks
                         .masks
                         .change_reserved(0, &[version.key], self.limits.descriptors)?;
-                let prepared = plan.bind(Vec::new())?;
+                let prepared = plan.bind(Vec::<MaskRecord>::new())?;
                 self.masks.masks.publish(prepared);
                 Ok(())
             })
@@ -247,7 +280,7 @@ impl Heap {
 }
 
 /// Each visited word contributes one checked native prefix count.
-pub(super) fn population(words: &[u64], budget: &mut Budget) -> Result<usize, MaskError> {
+pub(crate) fn population(words: &[u64], budget: &mut Budget) -> Result<usize, MaskError> {
     let mut total = 0_usize;
     for word in words {
         charge(budget, 1)?;
@@ -257,8 +290,55 @@ pub(super) fn population(words: &[u64], budget: &mut Budget) -> Result<usize, Ma
 }
 
 /// Isolated checked prefix arithmetic also supplies an overflow control without huge allocations.
-pub(super) fn add_population(prefix: usize, population: u32) -> Result<usize, MaskError> {
+pub(crate) fn add_population(prefix: usize, population: u32) -> Result<usize, MaskError> {
     prefix
         .checked_add(usize::try_from(population).map_err(|_| MaskError::CountOverflow)?)
         .ok_or(MaskError::CountOverflow)
+}
+
+/// Native slots are occupied before a detached owner can escape.
+#[derive(Debug)]
+pub(crate) enum Native<T> {
+    /// Prospective owner belongs to this reserved managed bundle root.
+    Reserved(crate::heap::identity::Key),
+    /// Immutable storage shared with qualified attachments when managed.
+    Published {
+        /// The unique registry root; retaining uses own explicit additional edges.
+        owner: Rc<T>,
+        /// Automatic reclamation is restricted to managed roots.
+        managed: bool,
+    },
+}
+impl<T> From<T> for Native<T> {
+    fn from(value: T) -> Self {
+        Self::Published {
+            owner: Rc::new(value),
+            managed: false,
+        }
+    }
+}
+impl<T> Native<T> {
+    /// Exact bundle that occupies a private native reservation.
+    pub(crate) const fn reserved_root(&self) -> Option<crate::heap::identity::Key> {
+        match self {
+            Self::Reserved(root) => Some(*root),
+            Self::Published { .. } => None,
+        }
+    }
+    /// A reserved slot cannot expose an incomplete native owner.
+    pub(crate) fn owner(&self) -> Result<&Rc<T>, MaskError> {
+        match self {
+            Self::Reserved(_) => Err(HeapError::OwnershipPending.into()),
+            Self::Published { owner, .. } => Ok(owner),
+        }
+    }
+    /// Refuse eager replacement or retirement while a bundle retains this owner.
+    pub(crate) fn unprotected(&self) -> Result<(), MaskError> {
+        let owner = self.owner()?;
+        if Rc::strong_count(owner) == 1 {
+            Ok(())
+        } else {
+            Err(HeapError::PinnedUses.into())
+        }
+    }
 }

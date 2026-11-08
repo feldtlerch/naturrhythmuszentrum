@@ -44,11 +44,11 @@ impl Heap {
             }
             let components = Layout::contiguous(Extent::new(capacity, components)?)?;
             let reservation = memory::Reservation::new(
-                &self.masks,
+                self,
                 Some(0),
                 Some(word_count(capacity)),
                 population,
-                [0, 0],
+                [&[], &[]],
                 budget,
             )?;
             reservation.run(budget, |budget| {
@@ -124,12 +124,12 @@ impl Heap {
             layout: layout_version,
         };
         let mut layout_records = memory::vector(1)?;
-        layout_records.push(layout);
+        layout_records.push(super::storage::Native::from(layout));
         let mut mask_records = memory::vector(1)?;
-        mask_records.push(MaskRecord {
+        mask_records.push(super::storage::Native::from(MaskRecord {
             layout: layout_version,
             words,
-        });
+        }));
         let layouts = layouts.bind(layout_records)?;
         let masks = masks.bind(mask_records)?;
         self.masks.layouts.publish(layouts);

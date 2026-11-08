@@ -51,7 +51,7 @@ impl<P: Scalar + 'static> Plan<P> {
             covariance: Some(covariance),
             means,
         };
-        let mut result = crate::binding::buffer(operation.outputs().len())?;
+        let mut result = super::resources::owner_buffer(operation.outputs().len())?;
         for slot in 0..operation.outputs().len() {
             result.push(self.output(operation, slot, &mut operands, &context, &mut work)?);
         }
@@ -309,14 +309,16 @@ impl<P: Scalar + 'static> Plan<P> {
         drop(first);
         drop(transposed);
         let means = self.planned_means(&affine, context, &mut work, run)?;
-        Ok(vec![MomentPayload {
+        let mut result = super::resources::owner_buffer(1)?;
+        result.push(MomentPayload {
             lineage: lineage.clone(),
             sensitivity,
             covariance: output,
             jacobian: affine.jacobian,
             derivative: self.derivative.clone(),
             means,
-        }])
+        });
+        Ok(result)
     }
     /// Explicit affine means retain their own planned source parameters and numerical errors.
     fn planned_means<Q: Scalar + 'static>(

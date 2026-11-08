@@ -15,7 +15,7 @@ pub(crate) fn capture<P: Scalar + 'static>(
     context: &ArithmeticContext,
     run: &super::inventory::Run,
 ) -> Result<Vec<Matrix<P>>, OperationError> {
-    let mut result = crate::binding::buffer(values.len())?;
+    let mut result = super::resources::owner_buffer(values.len())?;
     for (slot, &handle) in values.iter().enumerate() {
         let value = heap.value(handle)?;
         let bounds = heap.selected_bound(handle)?;

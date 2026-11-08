@@ -52,6 +52,46 @@ pub struct Candidate<P: Scalar> {
     pub(crate) statistics: Vec<crate::statistics::MomentPayload<P>>,
     /// Ticket authority follows the original candidate arrays until their destruction.
     pub(crate) private: Option<crate::private::Run>,
+    /// Declared last so both outer vector backings are destroyed before their debit closes.
+    pub(crate) _residence: CandidateResidence,
+}
+
+/// One non-cloneable debit follows the candidate's actual outer vector capacities.
+#[derive(Debug)]
+pub(crate) struct CandidateResidence {
+    /// Existing execution counters retain no numerical payload.
+    trace: crate::execution::Trace,
+    /// Combined physical backing bytes, independent of destination elements.
+    bytes: usize,
+}
+
+impl CandidateResidence {
+    /// Register both actual capacities once, without creating another heap allocation.
+    pub(crate) fn new<P: Scalar>(
+        trace: &crate::execution::Trace,
+        outputs: usize,
+        statistics: usize,
+    ) -> Result<Self, crate::OperationError> {
+        let bytes = outputs
+            .checked_mul(size_of::<Payload<P>>())
+            .and_then(|ordinary| {
+                statistics
+                    .checked_mul(size_of::<crate::statistics::MomentPayload<P>>())
+                    .and_then(|moments| ordinary.checked_add(moments))
+            })
+            .ok_or(crate::OperationError::ResourceLimit)?;
+        trace.retain_residence(bytes)?;
+        Ok(Self {
+            trace: trace.clone(),
+            bytes,
+        })
+    }
+}
+
+impl Drop for CandidateResidence {
+    fn drop(&mut self) {
+        self.trace.release_residence(self.bytes);
+    }
 }
 
 impl<P: Scalar> Candidate<P> {
@@ -82,4 +122,31 @@ pub(crate) struct Payload<P: Scalar> {
     pub(crate) evaluation: Option<crate::private::Buffer<P>>,
     /// Three overlapping product derivation regions, when carried or computed.
     pub(crate) contributions: Option<[Vec<P>; 3]>,
+}
+
+impl<P: Scalar> Payload<P> {
+    /// Every escaped ordinary channel retains its original measured residence debit.
+    pub(crate) fn retain_residence(
+        &mut self,
+        trace: &crate::execution::Trace,
+    ) -> Result<(), crate::OperationError> {
+        let companions = self
+            .contributions
+            .iter()
+            .flatten()
+            .try_fold(0_usize, |sum, values| {
+                values
+                    .capacity()
+                    .checked_mul(size_of::<P>())
+                    .and_then(|bytes| sum.checked_add(bytes))
+                    .ok_or(crate::OperationError::ResourceLimit)
+            })?;
+        // Contributions cannot leave this private payload separately. Their debit shares the
+        // center's original authority without enlarging any candidate header.
+        self.centers.retain_residence(trace, companions)?;
+        for values in self.bounds.iter_mut().chain(self.evaluation.iter_mut()) {
+            values.retain_residence(trace, 0)?;
+        }
+        Ok(())
+    }
 }

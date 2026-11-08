@@ -38,7 +38,7 @@ impl PlanBudget<'_> {
 }
 
 /// One caller-prepared derivative owner for the selected closed operation.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) enum PreparedDerivative<P: Scalar> {
     /// Numerical reciprocal derivative already bound to its original sources.
     Reciprocal(std::rc::Rc<crate::ReciprocalDerivativeEvaluation<P>>),
@@ -68,7 +68,7 @@ pub(crate) struct Plan<P: Scalar> {
 }
 impl<P: Scalar + 'static> Plan<P> {
     /// Replace unconditional refusal with complete source, recipe and work validation.
-    pub(crate) fn capture<Q: Scalar + 'static>(
+    pub(crate) fn prepare<Q: Scalar + 'static>(
         heap: &Heap,
         operation: &CheckedOperation,
         handles: &[Handle<Value, P>],
@@ -124,7 +124,6 @@ impl<P: Scalar + 'static> Plan<P> {
         if !operation.carries_statistics() {
             return Err(crate::HeapError::MissingCoverage.into());
         }
-        let context = ArithmeticContext::new()?;
         let mut bindings = crate::binding::buffer(handles.len())?;
         for (slot, &handle) in handles.iter().enumerate() {
             let binding = super::capture::inspect(heap, handle, slot, joint)?;
@@ -147,16 +146,28 @@ impl<P: Scalar + 'static> Plan<P> {
         if !matches!(operation.recipe, NativeRecipe::Solve(_)) {
             run.backend_allowance(result.work, size_of::<Q>())?;
         }
-        for slot in 0..handles.len() {
-            result
-                .inputs
-                .push(super::capture::input(heap, slot, &run, &context)?);
-        }
-        super::structure::inputs(operation, &result.inputs, &context, joint, &run)?;
-        result.points = super::operating::capture(heap, handles, &context, &run)?;
         result.inventory = Some(run);
-        result.record_law(operation, &context)?;
         Ok(result)
+    }
+    /// Numerical capture starts only after the complete common physical plan is admitted.
+    pub(crate) fn capture(
+        &mut self,
+        heap: &Heap,
+        operation: &CheckedOperation,
+        handles: &[Handle<Value, P>],
+    ) -> Result<(), OperationError> {
+        let Some(run) = &self.inventory else {
+            return Ok(());
+        };
+        let context = ArithmeticContext::new()?;
+        self.inputs = super::resources::owner_buffer(handles.len())?;
+        for slot in 0..handles.len() {
+            self.inputs
+                .push(super::capture::input(heap, slot, run, &context)?);
+        }
+        super::structure::inputs(operation, &self.inputs, &context, self.limits, run)?;
+        self.points = super::operating::capture(heap, handles, &context, run)?;
+        self.record_law(operation, &context)
     }
     /// Record the classified law on the same immutable allocation inventory.
     fn record_law(

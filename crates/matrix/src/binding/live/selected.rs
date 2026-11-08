@@ -217,7 +217,7 @@ impl Heap {
             &indices,
             self.limits.layout_work,
         )?;
-        let plan = self.descriptors.prepare(1, self.limits.descriptors)?;
+        let plan = self.prepare_descriptors(1)?;
         let key = *plan.keys().first().ok_or(HeapError::Capacity)?;
         self.symbols
             .reserve_selection(key, self.limits.descriptors)?;

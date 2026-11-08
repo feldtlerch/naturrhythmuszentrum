@@ -99,8 +99,8 @@ fn prepare<P: Scalar + 'static>(
         return Ok(None);
     };
     let target = *plan.keys.first().ok_or(HeapError::Capacity)?;
-    let mut handles = crate::binding::buffer(3)?;
-    for position in 3..6 {
+    let mut handles = [Handle::new(plan.scope, target); 3];
+    for (position, handle) in (3..6).zip(&mut handles) {
         let key = *plan.keys.get(position).ok_or(HeapError::Capacity)?;
         let arena = *plan.arenas.get(position).ok_or(HeapError::Capacity)?;
         records.push(Record {
@@ -118,9 +118,9 @@ fn prepare<P: Scalar + 'static>(
                 stamp: plan.stamp,
             },
         });
-        handles.push(Handle::new(plan.scope, key));
+        *handle = Handle::new(plan.scope, key);
     }
-    Ok(Some(handles.try_into().map_err(|_| HeapError::Capacity)?))
+    Ok(Some(handles))
 }
 
 /// Capture all existing selected contribution views as one all-or-none inventory.
@@ -185,10 +185,11 @@ pub(crate) fn finish<P: Scalar + 'static>(
     bound: Option<Key>,
     evaluation: Option<Handle<Companion, P>>,
     records: &mut Vec<Record>,
+    start: usize,
 ) -> Result<PublishedBundle<P>, HeapError> {
     let contributions = prepare(plan, records)?;
     let target = *plan.keys.first().ok_or(HeapError::Capacity)?;
-    let record = records.first_mut().ok_or(HeapError::Capacity)?;
+    let record = records.get_mut(start).ok_or(HeapError::Capacity)?;
     let Meaning::Value {
         evaluation: edge,
         contributions: terms,

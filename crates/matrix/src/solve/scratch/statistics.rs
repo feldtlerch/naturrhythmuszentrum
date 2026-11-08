@@ -83,7 +83,10 @@ pub(super) fn has_means<P: Scalar>(plan: &crate::statistics::Plan<P>) -> bool {
     plan.lineage
         .as_ref()
         .is_some_and(|lineage| lineage.assurance == MomentAssurance::AffineMoments)
-        && plan.inputs.iter().all(|input| input.means.is_some())
+        && plan
+            .inventory
+            .as_ref()
+            .is_some_and(crate::statistics::inventory::Run::has_means)
 }
 impl Stage {
     /// Contraction indices have distinct mathematical products under one original source relation.

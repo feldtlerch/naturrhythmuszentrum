@@ -7,11 +7,11 @@ use crate::{HeapError, Layout, heap::identity::Key};
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CellAxis {
     /// Owning heap, checked before interpreting an identity.
-    pub(super) scope: u64,
+    pub(crate) scope: u64,
     /// Nonwrapping original axis identity.
-    pub(super) identity: u64,
+    pub(crate) identity: u64,
     /// Logical cells, never the number of floating components.
-    pub(super) capacity: usize,
+    pub(crate) capacity: usize,
 }
 
 impl CellAxis {
@@ -26,27 +26,27 @@ impl CellAxis {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CellLayoutVersion {
     /// Original numerical owner.
-    pub(super) scope: u64,
+    pub(crate) scope: u64,
     /// Layout table occupation; replacing a component stride advances its generation.
-    pub(super) key: Key,
+    pub(crate) key: Key,
 }
 
 /// Validated identity correspondence; each operation rechecks its layout occupation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CellCorrespondence {
     /// The only layout whose bit positions may be combined through this correspondence.
-    pub(super) layout: CellLayoutVersion,
+    pub(crate) layout: CellLayoutVersion,
 }
 
 /// An immutable packed allocation occupation qualified by its cell-layout version.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MaskVersion {
     /// Exact heap owner, checked before indexing.
-    pub(super) scope: u64,
+    pub(crate) scope: u64,
     /// Allocation occupation; retirement and reuse never revive a stale version.
-    pub(super) key: Key,
+    pub(crate) key: Key,
     /// Capacity, component strides and ordered axis belong to this layout version.
-    pub(super) layout: CellLayoutVersion,
+    pub(crate) layout: CellLayoutVersion,
 }
 
 impl MaskVersion {
@@ -64,13 +64,13 @@ impl MaskVersion {
 #[derive(Debug)]
 pub struct CellGather {
     /// Immediate input branch occupation whose selected cells moved.
-    pub(super) parent: MaskVersion,
+    pub(crate) parent: MaskVersion,
     /// Original immutable branch occupation and layout association.
-    pub(super) source: MaskVersion,
+    pub(crate) source: MaskVersion,
     /// Original ordered axis, retained independently of future slot reuse.
-    pub(super) axis: CellAxis,
+    pub(crate) axis: CellAxis,
     /// Strictly increasing original cell indices, checked before publication.
-    pub(super) indices: Vec<usize>,
+    pub(crate) indices: Vec<usize>,
 }
 
 impl CellGather {
@@ -103,13 +103,13 @@ impl CellGather {
 #[derive(Debug)]
 pub struct MaskView<'a> {
     /// Actual immutable allocation.
-    pub(super) words: &'a [u64],
+    pub(crate) words: &'a [u64],
     /// Validated logical cell axis.
-    pub(super) axis: CellAxis,
+    pub(crate) axis: CellAxis,
     /// Row is the logical cell; column is the floating component.
-    pub(super) components: &'a Layout,
+    pub(crate) components: &'a Layout,
     /// Native gather edge when this allocation is a compacted branch.
-    pub(super) gather: Option<&'a CellGather>,
+    pub(crate) gather: Option<&'a CellGather>,
 }
 
 impl MaskView<'_> {

@@ -9,7 +9,7 @@ mod trace;
 pub(crate) use lease::{ErasedFactor, Lease};
 pub use record::{ExecutionInventory, SharedFactorAllocation};
 pub(crate) use registry::Registry;
-pub(crate) use trace::Trace;
+pub(crate) use trace::{Trace, WeakTrace};
 
 #[cfg(test)]
 mod tests;

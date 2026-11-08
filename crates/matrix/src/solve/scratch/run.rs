@@ -200,7 +200,7 @@ fn check_budget(bytes: usize, budget: &Budget) -> Result<(), OperationError> {
     Ok(())
 }
 /// Charge aligned plan, source selection copies and the maximum historical receipt exactly once.
-fn metadata(count: usize, sources: usize, maps: usize) -> Result<usize, OperationError> {
+pub(super) fn metadata(count: usize, sources: usize, maps: usize) -> Result<usize, OperationError> {
     let fixed = size_of::<RcLayout>() + size_of::<super::SolveInventory>() + 2 * size_of::<usize>();
     count
         .checked_mul(size_of::<Specification>() + size_of::<super::SolveAllocation>())

@@ -10,6 +10,7 @@
 //! The implemented homogeneous operation subset supports checked copy, homogeneous affine conversions and the deterministic kernels documented in `src/kernels/`, plus joint source declarations and covariance admission. Execution of mixed physical entries remains unavailable through this facade; float storage itself imposes no physical homogeneity principle. `Factor` and `Workspace` are category markers only. Numerical conversions use scalar outward enclosures and accuracy nonnegative bounds.
 
 mod aliases;
+pub(crate) mod descriptors;
 mod error;
 mod extent;
 pub(crate) mod identity;
@@ -18,6 +19,7 @@ mod limits;
 pub(crate) mod publication;
 pub(crate) mod records;
 mod relocation;
+pub(crate) mod resources;
 mod scatter;
 pub(crate) mod schema;
 pub(crate) mod slots;
@@ -34,16 +36,14 @@ pub use records::{Coverage, PublishedBundle};
 pub use views::{CompanionView, RegionView, ValueView};
 
 use crate::storage::Storage;
-use records::Record;
+use descriptors::Descriptors;
 use schema::Schema;
-use slots::Slots;
 
 /// Single numerical owner of precision-separated faer arenas and descriptor slots.
 ///
 /// Imports state represented-only or declared-bound coverage explicitly. This subset
 /// admits coherent homogeneous imports and publishes the supported checked operation results.
 /// Descriptor-side interpretation records are opaque to numerical storage.
-#[derive(Debug)]
 pub struct Heap {
     /// Unique process-local scope; a foreign handle is refused before indexing.
     pub(crate) scope: u64,
@@ -53,8 +53,10 @@ pub struct Heap {
     pub(crate) storage: Storage,
     /// Independently owned packed masks and their immutable native cell layouts.
     pub(crate) masks: crate::mask::Store,
+    /// Managed owners, conservative debits and weak use indexes.
+    pub(crate) loans: crate::loan::Registry,
     /// Category-bearing descriptor occupations.
-    pub(crate) descriptors: Slots<Record>,
+    pub(crate) descriptors: Descriptors,
     /// Immutable numerical shapes; descriptor-side equality selects their opaque identities.
     pub(crate) schemas: Vec<Schema>,
     /// Opaque descriptor-side interpretations, never inspected by numerical storage.
@@ -71,6 +73,17 @@ pub struct Heap {
     pub(crate) executions: crate::execution::Registry,
 }
 
+impl std::fmt::Debug for Heap {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("Heap")
+            .field("scope", &self.scope)
+            .field("limits", &self.limits)
+            .field("epoch", &self.storage.epoch())
+            .finish_non_exhaustive()
+    }
+}
+
 impl Heap {
     /// Create an empty owner with explicit capacities.
     ///
@@ -82,7 +95,8 @@ impl Heap {
             limits,
             storage: Storage::new(),
             masks: crate::mask::Store::new(),
-            descriptors: Slots::new(),
+            loans: crate::loan::Registry::new(),
+            descriptors: Descriptors::new(),
             schemas: Vec::new(),
             meanings: Vec::new(),
             provenance: crate::provenance::Provenance::new(),

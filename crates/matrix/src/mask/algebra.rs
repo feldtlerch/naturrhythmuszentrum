@@ -115,11 +115,11 @@ impl Heap {
             let capacity = self.mask(left, correspondence.layout)?.axis().capacity();
             self.mask(right, correspondence.layout)?;
             let reservation = memory::Reservation::new(
-                &self.masks,
+                self,
                 None,
                 Some(word_count(capacity)),
                 0,
-                [0, 0],
+                [&[], &[]],
                 budget,
             )?;
             reservation.run(budget, |budget| {
@@ -210,11 +210,11 @@ impl Heap {
                 self.mask(input, correspondence.layout)?;
             }
             let reservation = memory::Reservation::new(
-                &self.masks,
+                self,
                 None,
                 Some(word_count(capacity)),
                 0,
-                [0, 0],
+                [&[], &[]],
                 budget,
             )?;
             reservation.run(budget, |budget| {

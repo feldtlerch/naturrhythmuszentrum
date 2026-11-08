@@ -255,7 +255,7 @@ fn lc_energy_native_owner_costs_and_boundaries() -> TestResult {
             inventory.backend_allowance_bytes(),
         ]);
     }
-    assert_eq!(profiles, WORK.map(|work| [work, 0, 0, 0, 168, 0]));
+    assert_eq!(profiles, WORK.map(|work| [work, 0, 0, 0, 176, 0]));
     Ok(())
 }
 
@@ -277,7 +277,7 @@ fn native_boundaries(
         );
     }
     for kind in [1, 2] {
-        for (limit, success) in [(168, true), (167, false)] {
+        for (limit, success) in [(176, true), (175, false)] {
             let resources = super::costs::policy(kind, limit, 0)?;
             assert_eq!(
                 Binding::from_symbols(

@@ -16,6 +16,7 @@ use super::schema::{BindingSchema, check_quantity, intern};
 use crate::heap::identity::identity;
 use crate::heap::publication::{SchemaPlan, prepare_records, scan};
 use crate::heap::records::{Meaning, Record};
+use crate::heap::resources::ResourcePolicy;
 use crate::heap::slots::{PreparedSlots, SlotPlan};
 use crate::storage::PreparedStorage;
 use crate::{
@@ -156,16 +157,20 @@ impl Heap {
         let (mut schemas, meanings) = self.prepare_schemas(extent, quantity, bounds.is_some())?;
         schemas.evaluation = errors.and(schemas.bound);
         let count = 1 + usize::from(bounds.is_some()) + usize::from(errors.is_some());
-        let descriptors = self.descriptors.prepare(count, self.limits.descriptors)?;
         let payloads = [centers, bounds.unwrap_or(&[]), errors.unwrap_or(&[])];
         let inputs = payloads.get(..count).ok_or(HeapError::LengthMismatch)?;
+        let plan =
+            self.legacy_plan::<P>(inputs.iter().map(|values| values.len()), None, &[], &[])?;
+        let permit =
+            self.preflight_resources(plan.bytes_only(), ResourcePolicy::compatibility())?;
+        let descriptors = self.change_descriptors(count, None, &[], &permit)?;
         let stamp = ValueStamp {
             id: ValueId(identity()?),
             version: ValueVersion(1),
         };
         let bundle = super::symbols::planned_bundle::<P>(self.scope, descriptors.keys(), &schemas)?;
         let covers = super::symbols::prepare(self, symbols, bundle, stamp)?;
-        let storage = self.storage.prepare(inputs, &[], self.limits)?;
+        let storage = self.prepare_storage(inputs, &[], &permit)?;
         let mut prepared = assemble(
             self.scope,
             extent,
@@ -190,11 +195,12 @@ impl Heap {
     pub(crate) fn replace_base<P: Scalar + 'static>(
         &mut self,
         handle: Handle<Value, P>,
-        expected: ValueVersion,
+        snapshot: &crate::heap::lifecycle::Snapshot,
+        retirement: &crate::heap::lifecycle::Retirement,
         centers: &[P],
         bounds: Option<&[P]>,
+        permit: &crate::heap::resources::ResourcePermit,
     ) -> Result<PublishedBundle<P>, HeapError> {
-        let snapshot = self.snapshot(handle, Some(expected))?;
         let next = snapshot
             .stamp
             .version
@@ -212,15 +218,10 @@ impl Heap {
         scan(extent, centers, bounds)?;
         let (schema_plan, meanings) = self.prepare_schemas(extent, &quantity, bounds.is_some())?;
         let count = 1 + usize::from(bounds.is_some());
-        let retired = snapshot.retire_keys(false)?;
-        let descriptors = self.descriptors.change(
-            count,
-            Some(snapshot.key),
-            &retired,
-            self.limits.descriptors,
-        )?;
         let payloads = [centers, bounds.unwrap_or(&[])];
         let inputs = payloads.get(..count).ok_or(HeapError::LengthMismatch)?;
+        let descriptors =
+            self.change_descriptors(count, Some(snapshot.key), retirement.keys(false), permit)?;
         let stamp = ValueStamp {
             id: snapshot.stamp.id,
             version: ValueVersion(next),
@@ -228,9 +229,7 @@ impl Heap {
         let bundle =
             super::symbols::planned_bundle::<P>(self.scope, descriptors.keys(), &schema_plan)?;
         let covers = super::symbols::prepare(self, &symbols, bundle, stamp)?;
-        let storage = self
-            .storage
-            .prepare(inputs, &snapshot.regions()?, self.limits)?;
+        let storage = self.prepare_storage(inputs, retirement.regions(), permit)?;
         let mut prepared = assemble(
             self.scope,
             extent,

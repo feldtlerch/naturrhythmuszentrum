@@ -10,6 +10,8 @@ pub(crate) fn product<P: Scalar + 'static>(
     left: &NormalizedView<'_, P>,
     right: &NormalizedView<'_, P>,
 ) -> Result<Vec<P>, OperationError> {
+    #[cfg(test)]
+    crate::loan::fault::entered_product_backend();
     match P::PRECISION {
         nrz_scalar::Precision::F32 => single(left, right),
         nrz_scalar::Precision::F64 => double(left, right),

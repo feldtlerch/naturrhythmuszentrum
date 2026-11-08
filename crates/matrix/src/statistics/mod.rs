@@ -36,6 +36,9 @@ mod product;
 mod publish;
 mod quantity;
 pub(crate) mod reciprocal;
+mod resources;
+#[cfg(test)]
+pub(crate) use resources::fixture_header_sizes;
 pub(crate) mod store;
 mod structure;
 

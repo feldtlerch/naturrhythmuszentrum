@@ -36,36 +36,49 @@ pub(crate) struct Snapshot {
     pub(crate) contributions: Option<[(Key, Region); 3]>,
 }
 
-impl Snapshot {
-    /// Complete old allocation set, validated before any retirement takes effect.
-    pub(crate) fn regions(&self) -> Result<Vec<Region>, HeapError> {
-        let mut regions = Vec::new();
-        regions
-            .try_reserve_exact(6)
-            .map_err(|_| HeapError::Capacity)?;
-        regions.push(self.region);
-        regions.extend(self.bound.map(|(_, region)| region));
-        regions.extend(self.evaluation.map(|(_, region)| region));
-        regions.extend(
-            self.contributions
-                .into_iter()
-                .flatten()
-                .map(|(_, region)| region),
-        );
-        Ok(regions)
+/// Fixed whole-bundle retirement data lives on the stack through admission and replacement.
+#[derive(Debug)]
+pub(crate) struct Retirement {
+    /// At most value, total, evaluation and three contribution occupations.
+    keys: [Key; 6],
+    /// Corresponding original allocations in the same order.
+    regions: [Region; 6],
+    /// Initialized bundle prefix.
+    length: usize,
+}
+
+impl Retirement {
+    /// The base occupation survives replacement and is included only for retirement.
+    pub(crate) fn keys(&self, include_value: bool) -> &[Key] {
+        &self.keys[usize::from(!include_value)..self.length]
     }
 
-    /// Retire the bound edge, and optionally the base value occupation.
-    pub(crate) fn retire_keys(&self, include_value: bool) -> Result<Vec<Key>, HeapError> {
-        let mut keys = Vec::new();
-        keys.try_reserve_exact(6).map_err(|_| HeapError::Capacity)?;
-        if include_value {
-            keys.push(self.key);
+    /// The complete original allocation set, without a heap-backed snapshot.
+    pub(crate) fn regions(&self) -> &[Region] {
+        &self.regions[..self.length]
+    }
+}
+
+impl Snapshot {
+    /// Capture the fixed bundle once, before admission, without allocating.
+    pub(crate) fn retirement(&self) -> Retirement {
+        let mut result = Retirement {
+            keys: [self.key; 6],
+            regions: [self.region; 6],
+            length: 0,
+        };
+        let members = std::iter::once((self.key, self.region))
+            .chain(self.bound)
+            .chain(self.evaluation)
+            .chain(self.contributions.into_iter().flatten());
+        for ((key, region), (slot, allocation)) in
+            members.zip(result.keys.iter_mut().zip(&mut result.regions))
+        {
+            *slot = key;
+            *allocation = region;
+            result.length += 1;
         }
-        keys.extend(self.bound.map(|(key, _)| key));
-        keys.extend(self.evaluation.map(|(key, _)| key));
-        keys.extend(self.contributions.into_iter().flatten().map(|(key, _)| key));
-        Ok(keys)
+        result
     }
 }
 
@@ -121,31 +134,69 @@ impl Heap {
         &mut self,
         handle: Handle<Value, P>,
     ) -> Result<(), HeapError> {
+        self.retire_with_policy(handle, super::resources::ResourcePolicy::compatibility())
+    }
+
+    /// The original retirement transaction admits removal keys with zero retained bytes.
+    fn retire_with_policy<P: Scalar + 'static>(
+        &mut self,
+        handle: Handle<Value, P>,
+        policy: super::resources::ResourcePolicy,
+    ) -> Result<(), HeapError> {
         if matches!(self.record(handle)?.meaning, Meaning::Alias { .. }) {
             let key = handle.key;
-            let plan = self.descriptors.change(
-                0,
-                None,
-                std::slice::from_ref(&key),
-                self.limits.descriptors,
-            )?;
+            let resources =
+                self.legacy_plan::<P>(std::iter::empty(), None, std::slice::from_ref(&key), &[])?;
+            let permit = self.preflight_resources(resources, policy)?;
+            let plan = self.change_descriptors(0, None, std::slice::from_ref(&key), &permit)?;
             self.descriptors.publish(plan.bind(Vec::new())?);
             return Ok(());
         }
         let snapshot = self.retirement_snapshot(handle)?;
-        let mut keys = snapshot.retire_keys(true)?;
-        for (key, record) in self.descriptors.iter() {
-            if matches!(record.meaning, Meaning::Alias { base } if base == snapshot.key) {
-                keys.try_reserve(1).map_err(|_| HeapError::Capacity)?;
-                keys.push(key);
-            }
-        }
-        let regions = snapshot.regions()?;
-        let plan = self
-            .descriptors
-            .change(0, None, &keys, self.limits.descriptors)?;
+        let retirement = snapshot.retirement();
+        let aliases = self.descriptors.iter().filter(|(_, record)| {
+            matches!(record.meaning, Meaning::Alias { base } if base == snapshot.key)
+        }).count();
+        let mut resources = self.legacy_plan::<P>(
+            std::iter::empty(),
+            None,
+            retirement.keys(true),
+            retirement.regions(),
+        )?;
+        let count = super::resources::add(retirement.keys(true).len(), aliases)?;
+        let extra_keys = if aliases == 0 {
+            0
+        } else {
+            super::resources::add(count, aliases)?
+        };
+        resources.scratch = super::resources::add(
+            resources.scratch,
+            extra_keys
+                .checked_mul(size_of::<Key>())
+                .ok_or(HeapError::Capacity)?,
+        )?;
+        let permit = self.preflight_resources(resources, policy)?;
+        let mut expanded = Vec::new();
+        let keys = if aliases == 0 {
+            retirement.keys(true)
+        } else {
+            #[cfg(test)]
+            crate::loan::fault::entered_retirement_keys();
+            expanded
+                .try_reserve_exact(count)
+                .map_err(|_| HeapError::Capacity)?;
+            expanded.extend_from_slice(retirement.keys(true));
+            expanded.extend(self.descriptors.iter().filter_map(|(key, record)| {
+                matches!(record.meaning, Meaning::Alias { base } if base == snapshot.key)
+                    .then_some(key)
+            }));
+            expanded.as_slice()
+        };
+        let plan = self.change_descriptors(0, None, keys, &permit)?;
         let descriptors = plan.bind(Vec::new())?;
-        let storage = self.storage.prepare::<P>(&[], &regions, self.limits)?;
+        let storage = self
+            .storage
+            .prepare::<P>(&[], retirement.regions(), self.limits, &permit)?;
         let invalidations = crate::binding::live::invalidation::whole(self, snapshot.key);
         self.storage.publish(storage);
         self.descriptors.publish(descriptors);
@@ -219,6 +270,70 @@ mod tests {
 
     use super::super::{Extent, HeapLimits};
     use super::{Heap, HeapError, Meaning, ValueVersion};
+
+    /// Retirement joins descriptor-removal and arena-removal keys without retaining a new owner.
+    /// ´test:unit:loan-retirement-physical-key-neighbours´
+    #[test]
+    fn loan_retirement_physical_key_neighbours() -> Result<(), HeapError> {
+        for (alias_only, aliases) in [(true, 1), (false, 0), (false, 1), (false, 7)] {
+            let mut heap = Heap::new(HeapLimits::default())?;
+            let base = heap
+                .import_represented(Extent::new(2, 1)?, &Descriptor::ratio(), &[1.0_f64; 2])?
+                .value();
+            let mut alias = base;
+            for _ in 0..aliases {
+                alias = heap.alias(
+                    base,
+                    &crate::Layout::strided(Extent::new(1, 1)?, 2, 0, 1, 1)?,
+                )?;
+            }
+            let handle = if alias_only { alias } else { base };
+            let staged = if alias_only {
+                size_of::<super::Key>()
+            } else {
+                // One slab, all descriptor removals, two arena keys and, only with aliases,
+                // one exact expanded input-key backing. The six-member snapshots are stack values.
+                let input_keys = if aliases == 0 { 0 } else { 1 + aliases };
+                64 + (3 + aliases + input_keys) * size_of::<super::Key>()
+            };
+            let injection = crate::loan::fault::Injection::after(0);
+            assert_eq!(
+                heap.retire_with_policy(
+                    handle,
+                    super::super::resources::ResourcePolicy {
+                        output: 0,
+                        staged: u64::try_from(staged - 1).map_err(|_| HeapError::Capacity)?,
+                    }
+                ),
+                Err(HeapError::ResourceBytes {
+                    staged: true,
+                    used: u64::try_from(staged).map_err(|_| HeapError::Capacity)?,
+                    limit: u64::try_from(staged - 1).map_err(|_| HeapError::Capacity)?,
+                })
+            );
+            assert_eq!(crate::loan::fault::Injection::attempts(), 0);
+            assert_eq!(crate::loan::fault::Injection::retirement_keys(), 0);
+            drop(injection);
+            assert_eq!(
+                heap.value(alias)?.region().get(0, 0)?.to_bits(),
+                1.0_f64.to_bits()
+            );
+            heap.retire_with_policy(
+                handle,
+                super::super::resources::ResourcePolicy {
+                    output: 0,
+                    staged: u64::try_from(staged).map_err(|_| HeapError::Capacity)?,
+                },
+            )?;
+            assert_eq!(
+                crate::loan::fault::Injection::retirement_keys(),
+                usize::from(!alias_only && aliases != 0)
+            );
+            assert!(matches!(heap.value(alias), Err(HeapError::StaleHandle)));
+            assert_eq!(heap.storage.elements(), [0, if alias_only { 2 } else { 0 }]);
+        }
+        Ok(())
+    }
 
     /// A maximum content version refuses replacement without changing bytes or identity.
     /// ´test:unit:value-version-exhaustion-is-atomic´

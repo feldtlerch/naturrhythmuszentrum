@@ -139,7 +139,19 @@ impl Run {
             return Err(Error::Representation.into());
         }
         let permit = self.grant(stage)?;
-        let value = allocate()?;
+        let first = !permit.plan.has_backend();
+        if first {
+            permit.plan.trace.retain_residence(permit.plan.backend)?;
+        }
+        let value = match allocate() {
+            Ok(value) => value,
+            Err(error) => {
+                if first {
+                    permit.plan.trace.release_residence(permit.plan.backend);
+                }
+                return Err(error);
+            }
+        };
         permit.plan.states[permit.slot].set(State::Live);
         Ok(Backend { value, permit })
     }
@@ -207,6 +219,19 @@ impl Run {
     }
 }
 impl Plan {
+    /// Factor stages share one original conservative backend allowance.
+    pub(super) fn has_backend(&self) -> bool {
+        Stage::ALL
+            .into_iter()
+            .zip(&self.states)
+            .any(|(stage, state)| stage.is_backend() && state.get() == State::Live)
+    }
+    /// Release after the last original backend stage ends, independently of historical receipts.
+    pub(super) fn release_backend(&self) {
+        if !self.has_backend() {
+            self.trace.release_residence(self.backend);
+        }
+    }
     /// The opaque backend request still has one checked scalar and storage representation.
     fn backend_kind(&self, stage: Stage) -> TypeId {
         if self.kind == TypeId::of::<f32>() {

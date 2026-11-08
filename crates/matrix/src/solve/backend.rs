@@ -165,6 +165,13 @@ entries_adapter!(entries_single, f32);
 entries_adapter!(entries_double, f64);
 
 impl Lu {
+    /// Borrow the original counter without extending the numerical owner's lifetime.
+    pub(crate) fn trace(&self) -> &crate::execution::Trace {
+        match self {
+            Self::Single(factor) => factor.trace(),
+            Self::Double(factor) => factor.trace(),
+        }
+    }
     /// The factor's actual owner keeps its pre-allocation ticket through every later reuse.
     pub(crate) const fn ticket(&self) -> crate::PrivateAllocationTicket {
         match self {

@@ -43,6 +43,24 @@ impl Heap {
         limits: JointLimits,
         budget: &nrz_bindings::Budget,
     ) -> Result<MomentRef<P>, OperationError> {
+        self.cross_with_policy(
+            left,
+            right,
+            limits,
+            budget,
+            crate::heap::resources::ResourcePolicy::compatibility(),
+        )
+    }
+
+    /// Complete physical policy is independent of the compatibility metadata-only budget.
+    pub(crate) fn cross_with_policy<P: Scalar + 'static, Q: Scalar + 'static>(
+        &mut self,
+        left: Handle<Value, P>,
+        right: Handle<Value, Q>,
+        limits: JointLimits,
+        budget: &nrz_bindings::Budget,
+        policy: crate::heap::resources::ResourcePolicy,
+    ) -> Result<MomentRef<P>, OperationError> {
         let bindings = vec![
             super::capture::inspect(self, left, 0, limits)?,
             super::capture::inspect(self, right, 1, limits)?,
@@ -64,6 +82,22 @@ impl Heap {
         lineage.model.require(&lineage.columns, limits)?;
         run.backend_allowance(work, size_of::<P>())?;
         run.law(lineage.assurance);
+        let length = run
+            .extent(Role::Covariance, 0, super::inventory::Channel::Centers)?
+            .entries();
+        let mut resources =
+            self.legacy_plan::<P>(std::iter::repeat_n(length, 2), None, &[], &[])?;
+        let [metadata, numerical] = run.physical_bytes()?;
+        resources.retained = crate::heap::resources::add(resources.retained, metadata)?;
+        resources.scratch = crate::heap::resources::add(
+            resources.scratch,
+            crate::heap::resources::add(
+                numerical,
+                work.checked_mul(size_of::<P>())
+                    .ok_or(OperationError::ResourceLimit)?,
+            )?,
+        )?;
+        let permit = self.preflight_resources(resources.bytes_only(), policy)?;
         let context = ArithmeticContext::new()?;
         let covariance = evaluate::<P, Q>(self, &run, limits, &context, work)?;
         let targets = [first.dependency.clone(), second.dependency.clone()];
@@ -78,7 +112,7 @@ impl Heap {
             lineage,
             &covariance,
             &context,
-            &run,
+            (&run, &permit),
         )
     }
 }
@@ -128,7 +162,7 @@ fn publish<P: Scalar + 'static>(
     lineage: super::store::Lineage,
     covariance: &Matrix<P>,
     context: &ArithmeticContext,
-    run: &Run,
+    (run, permit): (&Run, &crate::heap::resources::ResourcePermit),
 ) -> Result<MomentRef<P>, OperationError> {
     if !run.matches(covariance, Role::Covariance, 0) {
         return Err(crate::PrivateAllocationError::ForeignInventory.into());
@@ -171,7 +205,7 @@ fn publish<P: Scalar + 'static>(
         .records
         .try_reserve(1)
         .map_err(|_| StatisticsError::ResourceLimit)?;
-    let prepared = super::allocation::standalone(heap, &regions)?;
+    let prepared = super::allocation::standalone(heap, &regions, permit)?;
     drop(regions);
     let inventory = run.finish(None, |role, index| run.matches(covariance, role, index))?;
     let keys = prepared.records.keys();

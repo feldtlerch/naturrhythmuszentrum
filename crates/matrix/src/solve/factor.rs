@@ -45,6 +45,13 @@ struct RcLayout<P: Scalar> {
     /// Backend and inverse witness payload.
     value: Resource<P>,
 }
+impl<P: Scalar> Drop for Resource<P> {
+    fn drop(&mut self) {
+        self.backend
+            .trace()
+            .release_residence(FactorRef::<P>::shared_header_bytes());
+    }
+}
 impl<P: Scalar> crate::execution::ErasedFactor for Resource<P> {
     fn ticket(&self) -> crate::PrivateAllocationTicket {
         self.backend.ticket()
@@ -187,6 +194,7 @@ fn build_with_budget<P: Scalar + 'static>(
     drop(defects);
     drop(candidate);
     let inventory = run.complete(backend.inline_bytes(), backend.ticket())?;
+    trace.retain_residence(FactorRef::<P>::shared_header_bytes())?;
     Ok(FactorRef {
         execution: trace.execution(),
         dependency,

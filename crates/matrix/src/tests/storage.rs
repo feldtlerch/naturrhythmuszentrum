@@ -10,7 +10,12 @@ use crate::{HeapError, HeapLimits};
 #[test]
 fn arena_resolution_refuses_corrupt_ranges() -> Result<(), HeapError> {
     let mut storage = Storage::new();
-    let prepared = storage.prepare::<f64>(&[&[1.0, 2.0]], &[], HeapLimits::default())?;
+    let prepared = storage.prepare::<f64>(
+        &[&[1.0, 2.0]],
+        &[],
+        HeapLimits::default(),
+        &crate::heap::resources::ResourcePermit::testing(storage.epoch()),
+    )?;
     let arena = *prepared.keys().first().ok_or(HeapError::Capacity)?;
     storage.publish(prepared);
     let region = Region {
@@ -58,7 +63,12 @@ fn arena_resolution_refuses_corrupt_ranges() -> Result<(), HeapError> {
 fn arena_reuse_invalidates_old_regions() -> Result<(), HeapError> {
     let mut storage = Storage::new();
     let limits = HeapLimits::new(1, 1, 1);
-    let prepared = storage.prepare::<f64>(&[&[1.0]], &[], limits)?;
+    let prepared = storage.prepare::<f64>(
+        &[&[1.0]],
+        &[],
+        limits,
+        &crate::heap::resources::ResourcePermit::testing(storage.epoch()),
+    )?;
     let arena = *prepared.keys().first().ok_or(HeapError::Capacity)?;
     storage.publish(prepared);
     let region = Region {
@@ -68,7 +78,12 @@ fn arena_reuse_invalidates_old_regions() -> Result<(), HeapError> {
         offset: 0,
         length: 1,
     };
-    let changed = storage.prepare::<f64>(&[&[2.0]], std::slice::from_ref(&region), limits)?;
+    let changed = storage.prepare::<f64>(
+        &[&[2.0]],
+        std::slice::from_ref(&region),
+        limits,
+        &crate::heap::resources::ResourcePermit::testing(storage.epoch()),
+    )?;
     let replacement = *changed.keys().first().ok_or(HeapError::Capacity)?;
     storage.publish(changed);
     assert_eq!(replacement.slot, arena.slot);

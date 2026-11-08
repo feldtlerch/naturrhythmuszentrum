@@ -59,6 +59,7 @@ impl Heap {
         budget.with_work_phase(super::FAMILY, "cell layout replacement", |budget| {
             charge(budget, 1)?;
             let axis = self.masks.layout(self.scope, previous)?.axis;
+            self.masks.layouts.get(previous.key)?.unprotected()?;
             self.publish_cell_layout(axis, components, Some(previous), budget)
         })
     }
@@ -77,7 +78,9 @@ impl Heap {
         budget.with_work_phase(super::FAMILY, "cell layout retirement", |budget| {
             charge(budget, 1)?;
             self.masks.layout(self.scope, version)?;
-            let reservation = memory::Reservation::new(&self.masks, None, None, 0, [1, 0], budget)?;
+            self.masks.layouts.get(version.key)?.unprotected()?;
+            let reservation =
+                memory::Reservation::new(self, None, None, 0, [&[version.key], &[]], budget)?;
             reservation.run(budget, |budget| {
                 charge(budget, self.masks.layouts.scan_work())?;
                 let plan = self.masks.layouts.change_reserved(
@@ -85,7 +88,7 @@ impl Heap {
                     &[version.key],
                     self.limits.descriptors,
                 )?;
-                let prepared = plan.bind(Vec::new())?;
+                let prepared = plan.bind(Vec::<LayoutRecord>::new())?;
                 self.masks.layouts.publish(prepared);
                 Ok(())
             })
@@ -117,11 +120,11 @@ impl Heap {
         let retired = previous.map(|version| version.key);
         let retired = retired.as_slice();
         let reservation = memory::Reservation::new(
-            &self.masks,
+            self,
             Some(components.owned_bytes()),
             None,
             map_entries,
-            [retired.len(), 0],
+            [retired, &[]],
             budget,
         )?;
         reservation.run(budget, |budget| {
@@ -142,11 +145,11 @@ impl Heap {
                 .change_reserved(1, retired, self.limits.descriptors)?;
             let key = *plan.keys().first().ok_or(HeapError::Capacity)?;
             let mut records = memory::vector(1)?;
-            records.push(LayoutRecord {
+            records.push(super::storage::Native::from(LayoutRecord {
                 axis,
                 components,
                 gather,
-            });
+            }));
             let prepared = plan.bind(records)?;
             self.masks.layouts.publish(prepared);
             Ok(CellLayoutVersion {

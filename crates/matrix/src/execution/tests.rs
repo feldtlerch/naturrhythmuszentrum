@@ -117,14 +117,25 @@ fn surviving_consumer<P: Scalar + 'static>() -> TestResult {
         reused.backend_allowance_bytes(),
         factor.allocation_inventory().backend_allowance_bytes()
     );
+    let before_origin = case.heap.resource_bytes()?;
     case.heap.retire_execution(origin.record())?;
+    assert_eq!(
+        before_origin - case.heap.resource_bytes()?,
+        size_of::<super::lease::Share>()
+    );
     assert!(weak.upgrade().is_some());
     let bound = case.bound()?;
     bound.validate_factor(&factor)?;
     drop(bound);
     drop(factor);
     assert!(weak.upgrade().is_some());
+    let before_consumer = case.heap.resource_bytes()?;
+    let allowance = historical.factors()[0].backend_allowance_bytes();
     case.heap.retire_execution(consumer.record())?;
+    assert_eq!(
+        before_consumer - case.heap.resource_bytes()?,
+        size_of::<super::lease::Share>() + allowance + crate::FactorRef::<P>::shared_header_bytes()
+    );
     assert!(weak.upgrade().is_none());
     assert_eq!(historical.factors().len(), 1);
     Ok(())
@@ -268,8 +279,8 @@ fn execution_resource_costs_are_pinned() -> TestResult {
     assert_eq!(
         [measurement::<f32>()?, measurement::<f64>()?],
         [
-            [112, 56, 240, 792, 2352, 11, 112, 32, 6144],
-            [112, 56, 240, 792, 2352, 11, 224, 64, 12288],
+            [112, 64, 248, 792, 2352, 11, 112, 32, 6144],
+            [112, 64, 248, 792, 2352, 11, 224, 64, 12288],
         ]
     );
     Ok(())
@@ -343,5 +354,60 @@ fn metadata_boundaries<P: Scalar + 'static>() -> TestResult {
             }
         }
     }
+    Ok(())
+}
+
+/// Unpublished escaped factors remain in the unique original residence inventory until destruction.
+/// ´test:unit:loan-common-inventory-retains-unpublished-factor´
+#[test]
+fn loan_common_inventory_retains_unpublished_factor() -> TestResult {
+    escaped_inventory::<f32>()?;
+    escaped_inventory::<f64>()
+}
+/// Opaque factors consume residence bytes without inventing destination element occupations.
+fn escaped_inventory<P: Scalar + 'static>() -> TestResult {
+    let mut case = Case::<P>::new()?;
+    let bound = case.bound()?;
+    let factor = bound.factor()?;
+    let allowance = factor.allocation_inventory().backend_allowance_bytes();
+    drop(bound);
+    for input in &case.inputs {
+        case.heap.retire(*input)?;
+    }
+    let with_factor = case.heap.resource_bytes()?;
+    let mut account =
+        crate::ExecutionAccount::new(nrz_bindings::Budget::new(nrz_bindings::Limits::default())?)?;
+    assert!(matches!(
+        case.heap.residence(&mut account, 1000)?,
+        crate::Residence::Pending {
+            elements: Some([0, 0]),
+            ..
+        }
+    ));
+    drop(factor);
+    assert_eq!(
+        with_factor - case.heap.resource_bytes()?,
+        allowance + crate::FactorRef::<P>::shared_header_bytes()
+    );
+    assert!(matches!(
+        case.heap.residence(&mut account, 1000)?,
+        crate::Residence::Empty { .. }
+    ));
+    Ok(())
+}
+
+/// An expired counter header remains alive until the replacement counter is registered.
+/// ´test:unit:loan-expired-trace-replacement-counts-both-headers´
+#[test]
+fn loan_expired_trace_replacement_counts_both_headers() -> TestResult {
+    let mut case = Case::<f64>::new()?;
+    drop(case.bound()?);
+    let before = case.heap.resource_bytes()?;
+    let plan = case.heap.executions.admission_plan()?;
+    // Six counter words plus the two reference-count words, independently laid out.
+    let header = size_of::<[usize; 8]>();
+    assert_eq!([plan.retained, plan.scratch], [header, header]);
+    drop(case.bound()?);
+    assert_eq!(case.heap.resource_bytes()?, before);
     Ok(())
 }

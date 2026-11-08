@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Reserve real backend slabs and descriptor occupations without exposing a handle.
 
+mod resources;
+
 use nrz_scalar::Scalar;
 
 use super::schema::{BindingSchema, intern};
 use super::{InputSnapshot, OperationError, buffer};
 use crate::heap::identity::identity;
-use crate::heap::publication::{SchemaPlan, prepare_records};
+use crate::heap::publication::{SchemaPlan, append_records};
 use crate::heap::records::{Location, Record};
 use crate::heap::slots::PreparedSlots;
 use crate::storage::PreparedStorage;
@@ -86,6 +88,7 @@ impl<Q: Scalar + 'static> Reservations<Q> {
         inputs: &[InputSnapshot<P>],
         operation: &crate::CheckedOperation,
         supplied: Option<Vec<nrz_bindings::BindingSymbols>>,
+        permit: &crate::heap::resources::ResourcePermit,
     ) -> Result<Self, OperationError> {
         let specifications = specifications(inputs, operation)?;
         let (symbols, copies) = if let Some(symbols) = supplied {
@@ -100,11 +103,15 @@ impl<Q: Scalar + 'static> Reservations<Q> {
                 .checked_add(bundle_count(plan))
                 .ok_or(HeapError::Capacity)
         })?;
-        let slots = heap.descriptors.prepare(count, heap.limits.descriptors)?;
+        let slots = heap.change_descriptors(count, None, &[], permit)?;
         let (covers, stamps) = prepare_covers::<Q>(heap, &plans, &symbols, slots.keys())?;
         let payloads = zeros::<Q>(&specifications, &plans)?;
-        let slices = payloads.iter().map(Vec::as_slice).collect::<Vec<_>>();
-        let storage = heap.storage.prepare(&slices, &[], heap.limits)?;
+        let storage = heap.storage.prepare_iter(
+            payloads.iter().map(Vec::as_slice),
+            &[],
+            heap.limits,
+            permit,
+        )?;
         let prepared = assemble_outputs(
             heap.scope,
             &specifications,
@@ -154,20 +161,27 @@ impl<Q: Scalar + 'static> Reservations<Q> {
             .len()
             .checked_add(self.schemas.len())
             .ok_or(HeapError::Capacity)?;
-        let mut destinations = buffer(self.records.values.len())?;
         for (record, arena) in self.records.values.iter().zip(self.storage.keys()) {
             let Location::Owned(region) = record.location else {
                 return Err(HeapError::InvalidLayout.into());
             };
-            if region.arena != *arena || record.schema >= schema_count {
+            if region.arena != *arena || region.offset != 0 || record.schema >= schema_count {
                 return Err(HeapError::InvalidLayout.into());
             }
             record
                 .layout
                 .validate(region.length, heap.limits.layout_work)?;
-            destinations.push((region, &record.layout));
+            // Every reserved output owns a distinct arena and is constructed contiguous.
+            // Enforce that invariant directly instead of allocating a destination/range proof.
+            if record.layout.dense_range()?.is_none() {
+                return Err(HeapError::OutputOverlap.into());
+            }
         }
-        crate::layout::validate_outputs(&destinations, heap.limits.layout_work)?;
+        for (position, key) in self.storage.keys().iter().enumerate() {
+            if self.storage.keys()[..position].contains(key) {
+                return Err(HeapError::OutputOverlap.into());
+            }
+        }
         Ok(())
     }
 }
@@ -194,7 +208,7 @@ fn assemble_outputs<Q: Scalar + 'static>(
     storage: &PreparedStorage,
     stamps: &[ValueStamp],
 ) -> Result<PreparedOutputs<Q>, OperationError> {
-    let mut records = buffer(slots.keys().len())?;
+    let mut records = crate::heap::publication::record_buffer(slots.keys().len())?;
     let mut bundles = buffer(specifications.len())?;
     let mut outputs = buffer(specifications.len())?;
     let mut planned = buffer(specifications.len())?;
@@ -208,7 +222,7 @@ fn assemble_outputs<Q: Scalar + 'static>(
             + 3 * usize::from(plan.contributions.is_some());
         let end = start.checked_add(count).ok_or(HeapError::Capacity)?;
         let extent = specification.extent;
-        let (mut prepared, bundle) = prepare_records::<Q>(
+        let bundle = append_records::<Q>(
             scope,
             extent,
             slots.keys().get(start..end).ok_or(HeapError::Capacity)?,
@@ -216,8 +230,9 @@ fn assemble_outputs<Q: Scalar + 'static>(
             &plan,
             stamp,
             storage.epoch(),
+            &mut records,
         )?;
-        if let Some(record) = prepared.first_mut()
+        if let Some(record) = records.get_mut(start)
             && let crate::heap::records::Meaning::Value { coverage, .. } = &mut record.meaning
         {
             *coverage = specification.coverage;
@@ -239,7 +254,6 @@ fn assemble_outputs<Q: Scalar + 'static>(
         planned.push(super::lifecycle::planned(
             scope, bundle, stamp, extent, schemas, inventory,
         )?);
-        records.extend(prepared);
         bundles.push(bundle);
     }
     Ok(PreparedOutputs {

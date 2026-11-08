@@ -21,7 +21,7 @@ pub(crate) trait ErasedFactor: std::fmt::Debug {
 #[derive(Debug)]
 pub(super) struct Share {
     /// Independent strong numerical ownership, never copied into immutable history.
-    resource: Rc<dyn ErasedFactor>,
+    pub(super) resource: Rc<dyn ErasedFactor>,
     /// Current successful candidate, if this execution consumed this factor.
     candidate: Option<u64>,
 }

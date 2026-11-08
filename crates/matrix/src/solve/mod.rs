@@ -26,6 +26,7 @@ mod lifecycle;
 pub use lifecycle::{SolveFailure, SolveFailureRecord, SolveRecordKeys, SolveStage};
 mod policy;
 pub(crate) mod recovery;
+mod resources;
 mod restoration;
 mod retry;
 pub use recovery::{SolveAttempt, SolveRecoveryEvidence, SolveStop};

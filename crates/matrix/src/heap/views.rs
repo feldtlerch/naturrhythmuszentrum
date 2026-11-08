@@ -62,6 +62,8 @@ impl<P: Scalar + 'static> RegionView<'_, P> {
     pub fn export(&self) -> Result<Vec<P>, HeapError> {
         let mut copy = Vec::new();
         crate::layout::check_work(self.layout.extent().entries(), self.packing_limit)?;
+        #[cfg(test)]
+        crate::loan::fault::entered_raw_copy();
         copy.try_reserve_exact(self.layout.extent().entries())
             .map_err(|_| HeapError::Capacity)?;
         for index in 0..self.layout.extent().entries() {
@@ -89,7 +91,7 @@ impl<P: Scalar + 'static> RegionView<'_, P> {
     /// # Errors
     /// Refuses packing work or capacity exhaustion and invalid resolved addresses.
     pub fn pack(&self) -> Result<PackedRegion<P>, HeapError> {
-        PackedRegion::new(self.extent(), &self.export()?)
+        PackedRegion::new(self)
     }
 
     /// Read inside the allocated region, never merely inside slab capacity.

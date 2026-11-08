@@ -37,7 +37,7 @@ impl Heap {
             layout,
             meaning: Meaning::Alias { base: base.key },
         };
-        let plan = self.descriptors.prepare(1, self.limits.descriptors)?;
+        let plan = self.prepare_descriptors(1)?;
         let key = *plan.keys().first().ok_or(HeapError::Capacity)?;
         let mut records = Vec::new();
         records

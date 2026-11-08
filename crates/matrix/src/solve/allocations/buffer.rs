@@ -18,6 +18,11 @@ impl<T> Backend<T> {
         &self.value
     }
 
+    /// Original lifetime counter also observes the shared factor allocation.
+    pub(crate) fn trace(&self) -> &crate::execution::Trace {
+        &self.permit.plan.trace
+    }
+
     /// Original authority of this actual backend owner, used when exposing a factor.
     pub(crate) const fn ticket(&self) -> crate::PrivateAllocationTicket {
         self.permit.ticket
@@ -26,6 +31,7 @@ impl<T> Backend<T> {
 impl<T> Drop for Backend<T> {
     fn drop(&mut self) {
         self.permit.plan.states[self.permit.slot].set(State::Released(self.permit.plan.entries));
+        self.permit.plan.release_backend();
     }
 }
 /// Matrix-owned inverse coordinates or defect entries with no route to unplanned vector growth.

@@ -4,8 +4,8 @@
 mod algebra;
 mod compaction;
 mod layout;
-mod memory;
-mod storage;
+pub(crate) mod memory;
+pub(crate) mod storage;
 mod types;
 
 pub use algebra::MaskPartition;

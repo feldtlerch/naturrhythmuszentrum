@@ -40,6 +40,13 @@ mod shape;
 )]
 mod storage;
 
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "managed ownership is shared across private heap modules"
+)]
+mod loan;
+pub use loan::*;
+
 mod lc_relation;
 mod quantity;
 pub use lc_relation::{
@@ -106,6 +113,10 @@ mod count_quantity_twins;
 #[cfg(any(doc, doctest))]
 #[path = "../tests/conformance/quantity_twins.rs"]
 mod quantity_twins;
+
+#[cfg(any(doc, doctest))]
+#[path = "../tests/conformance/loan_twins.rs"]
+mod loan_twins;
 
 #[cfg(any(doc, doctest))]
 #[path = "../tests/conformance/type_twins.rs"]

@@ -55,16 +55,56 @@ pub(crate) fn prepare_records<P: Scalar + 'static>(
     stamp: ValueStamp,
     epoch: u64,
 ) -> Result<(Vec<Record>, PublishedBundle<P>), HeapError> {
+    let mut records = record_buffer(keys.len())?;
+    let bundle = append_records::<P>(
+        scope,
+        extent,
+        keys,
+        arenas,
+        schemas,
+        stamp,
+        epoch,
+        &mut records,
+    )?;
+    Ok((records, bundle))
+}
+
+/// Allocate the one exact physical record backing admitted for this destination set.
+pub(crate) fn record_buffer(count: usize) -> Result<Vec<Record>, HeapError> {
+    let records = crate::binding::buffer(count)?;
+    if records.capacity() != count {
+        return Err(HeapError::Capacity);
+    }
+    #[cfg(test)]
+    crate::loan::fault::entered_record_backing(records.capacity());
+    Ok(records)
+}
+
+/// Append directly into the one admitted record backing without a per-bundle allocation.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the helper forwards an existing checked storage reservation"
+)]
+pub(crate) fn append_records<P: Scalar + 'static>(
+    scope: u64,
+    extent: Extent,
+    keys: &[Key],
+    arenas: &[Key],
+    schemas: &SchemaPlan,
+    stamp: ValueStamp,
+    epoch: u64,
+    records: &mut Vec<Record>,
+) -> Result<PublishedBundle<P>, HeapError> {
+    if records.capacity().saturating_sub(records.len()) < keys.len() {
+        return Err(HeapError::Capacity);
+    }
+    let start = records.len();
     let target = *keys.first().ok_or(HeapError::Capacity)?;
     let value_arena = *arenas.first().ok_or(HeapError::Capacity)?;
     let bound_key = schemas
         .bound
         .map(|_| keys.get(1).copied().ok_or(HeapError::Capacity))
         .transpose()?;
-    let mut records = Vec::new();
-    records
-        .try_reserve_exact(keys.len())
-        .map_err(|_| HeapError::Capacity)?;
     records.push(Record {
         schema: schemas.value,
         location: Location::Owned(Region {
@@ -102,16 +142,8 @@ pub(crate) fn prepare_records<P: Scalar + 'static>(
             meaning: Meaning::Bound { target, stamp },
         });
     }
-    let evaluation = prepare_evaluation::<P>(
-        scope,
-        extent,
-        keys,
-        arenas,
-        schemas,
-        stamp,
-        epoch,
-        &mut records,
-    )?;
+    let evaluation =
+        prepare_evaluation::<P>(scope, extent, keys, arenas, schemas, stamp, epoch, records)?;
     let bundle = crate::kernels::finish_contributions::<P>(
         &crate::kernels::ContributionReservation {
             scope,
@@ -124,9 +156,10 @@ pub(crate) fn prepare_records<P: Scalar + 'static>(
         },
         bound_key,
         evaluation,
-        &mut records,
+        records,
+        start,
     )?;
-    Ok((records, bundle))
+    Ok(bundle)
 }
 
 /// Allocate the distinct evaluation region with the same exact converted-value target.

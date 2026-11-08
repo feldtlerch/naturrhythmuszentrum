@@ -20,8 +20,125 @@ struct Entry {
 pub(crate) struct Registry {
     /// Completed records retain immutable observations and independently releasable shares.
     entries: Vec<Entry>,
+    /// Original live allocation counters include unpublished escaped factors.
+    traces: Vec<super::WeakTrace>,
+    /// Active edge-row count keeps inventory cost planning allocation-free and constant time.
+    active_shares: usize,
 }
 impl Registry {
+    /// Unpublished escaped factors participate in the heap's zero-occupied predicate.
+    pub(crate) fn has_payload(&self) -> bool {
+        self.traces
+            .iter()
+            .fold(false, |present, trace| trace.has_payload() | present)
+    }
+    /// Every visited weak row, including expired rows, belongs to common inventory Work.
+    pub(crate) const fn scan_work(&self) -> usize {
+        self.traces.len() + self.entries.len() + self.active_shares
+    }
+    /// Residence additionally inspects each weak counter for a live numerical owner.
+    pub(crate) const fn trace_work(&self) -> usize {
+        self.traces.len()
+    }
+    /// Unique original counters and retained registry buffers, never historical payload totals.
+    pub(crate) fn owned_bytes(&self) -> Result<usize, HeapError> {
+        let add = crate::heap::resources::add;
+        let mut bytes = self
+            .entries
+            .capacity()
+            .checked_mul(size_of::<Entry>())
+            .ok_or(HeapError::Capacity)?;
+        bytes = add(
+            bytes,
+            self.traces
+                .capacity()
+                .checked_mul(size_of::<super::WeakTrace>())
+                .ok_or(HeapError::Capacity)?,
+        )?;
+        for trace in &self.traces {
+            bytes = add(bytes, trace.owned_bytes()?)?;
+        }
+        for entry in &self.entries {
+            bytes = add(
+                bytes,
+                entry
+                    .inventory
+                    .factors
+                    .capacity()
+                    .checked_mul(size_of::<super::SharedFactorAllocation>())
+                    .ok_or(HeapError::Capacity)?,
+            )?;
+            if let Some(shares) = &entry.active {
+                bytes = add(
+                    bytes,
+                    shares
+                        .capacity()
+                        .checked_mul(size_of::<Share>())
+                        .ok_or(HeapError::Capacity)?,
+                )?;
+            }
+        }
+        Ok(bytes)
+    }
+    /// Complete new counter and exact registry growth precede the execution's first allocation.
+    pub(crate) fn admission_plan(&self) -> Result<crate::heap::resources::ResourcePlan, HeapError> {
+        let reused = self.traces.iter().any(super::WeakTrace::expired);
+        let trace_count = self
+            .traces
+            .len()
+            .checked_add(usize::from(!reused))
+            .ok_or(HeapError::Capacity)?;
+        let entry_count = self
+            .entries
+            .len()
+            .checked_add(1)
+            .ok_or(HeapError::Capacity)?;
+        // A new counter is allocated before registration can destroy an expired weak header.
+        let mut retained = super::Trace::metadata_bytes();
+        let mut scratch = if reused {
+            super::Trace::metadata_bytes()
+        } else {
+            0
+        };
+        for (old, new, width) in [
+            (
+                self.traces.capacity(),
+                trace_count,
+                size_of::<super::WeakTrace>(),
+            ),
+            (self.entries.capacity(), entry_count, size_of::<Entry>()),
+        ] {
+            let new = crate::heap::slots::growth_capacity::<Entry>(old, new)?;
+            if new > old {
+                retained = crate::heap::resources::add(
+                    retained,
+                    (new - old).checked_mul(width).ok_or(HeapError::Capacity)?,
+                )?;
+                scratch = crate::heap::resources::add(
+                    scratch,
+                    old.checked_mul(width)
+                        .and_then(|bytes| bytes.checked_mul(2))
+                        .ok_or(HeapError::Capacity)?,
+                )?;
+            }
+        }
+        Ok(crate::heap::resources::ResourcePlan {
+            retained,
+            scratch,
+            ..Default::default()
+        })
+    }
+    /// Consume previously admitted backing capacity and install a metadata-only weak witness.
+    pub(crate) fn register(&mut self, trace: &super::Trace) -> Result<(), OperationError> {
+        grow(&mut self.entries, 1)?;
+        if let Some(entry) = self.traces.iter_mut().find(|entry| entry.expired()) {
+            *entry = trace.downgrade();
+        } else {
+            grow(&mut self.traces, 1)?;
+            self.traces.push(trace.downgrade());
+        }
+        Ok(())
+    }
     /// Exact aligned inline registry entry charged to this execution's metadata budget.
     pub(crate) const fn entry_bytes() -> usize {
         size_of::<Entry>()
@@ -34,6 +151,9 @@ impl Registry {
     ) -> Result<ExecutionInventory, OperationError> {
         lease.validate(candidate)?;
         let inventory = lease.snapshot()?;
+        self.active_shares
+            .checked_add(inventory.factors.len())
+            .ok_or(OperationError::ResourceLimit)?;
         self.entries
             .try_reserve(1)
             .map_err(|_| OperationError::ResourceLimit)?;
@@ -46,9 +166,11 @@ impl Registry {
         lease: Lease,
         inventory: ExecutionInventory,
     ) {
+        let shares = lease.into_shares();
+        self.active_shares += shares.len();
         self.entries.push(Entry {
             record,
-            active: Some(lease.into_shares()),
+            active: Some(shares),
             inventory,
         });
     }
@@ -63,6 +185,7 @@ impl Registry {
             return Err(HeapError::StaleEvidence);
         }
         let active = entry.active.take().ok_or(HeapError::StaleHandle)?;
+        self.active_shares -= active.len();
         drop(active);
         Ok(())
     }
@@ -90,4 +213,22 @@ impl Heap {
             .map(|entry| &entry.inventory)
             .ok_or(HeapError::StaleEvidence)
     }
+}
+
+/// Exact replacement retains the old table until the admitted new buffer is complete.
+fn grow<T>(values: &mut Vec<T>, additional: usize) -> Result<(), OperationError> {
+    let count = values
+        .len()
+        .checked_add(additional)
+        .ok_or(OperationError::ResourceLimit)?;
+    if count > values.capacity() {
+        let count = crate::heap::slots::growth_capacity::<T>(values.capacity(), count)?;
+        let mut replacement = crate::binding::buffer(count)?;
+        if replacement.capacity() != count {
+            return Err(OperationError::ResourceLimit);
+        }
+        replacement.append(values);
+        *values = replacement;
+    }
+    Ok(())
 }

@@ -31,6 +31,7 @@ impl<P: Scalar + 'static, Q: Scalar + 'static> Bound<'_, P, Q> {
         evidence: &mut Vec<crate::RecipeEvidence>,
         allocate: impl FnOnce() -> Result<u64, crate::HeapError>,
     ) -> Result<Candidate<Q>, OperationError> {
+        self.resource_permit.storage(self.heap.storage.epoch())?;
         if inputs.execution != self.execution {
             return Err(OperationError::ForeignInputs);
         }
@@ -72,7 +73,14 @@ impl<P: Scalar + 'static, Q: Scalar + 'static> Bound<'_, P, Q> {
                 Some(nrz_scalar::ArithmeticContext::new().map_err(crate::ConversionError::from)?)
             }
         };
-        let mut cache = buffer(inputs.views.len())?;
+        let mut cache = if matches!(
+            self.operation.recipe,
+            crate::binding::NativeRecipe::Affine(_)
+        ) {
+            buffer(inputs.views.len())?
+        } else {
+            Vec::new()
+        };
         for (slot, (view, reservation)) in inputs
             .views
             .into_iter()
@@ -85,6 +93,14 @@ impl<P: Scalar + 'static, Q: Scalar + 'static> Bound<'_, P, Q> {
             outputs.push(payload);
         }
         let statistics = self.statistics.evaluate(&self.operation, token)?;
+        for output in &mut outputs {
+            output.retain_residence(&self.resources.trace)?;
+        }
+        let residence = super::CandidateResidence::new::<Q>(
+            &self.resources.trace,
+            outputs.capacity(),
+            statistics.capacity(),
+        )?;
         self.issued.set(Some(token));
         Ok(Candidate {
             execution: self.execution,
@@ -94,6 +110,7 @@ impl<P: Scalar + 'static, Q: Scalar + 'static> Bound<'_, P, Q> {
             evidence: evidence.clone(),
             statistics,
             private: None,
+            _residence: residence,
         })
     }
 

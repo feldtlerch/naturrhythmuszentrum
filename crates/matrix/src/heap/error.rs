@@ -4,6 +4,22 @@
 /// A refused heap transaction or access; no partial bundle is published.
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum HeapError {
+    /// The combined retained or simultaneous allocation peak exceeds its effective ceiling.
+    #[error("heap byte capacity {used} exceeds {limit} (staged: {staged})")]
+    ResourceBytes {
+        /// Whether this is the simultaneous peak rather than retained output.
+        staged: bool,
+        /// Complete owner inventory plus the planned additions.
+        used: u64,
+        /// Original effective caller ceiling.
+        limit: u64,
+    },
+    /// A managed occupation requires its qualified owner capability.
+    #[error("managed occupation requires a qualified owner")]
+    OwnershipPending,
+    /// An immutable reader retains the complete native owner.
+    #[error("owner has pinned uses")]
+    PinnedUses,
     /// A planned symbol has no complete published numerical binding.
     #[error("symbol value is unavailable until complete publication")]
     UnavailableSymbol,

@@ -148,6 +148,33 @@ impl<P: Scalar + 'static, Q: Scalar + 'static> Binding<P, Q> {
         self.validate_with_resource_budget(heap, &budget)
     }
 
+    /// Validate legacy execution against the original account and all detached owner debits.
+    /// # Errors
+    /// Refuses combined resource capacity or the ordinary binding checks before zero allocation.
+    pub fn validate_with_account<'h>(
+        self,
+        heap: &'h mut Heap,
+        account: &mut crate::ExecutionAccount,
+    ) -> Result<Bound<'h, P, Q>, OperationError> {
+        let account_identity = account.identity;
+        account
+            .ledger
+            .with_work_phase("matrix.loan", "legacy resource preparation", |budget| {
+                let slots = heap.resource_work()?;
+                budget.work(
+                    u64::try_from(slots).map_err(|_| OperationError::ResourceLimit)?,
+                    nrz_bindings::readings::algebra::Location::new("legacy common inventory"),
+                )?;
+                let policy = crate::heap::resources::ResourcePolicy::from_budget(budget);
+                self.validate_inventory(
+                    heap,
+                    crate::statistics::PlanBudget::Quantity(budget),
+                    None,
+                    (policy, Some(account_identity)),
+                )
+            })
+    }
+
     /// Validate with explicit staged and retained ceilings for execution resource metadata.
     /// # Errors
     /// Refuses metadata exhaustion or any ordinary checked binding failure before a factor escapes.
@@ -160,6 +187,10 @@ impl<P: Scalar + 'static, Q: Scalar + 'static> Binding<P, Q> {
             heap,
             crate::statistics::PlanBudget::Independent(budget),
             None,
+            (
+                crate::heap::resources::ResourcePolicy::compatibility(),
+                None,
+            ),
         )
     }
 
@@ -174,16 +205,15 @@ impl<P: Scalar + 'static, Q: Scalar + 'static> Binding<P, Q> {
             heap,
             crate::statistics::PlanBudget::Quantity(budget),
             Some(symbols),
+            (
+                crate::heap::resources::ResourcePolicy::compatibility(),
+                None,
+            ),
         )
     }
 
-    /// Ordinary transactions and quantity transactions share every live and resource check.
-    fn validate_inventory<'h>(
-        self,
-        heap: &'h mut Heap,
-        mut budget: crate::statistics::PlanBudget<'_>,
-        symbols: Option<Vec<nrz_bindings::BindingSymbols>>,
-    ) -> Result<Bound<'h, P, Q>, OperationError> {
+    /// Authenticate recipe, concrete operands and exact symbol associations before planning bytes.
+    fn capture_dependencies(&self, heap: &Heap) -> Result<Vec<InputSnapshot<P>>, OperationError> {
         match self.operation.recipe {
             NativeRecipe::Precision { source, target }
                 if source == P::PRECISION && target == Q::PRECISION => {}
@@ -208,7 +238,115 @@ impl<P: Scalar + 'static, Q: Scalar + 'static> Binding<P, Q> {
                 heap.value_by_symbol(binding.symbol(), binding)?;
             }
         }
-        let dependencies = capture(heap, &self.inputs)?;
+        capture(heap, &self.inputs)
+    }
+
+    /// `validate_quantity` and `validate_with_resource_budget` retain metadata-only ceilings.
+    /// `validate_with_account` supplies original account ceilings for the complete physical plan.
+    fn resource_permit(
+        &self,
+        heap: &Heap,
+        dependencies: &[InputSnapshot<P>],
+        entries: [usize; 2],
+        statistics: &crate::statistics::Plan<P>,
+        (policy, account): (crate::heap::resources::ResourcePolicy, Option<u64>),
+    ) -> Result<crate::heap::resources::ResourcePermit, OperationError> {
+        let [entries, output_entries] = entries;
+        let parameters = statistics.parameter_lengths(&self.operation)?;
+        let mut plan =
+            Reservations::<Q>::resource_plan(heap, dependencies, &self.operation, parameters)?;
+        let [mut metadata, mut numerical] = statistics.physical_bytes::<Q>(&self.operation)?;
+        if let NativeRecipe::Solve(contract) = &self.operation.recipe {
+            let extra =
+                crate::solve::scratch::Run::physical_bytes(contract, statistics, dependencies)?;
+            metadata = metadata
+                .checked_add(extra[0])
+                .ok_or(OperationError::ResourceLimit)?;
+            numerical = numerical
+                .checked_add(extra[1])
+                .ok_or(OperationError::ResourceLimit)?;
+        }
+        plan.retained = plan
+            .retained
+            .checked_add(metadata)
+            .ok_or(OperationError::ResourceLimit)?;
+        plan.scratch = plan
+            .scratch
+            .checked_add(numerical)
+            .ok_or(OperationError::ResourceLimit)?;
+        let scratch_entries = self.operation.solve_work().unwrap_or(
+            entries
+                .checked_add(output_entries)
+                .ok_or(OperationError::ResourceLimit)?,
+        );
+        let scalar_scratch = scratch_entries
+            .checked_mul(size_of::<P>().max(size_of::<Q>()))
+            .ok_or(OperationError::ResourceLimit)?;
+        let scratch = match &self.operation.recipe {
+            NativeRecipe::Kernel(contract)
+            | NativeRecipe::Reciprocal {
+                kernel: contract, ..
+            }
+            | NativeRecipe::ReciprocalStatistics {
+                kernel: contract, ..
+            } => contract.physical_scratch::<P, Q>(scalar_scratch)?,
+            // Copy and either precision conversion allocate only their already reserved
+            // candidate channels; per-entry verification and conversion remain on the stack.
+            NativeRecipe::Copy | NativeRecipe::Precision { .. } => scalar_scratch,
+            NativeRecipe::Affine(contracts) => {
+                let [retained, scratch] = crate::conversion::physical_bytes::<Q>(
+                    contracts,
+                    statistics.lineage.is_some(),
+                )?;
+                plan.retained = plan
+                    .retained
+                    .checked_add(retained)
+                    .ok_or(OperationError::ResourceLimit)?;
+                scalar_scratch
+                    .checked_add(scratch)
+                    .ok_or(OperationError::ResourceLimit)?
+            }
+            NativeRecipe::Solve(contract) => {
+                // The finite RHS/restoration/recovery/statistical requests were added above.
+                // The unchanged work allowance covers opaque LU storage and workspaces.
+                scalar_scratch
+                    .checked_add(contract.physical_factor::<P>()?)
+                    .ok_or(OperationError::ResourceLimit)?
+            }
+        };
+        plan.scratch = plan
+            .scratch
+            .checked_add(scratch)
+            .ok_or(OperationError::ResourceLimit)?;
+        let execution_plan = heap.executions.admission_plan()?;
+        plan.retained = plan
+            .retained
+            .checked_add(execution_plan.retained)
+            .ok_or(OperationError::ResourceLimit)?;
+        plan.scratch = plan
+            .scratch
+            .checked_add(execution_plan.scratch)
+            .ok_or(OperationError::ResourceLimit)?;
+        if account.is_none() {
+            // Compatibility validates ordinary destinations here and complete statistical
+            // destination occupations at publication; all physical bytes are admitted here.
+            plan.elements = [0; 2];
+            plan.elements[crate::storage::Format::of::<Q>().index()] = output_entries;
+        }
+        let mut resource_permit = heap.preflight_resources(plan, policy)?;
+        resource_permit.account = account;
+        Ok(resource_permit)
+    }
+
+    /// Ordinary transactions and quantity transactions share every live and resource check.
+    fn validate_inventory<'h>(
+        self,
+        heap: &'h mut Heap,
+        mut budget: crate::statistics::PlanBudget<'_>,
+        symbols: Option<Vec<nrz_bindings::BindingSymbols>>,
+        policy: (crate::heap::resources::ResourcePolicy, Option<u64>),
+    ) -> Result<Bound<'h, P, Q>, OperationError> {
+        let dependencies = self.capture_dependencies(heap)?;
         let entries = payload_entries(&dependencies)?;
         if let NativeRecipe::Kernel(contract)
         | NativeRecipe::Reciprocal {
@@ -233,15 +371,24 @@ impl<P: Scalar + 'static, Q: Scalar + 'static> Binding<P, Q> {
         }
         let execution = ExecutionId(identity()?);
         let resources = crate::execution::Lease::new(execution, budget.resources())?;
-        let statistics = crate::statistics::Plan::capture::<Q>(
+        let mut statistics = crate::statistics::Plan::prepare::<Q>(
             heap,
             &self.operation,
             &self.inputs,
             self.limits,
             &resources.trace,
             &mut budget,
-            self.reciprocal_statistics,
+            self.reciprocal_statistics.clone(),
         )?;
+        let resource_permit = self.resource_permit(
+            heap,
+            &dependencies,
+            [entries, output_entries],
+            &statistics,
+            policy,
+        )?;
+        heap.executions.register(&resources.trace)?;
+        statistics.capture(heap, &self.operation, &self.inputs)?;
         if !matches!(self.operation.recipe, NativeRecipe::Solve(_)) {
             resources.completed_backend(
                 0,
@@ -252,7 +399,13 @@ impl<P: Scalar + 'static, Q: Scalar + 'static> Binding<P, Q> {
                     .ok_or(OperationError::ResourceLimit)?,
             )?;
         }
-        let reservations = Reservations::prepare(heap, &dependencies, &self.operation, symbols)?;
+        let reservations = Reservations::prepare(
+            heap,
+            &dependencies,
+            &self.operation,
+            symbols,
+            &resource_permit,
+        )?;
         reservations.validate(heap)?;
         Ok(Bound {
             heap,
@@ -262,6 +415,7 @@ impl<P: Scalar + 'static, Q: Scalar + 'static> Binding<P, Q> {
             execution,
             resources,
             reservations,
+            resource_permit,
             issued: std::cell::Cell::new(None),
         })
     }
@@ -284,6 +438,8 @@ pub struct Bound<'h, P: Scalar, Q: Scalar = P> {
     pub(crate) resources: crate::execution::Lease,
     /// Fully private output storage and descriptor occupations.
     pub(crate) reservations: Reservations<Q>,
+    /// Combined legacy/managed peak remains admitted for this entire exclusive lease.
+    pub(crate) resource_permit: crate::heap::resources::ResourcePermit,
     /// The one issued candidate token, unavailable before successful evaluation.
     pub(crate) issued: std::cell::Cell<Option<u64>>,
 }

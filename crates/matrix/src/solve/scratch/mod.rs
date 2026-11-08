@@ -5,6 +5,7 @@ mod backend;
 mod plan;
 mod publication;
 mod record;
+mod resources;
 mod run;
 mod schedule;
 mod sensitivity;
@@ -15,3 +16,6 @@ pub(crate) use plan::{Permit, Plan, State};
 pub use record::{SolveAllocation, SolveAllocationStage, SolveInventory};
 pub(crate) use run::{Attempt, Run};
 pub(crate) use schedule::Stage;
+
+#[cfg(test)]
+pub(crate) use resources::fixture_owner_sizes;
