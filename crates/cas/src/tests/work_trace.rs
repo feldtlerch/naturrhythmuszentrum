@@ -8,6 +8,7 @@ use crate::testing::work_trace::{Row, measured};
 use crate::work_observation::{Scope, observe};
 
 mod concurrency;
+mod consumer;
 mod disabled;
 mod evidence;
 

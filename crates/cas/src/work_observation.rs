@@ -197,6 +197,15 @@ impl Phase {
     /// The span callsite gates operation, identity and snapshot preparation together.
     #[inline]
     pub(crate) fn new(budget: &Budget, operation: impl FnOnce() -> &'static str) -> Self {
+        Self::family(budget, "cas", operation)
+    }
+
+    /// Consumer families share the original callsite and ledger owner namespace.
+    fn family(
+        budget: &Budget,
+        family: &'static str,
+        operation: impl FnOnce() -> &'static str,
+    ) -> Self {
         if !PHASE_CALLSITE.enabled() {
             return Self(Span::none());
         }
@@ -204,7 +213,7 @@ impl Phase {
         let ledger = budget.observation.get();
         let work = budget.usage().work;
         let values: [Option<&dyn tracing::field::Value>; PHASE_FIELDS.len()] = [
-            Some(&"cas"),
+            Some(&family),
             Some(&1_u64),
             Some(&"nrz-cas"),
             Some(&operation),
@@ -287,9 +296,26 @@ pub(crate) fn observed_context<C, T, E: std::fmt::Debug>(
     operation: impl FnOnce(&C) -> &'static str,
     run: impl FnOnce(&mut C) -> Result<T, E>,
 ) -> Result<T, E> {
+    observed_family(context, ledger, "cas", operation, run)
+}
+
+/// Public consumers enter the same cold helper without creating another ledger or callsite.
+#[cold]
+#[inline(never)]
+fn observed_family<C, T, E: std::fmt::Debug>(
+    context: &mut C,
+    ledger: impl Fn(&C) -> &Budget,
+    family: &'static str,
+    operation: impl FnOnce(&C) -> &'static str,
+    run: impl FnOnce(&mut C) -> Result<T, E>,
+) -> Result<T, E> {
     #[cfg(test)]
     ledger(context).observation.note_cold_entry();
-    let phase = Phase::new(ledger(context), || operation(context));
+    let phase = if family == "cas" {
+        Phase::new(ledger(context), || operation(context))
+    } else {
+        Phase::family(ledger(context), family, || operation(context))
+    };
     if phase.is_disabled() {
         return run(context);
     }
@@ -300,6 +326,29 @@ pub(crate) fn observed_context<C, T, E: std::fmt::Debug>(
 }
 
 impl Budget {
+    /// Observe a cross-crate boundary on this shared Work ledger.
+    ///
+    /// Static consumer `family` and `operation` names use the existing boundary
+    /// receipts and original ledger incarnation under (´def:cas:work-observation-protocol´).
+    /// The tiles-and-streams design governs shared-ledger attribution. The `owner`
+    /// field remains the ledger's `nrz-cas` namespace. Observation adds no tariff: only `run` consumes Work.
+    /// Disabled observation calls `run` without preparing fields or ledger identity.
+    /// # Errors
+    /// Preserves the body's error and its successfully consumed Work.
+    #[inline]
+    pub fn with_work_phase<T, E: std::fmt::Debug>(
+        &mut self,
+        family: &'static str,
+        operation: &'static str,
+        run: impl FnOnce(&mut Self) -> Result<T, E>,
+    ) -> Result<T, E> {
+        if potentially_enabled() {
+            observed_family(self, |budget| budget, family, |_| operation, run)
+        } else {
+            run(self)
+        }
+    }
+
     /// Reborrow an ordinary ledger into the separate cold observation path.
     #[inline]
     pub(crate) fn observed_phase<T, E: std::fmt::Debug>(
