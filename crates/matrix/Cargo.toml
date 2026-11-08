@@ -19,5 +19,8 @@ nrz-accuracy = { path = "../accuracy" }
 nrz-bindings = { path = "../bindings" }
 thiserror.workspace = true
 
+[dev-dependencies]
+nrz-docgen = { path = "../../tools/docgen" }
+
 [lints]
 workspace = true

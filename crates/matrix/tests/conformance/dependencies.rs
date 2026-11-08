@@ -64,7 +64,7 @@ const PACKAGES: [Package; 6] = [
             "nrz-bindings",
             "thiserror",
         ],
-        development: &[],
+        development: &["nrz-docgen"],
     },
     Package {
         name: "nrz-docgen",
