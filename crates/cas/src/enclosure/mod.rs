@@ -45,6 +45,7 @@ mod log;
 mod model;
 mod planning;
 mod power;
+pub mod prepared_expm1;
 mod producer;
 mod roots;
 mod saturating;
@@ -214,7 +215,7 @@ pub use model::{
 pub use power::{PowerEvidence, PowerRoute};
 
 /// Closed formal register; no unimplemented analytic schema grants authority.
-pub const ENCLOSURE_SCHEMAS: [crate::emptiness::LemmaSchema; 9] = [
+pub const ENCLOSURE_SCHEMAS: [crate::emptiness::LemmaSchema; 10] = [
     crate::emptiness::LemmaSchema {
         name: "enclosure.rational-inclusion",
         label: "thm:cas:enclosure-rational-inclusion",
@@ -287,9 +288,10 @@ pub const ENCLOSURE_SCHEMAS: [crate::emptiness::LemmaSchema; 9] = [
         statement: "The closed clamp composition encloses its branchwise values. Under the checked continuous smooth responsive extension, its generalized first derivative is enclosed by the responsive derivative above the wall, zero below it, and their convex hull at a touching or crossing box. An uncertain wall is included throughout; no classical derivative at a kink follows.",
         premises: "Original `DomainGuard`, exact `Equality` at the common join, `Cover` of the constant and responsive regions, and `Enclosure` for values; generalized derivatives additionally require reconstructed `Differentiable` and `Derivative` premises on the complete responsive extension, with every strict domain retained.",
     },
+    prepared_expm1::SCHEMA,
 ];
 
-/// Exhaustive implemented-law dispatcher; analytic families have no accepting arm.
+/// Exhaustive interval-law dispatcher; prepared schedule authority has its own checker.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EnclosureLaw {
     /// Exact rational endpoint relations and outward coarsening.
