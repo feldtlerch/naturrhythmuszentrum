@@ -16,7 +16,7 @@ mod classify;
 /// A kind is an assumed shape; a checked proof of an instance remains evidence for that instance.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum HypothesisKind {
-    /// A checked finite formal-series computation.
+    /// Checked finite formal-series object or original-source evidence.
     SeriesEvidence,
     /// The original Real operand equals Pi times half its retained concrete integer.
     HalfPiWitness,
@@ -615,8 +615,8 @@ pub static HYPOTHESIS_SCHEMAS: [LemmaSchema; 54] = [
         label: "assum:cas:hyp-series-evidence",
         version: 1,
         standing: crate::proof::Standing::Hypothesis,
-        statement: "The exact finite formal-series computation holds at its recorded order.",
-        premises: "Original object metadata, ordered restrictions and ordinary scalar-definedness evidence; classification supplies no proof.",
+        statement: "The exact finite object computation, source congruence or complete polynomial seed holds at its recorded order.",
+        premises: "Original metadata and domains; closed ordered source/object/ordinary-domain premise vectors for lifted inference, polynomial seeds and the three admitted origin laws; classification supplies no proof.",
     },
 ];
 

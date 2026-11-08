@@ -93,7 +93,7 @@ fn lc_original_missing_domain_refuses() -> TestResult {
     }
     assert_eq!(
         (domain_work, sign_work),
-        (9_553, vec![([0, 1], 448_063), ([1, 0], 445_655)])
+        (9_613, vec![([0, 1], 448_123), ([1, 0], 445_715)])
     );
     Ok(())
 }

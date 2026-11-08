@@ -4,6 +4,8 @@
 /// A compiled checker whose mathematical meaning is fixed by its semantic version.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Primitive {
+    /// Registered exact rational trigonometric source origin laws.
+    SeriesSource,
     /// Fixed-order derivative of a rational finite object.
     SeriesDerive,
     /// Fixed-order integral with ordinary definedness and checked integer units.
@@ -282,6 +284,7 @@ impl Primitive {
                 | Self::SeriesAdd
                 | Self::SeriesScale
                 | Self::SeriesDerive
+                | Self::SeriesSource
                 | Self::SeriesIntegrate
                 | Self::SeriesMul
                 | Self::SeriesCoefficient
@@ -335,6 +338,7 @@ impl Primitive {
             Self::SeriesScale => ("series.scale", 4),
             Self::SeriesDerive => ("series.derive", 4),
             Self::SeriesIntegrate => ("series.integrate", 4),
+            Self::SeriesSource => ("series.source", 8),
             Self::SeriesMul => ("series.mul", 8),
             Self::SeriesCoefficient => ("series.coefficient", 2),
             Self::SinOdd => ("trig.sin-odd", 2),
@@ -433,6 +437,7 @@ impl Primitive {
             | Self::SeriesAdd
             | Self::SeriesScale
             | Self::SeriesDerive
+            | Self::SeriesSource
             | Self::SeriesIntegrate
             | Self::SeriesMul
             | Self::SeriesCoefficient => ConclusionKind::Series,
@@ -482,6 +487,7 @@ impl Primitive {
             | Self::SeriesAdd
             | Self::SeriesScale
             | Self::SeriesDerive
+            | Self::SeriesSource
             | Self::SeriesIntegrate
             | Self::SeriesMul
             | Self::SeriesCoefficient => PremiseShape::SeriesEvidence,
@@ -541,6 +547,7 @@ impl Primitive {
             | Self::SeriesAdd
             | Self::SeriesScale
             | Self::SeriesDerive
+            | Self::SeriesSource
             | Self::SeriesIntegrate
             | Self::SeriesMul
             | Self::SeriesCoefficient => CertificateSchema::Series,
@@ -577,7 +584,7 @@ impl Primitive {
 }
 
 /// Every registered primitive, in ASCII key order; availability is separate metadata.
-pub const PRIMITIVES: [Primitive; 96] = [
+pub const PRIMITIVES: [Primitive; 97] = [
     Primitive::CaseCongruence,
     Primitive::CaseDomain,
     Primitive::CaseEliminate,
@@ -656,6 +663,7 @@ pub const PRIMITIVES: [Primitive; 96] = [
     Primitive::SeriesIntegrate,
     Primitive::SeriesMul,
     Primitive::SeriesScale,
+    Primitive::SeriesSource,
     Primitive::SeriesTruncate,
     Primitive::Solve(crate::solving::SolveSchema::ParameterImageCoverage),
     Primitive::Solve(crate::solving::SolveSchema::ImplicitFunctionBranch),

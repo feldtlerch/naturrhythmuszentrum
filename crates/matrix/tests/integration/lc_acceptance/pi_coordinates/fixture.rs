@@ -45,8 +45,8 @@ pub(super) fn with_scale(scale: Scale) -> TestResult<state_fixture::Plan> {
 /// The shared fixture allowance is the measured binary64 restoration ceiling.
 pub(super) fn execution() -> nrz_bindings::LimitsOverride {
     nrz_bindings::LimitsOverride {
-        staged_payload_bytes: Some(81_998),
-        output_bytes: Some(81_894),
+        staged_payload_bytes: Some(82_040),
+        output_bytes: Some(81_936),
         ..nrz_bindings::LimitsOverride::default()
     }
 }

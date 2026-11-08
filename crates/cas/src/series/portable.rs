@@ -362,9 +362,25 @@ fn decode_certificate(
         return Err(invalid());
     };
     let mode = reader.byte()?;
-    let count = reader.count(BudgetKind::ProofNodes, 4, 512)?;
     let Statement::Series(statement) = &claim.judgment.statement else {
         return Err(invalid());
+    };
+    let count = if matches!(statement.as_ref(), super::SeriesStatement::Source(_)) {
+        let count = usize::try_from(reader.index()?).map_err(|_| invalid())?;
+        if count != super::check::premise_count(cas, statement)? {
+            return Err(invalid());
+        }
+        reader
+            .budget
+            .check(BudgetKind::ProofNodes, crate::graph::size(count, AT)?, AT)?;
+        reader.allocation(
+            crate::graph::size(count, AT)?
+                .checked_mul(512)
+                .ok_or_else(invalid)?,
+        )?;
+        count
+    } else {
+        reader.count(BudgetKind::ProofNodes, 4, 512)?
     };
     if count != super::check::premise_count(cas, statement)? {
         return Err(invalid());
@@ -430,6 +446,10 @@ fn decode_conclusion(
     let Decoded::Application(proof) = reference(reader, records)? else {
         return Err(invalid());
     };
+    if matches!(&claim.judgment.statement, Statement::Series(value) if matches!(value.as_ref(), super::SeriesStatement::Source(_)))
+    {
+        return source_conclusion(cas, claim, proof, reader, records, manifest);
+    }
     let application = crate::proof_view::application(cas, cas.checked(proof)?, reader.budget)?;
     if !matches!(application.judgment.statement, Statement::Series(_)) {
         return Err(invalid());
@@ -459,4 +479,57 @@ fn decode_conclusion(
         return Err(invalid());
     }
     Ok(Decoded::Conclusion(cas.seal_scoped(proof, reader.budget)?))
+}
+
+/// Borrow the new source application's typed arity before sizing or copying its payload.
+fn source_conclusion(
+    cas: &Cas,
+    claim: &Claim,
+    proof: &Handle,
+    reader: &mut Reader<'_, '_>,
+    records: &[Decoded],
+    manifest: &[Primitive],
+) -> Result<Decoded, Fault> {
+    let Vertex::Proof(id) = cas.state.node(cas.checked(proof)?)? else {
+        return Err(invalid());
+    };
+    let application = cas.series_application(*id)?;
+    let Statement::Series(statement) = &claim.judgment.statement else {
+        return Err(invalid());
+    };
+    let count = usize::try_from(reader.index()?).map_err(|_| invalid())?;
+    if count != super::check::premise_count(cas, statement)? || count != application.premises.len()
+    {
+        return Err(invalid());
+    }
+    for expected in &application.premises {
+        if cas.checked(self::proof(reader, records)?)? != *expected {
+            return Err(invalid());
+        }
+    }
+    let declared = read_rules(reader, manifest)?;
+    let mut out = Encoder::new(reader.budget, AT);
+    crate::statement::judgment(&claim.judgment, &mut out)?;
+    let bytes = crate::graph::size(out.finish().len(), AT)?;
+    reader.budget.work(
+        bytes
+            .checked_add(
+                crate::graph::size(claim.hypotheses.len(), AT)?
+                    .checked_mul(32)
+                    .ok_or_else(invalid)?,
+            )
+            .ok_or_else(invalid)?,
+        AT,
+    )?;
+    if application.judgment != claim.judgment
+        || application.conditions.hypotheses != claim.hypotheses
+        || declared != claim.rules
+        || declared != rules(cas, proof.logical_id(), reader.budget)?
+    {
+        return Err(invalid());
+    }
+    let bytes = crate::proof_view::application_bytes(cas, cas.checked(proof)?, reader.budget)?;
+    reader.budget.with_retained_payload(bytes, AT, |budget| {
+        Ok(Decoded::Conclusion(cas.seal_scoped(proof, budget)?))
+    })
 }

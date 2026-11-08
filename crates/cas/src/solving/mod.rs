@@ -7,7 +7,7 @@
 //!
 //! |Surface|Available contract|Boundary|
 //! |-------|------------------|--------|
-//! |Registry|96 registered primitives: 75 non-solving native-weight and 19 executable solving rules among 21 solving entries; 94 available entries in total; logical policy v16.|`root.isolate` and `solve.local-branch` remain unavailable; subtype 13 is removed.|
+//! |Registry|97 registered primitives: 76 non-solving native-weight and 19 executable solving rules among 21 solving entries; 95 available entries in total; logical policy v17.|`root.isolate` and `solve.local-branch` remain unavailable; subtype 13 is removed.|
 //! |Complex producer|Complete symbolic cubic with original Complex parameters, all degree drops and Radicals presentation.|No general higher-degree radical or generic Galois-obstruction checker.|
 //! |Real producer|Complete symbolic cubic with Real radicals or counted Real cells and `RealExact` presentation.|Three-root cells do not satisfy a separate Real-radicals request.|
 //! |Mixed families|Explicit Real base and Complex fibre, complete linear/binomial and algebraic cubic pieces, checked optional base/fibre covers.|Mixed cubic radical discovery and automatic general nonlinear systems remain unavailable.|

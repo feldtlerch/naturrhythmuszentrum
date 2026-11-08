@@ -10,7 +10,7 @@ use nrz_bindings::{Budget, Descriptor, Limits};
 #[test]
 fn quantity_product_covariance_work_boundaries() -> TestResult {
     for (warm, required, charged, refused) in [
-        (false, 877_968, 831_178, 721_763),
+        (false, 878_088, 831_360, 721_885),
         (true, 10_443, 10_443, 8_762),
     ] {
         for accepted in [false, true] {

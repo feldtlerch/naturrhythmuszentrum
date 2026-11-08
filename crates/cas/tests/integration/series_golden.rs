@@ -6,30 +6,30 @@ use crate::testing::series_proof::fixture;
 use std::collections::BTreeMap;
 
 /// One literal byte segment or symbolic earlier-record reference.
-enum Part {
+pub(super) enum Part {
     Bytes(Vec<u8>),
     Ref(&'static str),
 }
 /// Independently stated record grammar, without a graph or production record descriptor.
-struct Record {
-    name: &'static str,
-    tag: u8,
-    layer: u8,
-    parts: Vec<Part>,
+pub(super) struct Record {
+    pub(super) name: &'static str,
+    pub(super) tag: u8,
+    pub(super) layer: u8,
+    pub(super) parts: Vec<Part>,
 }
 
 /// The wire collection width is four bytes.
-fn count(value: u32) -> Vec<u8> {
+pub(super) fn count(value: u32) -> Vec<u8> {
     value.to_le_bytes().to_vec()
 }
 /// Hand literal name encoding.
-fn name(value: &str) -> Vec<u8> {
+pub(super) fn name(value: &str) -> Vec<u8> {
     let mut out = count(u32::try_from(value.len()).expect("fixture name"));
     out.extend_from_slice(value.as_bytes());
     out
 }
 /// The fixture needs only one-byte magnitudes, including canonical empty zero numerator.
-fn number(negative: bool, numerator: u8, denominator: u8) -> Vec<u8> {
+pub(super) fn number(negative: bool, numerator: u8, denominator: u8) -> Vec<u8> {
     let mut out = vec![u8::from(negative)];
     out.extend(count(u32::from(numerator != 0)));
     if numerator != 0 {
@@ -40,16 +40,16 @@ fn number(negative: bool, numerator: u8, denominator: u8) -> Vec<u8> {
     out
 }
 /// A literal segment keeps all semantic tags visible at its declaration.
-const fn bytes(value: Vec<u8>) -> Part {
+pub(super) const fn bytes(value: Vec<u8>) -> Part {
     Part::Bytes(value)
 }
 /// Concatenate independently specified fixed wire fields.
-fn join(parts: &[Vec<u8>]) -> Vec<u8> {
+pub(super) fn join(parts: &[Vec<u8>]) -> Vec<u8> {
     parts.concat()
 }
 
 /// A scalar leaf retains the registered Real ambient and has no binder or case payload.
-fn expression(key: &'static str, operator: Vec<u8>) -> Record {
+pub(super) fn expression(key: &'static str, operator: Vec<u8>) -> Record {
     Record {
         name: key,
         tag: 3,
@@ -99,7 +99,7 @@ fn region(key: &'static str, members: &[&'static str]) -> Record {
 }
 
 /// Both order-three objects retain the exact interpretation, coordinate and original context.
-fn object(key: &'static str, coefficients: &[&'static str]) -> Record {
+pub(super) fn object(key: &'static str, coefficients: &[&'static str]) -> Record {
     let mut parts = vec![
         Part::Ref("Q"),
         Part::Ref("zero"),
@@ -139,7 +139,7 @@ fn closure() -> Vec<u8> {
     clippy::too_many_lines,
     reason = "The independent golden DAG retains its complete hand-authored record grammar"
 )]
-fn records() -> Vec<Record> {
+pub(super) fn records() -> Vec<Record> {
     let mut values = vec![
         Record {
             name: "real",
@@ -309,7 +309,7 @@ fn golden() -> TestResult<Vec<u8>> {
 }
 
 /// Encode hand-authored records without consulting any production descriptor.
-fn encode_records(records: &[Record], manifest: Vec<u8>) -> TestResult<Vec<u8>> {
+pub(super) fn encode_records(records: &[Record], manifest: Vec<u8>) -> TestResult<Vec<u8>> {
     let mut assigned = BTreeMap::new();
     let mut encoded = Vec::new();
     while assigned.len() < records.len() {

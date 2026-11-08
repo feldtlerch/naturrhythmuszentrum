@@ -14,14 +14,14 @@ use crate::{FaultKind, InvalidCode, Location};
 #[test]
 fn half_pi_policy_version() -> TestResult {
     let policy = crate::cost::CostPolicy::default();
-    assert_eq!(policy.version, 16);
-    assert_eq!(policy.weights.len(), 96);
+    assert_eq!(policy.version, 17);
+    assert_eq!(policy.weights.len(), 97);
     assert_eq!(
         crate::rule::PRIMITIVES
             .iter()
             .filter(|primitive| !matches!(primitive, crate::rule::Primitive::Solve(_)))
             .count(),
-        75
+        76
     );
     policy.validate(&mut default_budget()?)?;
     let mut old = policy.clone();

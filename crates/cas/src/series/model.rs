@@ -5,9 +5,11 @@ use crate::graph::Handle;
 use crate::number::Rational;
 use crate::rule::Primitive;
 
-/// A finite computation in the increment ring, never an equality of source functions.
+/// Finite object computations and registered correspondence with an exact original source.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SeriesStatement {
+    /// Exact original source correspondence, separate from object arithmetic.
+    Source(super::source::SourceStatement),
     /// Formal object derivative with exactly one fewer known coefficient.
     Derive {
         /// Original object of order at least two.
@@ -140,6 +142,8 @@ pub struct SeriesIntegralRow {
 /// Untrusted finite evidence; only a registered checker can establish a judgment.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SeriesCertificate {
+    /// Closed source theorem, polynomial seed or finite source inference.
+    Source(super::source::SourceCertificate),
     /// Reserved mode eight, with no ordinary-proof slots.
     Derive {
         /// Only object form zero is executable.
@@ -206,6 +210,7 @@ impl SeriesStatement {
     #[must_use]
     pub const fn primitive(&self) -> Primitive {
         match self {
+            Self::Source(value) => value.clause.primitive(),
             Self::Derive { .. } => Primitive::SeriesDerive,
             Self::Integrate { .. } => Primitive::SeriesIntegrate,
             Self::Truncate { .. } => Primitive::SeriesTruncate,
@@ -216,9 +221,10 @@ impl SeriesStatement {
         }
     }
 
-    /// Every original object and result, in semantic role order.
+    /// Every original expression, domain, object and result, in semantic role order.
     pub(crate) fn objects(&self) -> Vec<&Handle> {
         match self {
+            Self::Source(value) => vec![&value.source, &value.domain, &value.output],
             Self::Truncate { input, output } | Self::Derive { input, output } => {
                 vec![input, output]
             }
@@ -248,9 +254,10 @@ impl SeriesStatement {
         }
     }
 
-    /// The original first object fixes the complete increment-ring interpretation.
+    /// The first original operand; source clauses obtain their interpretation from the output.
     pub(crate) const fn input(&self) -> &Handle {
         match self {
+            Self::Source(value) => &value.source,
             Self::Truncate { input, .. }
             | Self::Derive { input, .. }
             | Self::Integrate { input, .. }
@@ -266,6 +273,7 @@ impl SeriesCertificate {
     #[must_use]
     pub const fn mode(&self) -> u8 {
         match self {
+            Self::Source(value) => value.clause.mode(),
             Self::Derive { .. } => 8,
             Self::Integrate { .. } => 9,
             Self::Truncate { .. } => 0,
@@ -280,6 +288,7 @@ impl SeriesCertificate {
     #[must_use]
     pub const fn form(&self) -> u8 {
         match self {
+            Self::Source(value) => value.clause.form(),
             Self::Truncate { form, .. }
             | Self::Derive { form, .. }
             | Self::Integrate { form, .. }
