@@ -17,7 +17,7 @@
 //! | [`refuses_legacy_formulas_and_forged_evidence`] | docgen | Reject legacy envelopes, invalid original formulas and forged committed evidence. |
 //! | [`tracked_ordinal_refusal_is_read_only`] | docgen | The check reads tracked working bytes and names the exact refusal location. |
 //! | [`tracked_ordinal_path_refuses`] | docgen | Tracked filenames are checked even when their contents contain no prose. |
-//! | [`oracle_check_precedes_tracked_read`] | docgen | Exercise the real command: a bounded oracle refusal precedes a tracked-text sentinel. # Errors Returns filesystem or subprocess failures. # Panics Panics only if the command reaches the tracked scan before bounded oracle admission. |
+//! | [`golden_check_precedes_tracked_read`] | docgen | Exercise the real command: a bounded golden refusal precedes a tracked-text sentinel. # Errors Returns filesystem or subprocess failures. # Panics Panics only if the command reaches the tracked scan before bounded golden admission. |
 
 //! Binary-level checks of the documentation fixed point and exit classes.
 
@@ -545,31 +545,31 @@ fn tracked_ordinal_path_refuses() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Exercise the real command: a bounded oracle refusal precedes a tracked-text sentinel.
+/// Exercise the real command: a bounded golden refusal precedes a tracked-text sentinel.
 /// # Errors
 /// Returns filesystem or subprocess failures.
 /// # Panics
-/// Panics only if the command reaches the tracked scan before bounded oracle admission.
-/// ´claim:docgen:oracle-check-precedes-tracked-read´
-/// ´test:integration:oracle-check-precedes-tracked-read´
+/// Panics only if the command reaches the tracked scan before bounded golden admission.
+/// ´claim:docgen:golden-check-precedes-tracked-read´
+/// ´test:integration:golden-check-precedes-tracked-read´
 #[test]
-fn oracle_check_precedes_tracked_read() -> Result<(), Box<dyn std::error::Error>> {
+fn golden_check_precedes_tracked_read() -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempfile::tempdir()?;
     let root = directory.path();
     fixture(root)?;
-    fs::create_dir_all(root.join("data/oracles"))?;
-    let path = root.join("data/oracles/oversized.json");
-    let mut bytes = include_bytes!("../../../data/oracles/prepared-binary64.json").to_vec();
+    fs::create_dir_all(root.join("data/golden"))?;
+    let path = root.join("data/golden/oversized.json");
+    let mut bytes = include_bytes!("support/prepared-binary64-golden-seven.json").to_vec();
     // The ordinal trap makes the old ordering observably fail without a giant allocation.
     let sentinel = format!("\nStage {}{}", "3", "a");
     bytes.extend_from_slice(sentinel.as_bytes());
-    bytes.resize(nrz_docgen::oracle::Limits::default().bytes + 1, b' ');
+    bytes.resize(nrz_docgen::golden::Limits::default().bytes + 1, b' ');
     fs::write(&path, &bytes)?;
     track_fixture(root)?;
     let output = run(root, "check")?;
     assert_eq!(output.status.code(), Some(1));
     let error = String::from_utf8(output.stderr)?;
-    assert!(error.contains("oracle Bytes"), "{error}");
+    assert!(error.contains("golden Bytes"), "{error}");
     assert!(!error.contains("ordinal-step-code"), "{error}");
     assert_eq!(fs::read(path)?, bytes);
     Ok(())

@@ -14,7 +14,7 @@ mod bounds;
 /// Panics only if the committed fixture is not JSON, which the fixture gate rejects.
 fn fixture() -> Value {
     serde_json::from_str(include_str!(
-        "../../../../data/oracles/prepared-binary64.json"
+        "../../tests/support/prepared-binary64-golden-seven.json"
     ))
     .expect("committed JSON fixture")
 }
@@ -53,10 +53,10 @@ fn rejects(value: &Value, cause: Cause) {
 ///
 /// # Panics
 /// Panics if fixture encoding or admission fails, or checked bytes change meaning.
-/// ´claim:docgen:oracle-admits-sample-evidence´
-/// ´test:unit:oracle-admits-sample-evidence´
+/// ´claim:docgen:golden-admits-sample-evidence´
+/// ´test:unit:golden-admits-sample-evidence´
 #[test]
-fn oracle_admits_sample_evidence() {
+fn golden_admits_sample_evidence() {
     let value = fixture();
     let bytes = serde_json::to_vec(&value).expect("fixture serialization");
     let checked = read(
@@ -83,15 +83,15 @@ fn oracle_admits_sample_evidence() {
 ///
 /// # Panics
 /// Panics if the fixture shape changes or a mutation has the wrong outcome.
-/// ´claim:docgen:oracle-refuses-evidence-mutations´
-/// ´test:unit:oracle-refuses-evidence-mutations´
+/// ´claim:docgen:golden-refuses-evidence-mutations´
+/// ´test:unit:golden-refuses-evidence-mutations´
 #[test]
-fn oracle_refuses_evidence_mutations() {
+fn golden_refuses_evidence_mutations() {
     let mut value = fixture();
     value["entries"][0]["evidence"][0]["routes"][0]["interval"] = json!(["2", "3"]);
     rejects(&value, Cause::EmptyIntersection);
     let mut value = fixture();
-    value["entries"][0]["oracle"]["point"] = json!(["0", "1"]);
+    value["entries"][0]["golden"]["point"] = json!(["0", "1"]);
     rejects(&value, Cause::Intersection);
     let mut value = fixture();
     assert!(
@@ -133,10 +133,10 @@ fn oracle_refuses_evidence_mutations() {
 ///
 /// # Panics
 /// Panics if a mutation path disappears or the checker has the wrong outcome.
-/// ´claim:docgen:oracle-refuses-malformed-forms´
-/// ´test:unit:oracle-refuses-malformed-forms´
+/// ´claim:docgen:golden-refuses-malformed-forms´
+/// ´test:unit:golden-refuses-malformed-forms´
 #[test]
-fn oracle_refuses_malformed_forms() {
+fn golden_refuses_malformed_forms() {
     for (pointer, replacement, cause) in [
         ("/namespace", json!("other"), Cause::Namespace),
         ("/version", json!([1, 0, 1]), Cause::Version),
@@ -160,7 +160,7 @@ fn oracle_refuses_malformed_forms() {
         ),
         ("/entries/3/input/box", json!(["2", "1"]), Cause::Ordering),
         (
-            "/entries/0/oracle/point",
+            "/entries/0/golden/point",
             json!(["1", "0"]),
             Cause::Ordering,
         ),
@@ -194,7 +194,7 @@ fn singleton(operation: &str, input: &str, output: &str) -> Value {
     row["operation"] = json!(operation);
     row["input"]["point"] = json!(input);
     row["evidence"][0]["input"] = json!(input);
-    row["oracle"]["point"] = json!([output, output]);
+    row["golden"]["point"] = json!([output, output]);
     for route in row["evidence"][0]["routes"]
         .as_array_mut()
         .expect("route list")
@@ -216,10 +216,10 @@ fn singleton(operation: &str, input: &str, output: &str) -> Value {
 ///
 /// # Panics
 /// Panics if fixture encoding, shape or a declared checker outcome changes.
-/// ´claim:docgen:oracle-checks-exact-results-and-width´
-/// ´test:unit:oracle-checks-exact-results-and-width´
+/// ´claim:docgen:golden-checks-exact-results-and-width´
+/// ´test:unit:golden-checks-exact-results-and-width´
 #[test]
-fn oracle_checks_exact_results_and_width() {
+fn golden_checks_exact_results_and_width() {
     let mut identity = singleton("power", "1/2", "1/2");
     identity["entries"][0]["exponent"] = json!("1");
     let bytes = serde_json::to_vec(&identity).expect("identity encoding");
@@ -255,7 +255,7 @@ fn oracle_checks_exact_results_and_width() {
         ("1/664613997892457936451903530140172288", false),
     ] {
         let mut value = singleton("exp", "-1", "0");
-        value["entries"][0]["oracle"]["point"] = json!(["0", upper]);
+        value["entries"][0]["golden"]["point"] = json!(["0", upper]);
         for route in value["entries"][0]["evidence"][0]["routes"]
             .as_array_mut()
             .expect("routes")
@@ -282,10 +282,10 @@ fn oracle_checks_exact_results_and_width() {
 ///
 /// # Panics
 /// Panics if encoding or a declared resource-boundary outcome changes.
-/// ´claim:docgen:oracle-enforces-resource-boundaries´
-/// ´test:unit:oracle-enforces-resource-boundaries´
+/// ´claim:docgen:golden-enforces-resource-boundaries´
+/// ´test:unit:golden-enforces-resource-boundaries´
 #[test]
-fn oracle_enforces_resource_boundaries() {
+fn golden_enforces_resource_boundaries() {
     let mut value = singleton("expm1", "0", "0");
     value["routes"][0]["argument"] = json!(r#"[[[{\"}]]]"#);
     let bytes = serde_json::to_vec(&value).expect("encoding");
@@ -356,10 +356,10 @@ fn oracle_enforces_resource_boundaries() {
 ///
 /// # Panics
 /// Panics if the checker admits one of these malformed JSON controls.
-/// ´claim:docgen:oracle-refuses-json-ambiguity´
-/// ´test:unit:oracle-refuses-json-ambiguity´
+/// ´claim:docgen:golden-refuses-json-ambiguity´
+/// ´test:unit:golden-refuses-json-ambiguity´
 #[test]
-fn oracle_refuses_json_ambiguity() {
+fn golden_refuses_json_ambiguity() {
     for source in ["{\"x\":1,\"x\":2}".to_owned(), "{} {}".to_owned()] {
         assert!(matches!(
             read(
@@ -383,14 +383,14 @@ fn oracle_refuses_json_ambiguity() {
     ));
 }
 
-/// Refusal fixtures carry the closed vocabulary without fabricated oracle evidence.
+/// Refusal fixtures carry the closed vocabulary without fabricated golden evidence.
 ///
 /// # Panics
 /// Panics if the fixture cannot be encoded or a declared refusal form is rejected.
-/// ´claim:docgen:oracle-admits-closed-refusal-forms´
-/// ´test:unit:oracle-admits-closed-refusal-forms´
+/// ´claim:docgen:golden-admits-closed-refusal-forms´
+/// ´test:unit:golden-admits-closed-refusal-forms´
 #[test]
-fn oracle_admits_closed_refusal_forms() {
+fn golden_admits_closed_refusal_forms() {
     for reason in [
         "outside-domain",
         "below-normal-operand",
@@ -415,7 +415,7 @@ fn oracle_admits_closed_refusal_forms() {
             )
             .is_ok()
         );
-        value["entries"][0]["oracle"] = json!({"point":["0", "0"]});
+        value["entries"][0]["golden"] = json!({"point":["0", "0"]});
         rejects(&value, Cause::Fields);
     }
 }

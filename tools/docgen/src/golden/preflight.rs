@@ -24,7 +24,7 @@ enum Role {
     /// Original point or box.
     Input,
     /// Published endpoint intervals.
-    Oracle,
+    Golden,
     /// Endpoint evidence array.
     Evidence,
     /// One endpoint's input association.
@@ -47,13 +47,13 @@ impl Role {
         match (self, key) {
             (Self::Root, b"entries") => Self::Entries,
             (Self::Row, b"input") => Self::Input,
-            (Self::Row, b"oracle") => Self::Oracle,
+            (Self::Row, b"golden") => Self::Golden,
             (Self::Row, b"evidence") => Self::Evidence,
             (Self::Row, b"exponent") | (Self::Input, b"point") | (Self::Endpoint, b"input") => {
                 Self::Number
             }
             (Self::Input, b"box")
-            | (Self::Oracle, b"point" | b"lower_endpoint" | b"upper_endpoint")
+            | (Self::Golden, b"point" | b"lower_endpoint" | b"upper_endpoint")
             | (Self::Route, b"interval") => Self::Numbers,
             (Self::Endpoint, b"routes") => Self::Routes,
             _ => Self::Other,
