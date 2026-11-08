@@ -36,6 +36,10 @@ pub(crate) enum PendingJudgment {
     NewPi(super::PiInventory),
     /// Complete newly checked original-scope enclosure.
     NewEnclosure(super::EnclosureInventory),
+    /// Newly checked native exponential schedule.
+    NewExpm1(super::Expm1Inventory),
+    /// Native schedule independently replayed in this namespace.
+    RecheckedExpm1(LogicalId),
     /// Earlier enclosure independently rechecked in this namespace.
     RecheckedEnclosure(LogicalId),
     /// Earlier Machin node independently rechecked in this namespace.
@@ -117,6 +121,7 @@ impl Cas {
                     PendingJudgment::NewScalar(_)
                         | PendingJudgment::NewPi(_)
                         | PendingJudgment::NewEnclosure(_)
+                        | PendingJudgment::NewExpm1(_)
                 )
             })
             .count();
@@ -124,8 +129,10 @@ impl Cas {
             PendingJudgment::NewScalar(inventory) => total.saturating_add(inventory.bytes),
             PendingJudgment::NewPi(inventory) => total.saturating_add(inventory.bytes),
             PendingJudgment::NewEnclosure(inventory) => total.saturating_add(inventory.bytes),
+            PendingJudgment::NewExpm1(inventory) => total.saturating_add(inventory.bytes),
             PendingJudgment::RecheckedScalar(_)
             | PendingJudgment::RecheckedPi(_)
+            | PendingJudgment::RecheckedExpm1(_)
             | PendingJudgment::RecheckedEnclosure(_) => total,
         });
         preflight(self, pending, count, bytes, budget)?;
@@ -146,6 +153,11 @@ impl Cas {
                 serial,
             };
             let undo = match entry {
+                PendingJudgment::NewExpm1(inventory) => Undo::Vertex {
+                    id,
+                    key: Some(inventory.key.clone().into()),
+                    policy: None,
+                },
                 PendingJudgment::NewEnclosure(inventory) => Undo::Vertex {
                     id,
                     key: Some(inventory.key.clone().into()),
@@ -161,6 +173,7 @@ impl Cas {
                 },
                 PendingJudgment::RecheckedScalar(_)
                 | PendingJudgment::RecheckedPi(_)
+                | PendingJudgment::RecheckedExpm1(_)
                 | PendingJudgment::RecheckedEnclosure(_) => continue,
             };
             self.state.record(undo)?;
@@ -173,6 +186,10 @@ impl Cas {
                 PendingJudgment::NewEnclosure(inventory) => {
                     super::enclosure::append(self, inventory);
                 }
+                PendingJudgment::NewExpm1(inventory) => {
+                    super::prepared_expm1::append(self, inventory);
+                }
+                PendingJudgment::RecheckedExpm1(id) => self.refresh_expm1(id),
                 PendingJudgment::RecheckedEnclosure(id) => self.refresh_enclosure(id),
                 PendingJudgment::RecheckedPi(id) => self.refresh_pi(id),
                 PendingJudgment::RecheckedScalar(id) => {
@@ -204,9 +221,10 @@ fn preflight(
         total.saturating_add(match entry {
             PendingJudgment::NewScalar(_) => 4,
             PendingJudgment::NewPi(_) => 2,
-            PendingJudgment::NewEnclosure(_) => 3,
+            PendingJudgment::NewEnclosure(_) | PendingJudgment::NewExpm1(_) => 3,
             PendingJudgment::RecheckedScalar(_)
             | PendingJudgment::RecheckedPi(_)
+            | PendingJudgment::RecheckedExpm1(_)
             | PendingJudgment::RecheckedEnclosure(_) => 0,
         })
     });
@@ -246,6 +264,18 @@ fn preflight(
             }
             PendingJudgment::RecheckedEnclosure(id) => {
                 cas.enclosure_inventory(*id)?;
+            }
+            PendingJudgment::NewExpm1(inventory) => {
+                for id in inventory.scope {
+                    cas.state.node(id)?;
+                }
+                let total = cas.state.judgment_bytes.saturating_add(bytes);
+                budget.check(BudgetKind::OutputBytes, total, AT)?;
+                let unregistered = cas.judgment_reservation(total, budget, AT)?;
+                budget.check(BudgetKind::StagedPayloadBytes, unregistered, AT)?;
+            }
+            PendingJudgment::RecheckedExpm1(id) => {
+                cas.expm1_inventory(*id)?;
             }
             PendingJudgment::NewScalar(inventory) => {
                 for id in inventory.scope {

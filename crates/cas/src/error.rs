@@ -28,6 +28,26 @@ impl Location {
 /// The reason a value cannot be admitted.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum InvalidCode {
+    /// The prepared exponential coefficient is not the declared nearest dyadic.
+    Expm1Coefficient,
+    /// A prepared exponential rounding stage is absent, reordered or unsound.
+    Expm1Rounding,
+    /// The prepared exponential analytic remainder relation is invalid.
+    Expm1Analytic,
+    /// The prepared exponential input-import bound is invalid.
+    Expm1Import,
+    /// The prepared exponential endpoint export or restoration is invalid.
+    Expm1Export,
+    /// A proposed schedule fails its claimed relative endpoint target.
+    Expm1Target,
+    /// The original exponential-minus-one operand is outside [-2,0].
+    Expm1OutsideDomain,
+    /// A nonzero original operand endpoint has below-normal magnitude.
+    Expm1BelowNormal,
+    /// The proposed native arithmetic environment or schedule is unsupported.
+    Expm1Environment,
+    /// The proposed prepared theorem differs from the complete original claim.
+    Expm1Claim,
     /// A well-formed formal-series request exceeds the admitted finite object fragment.
     SeriesUnsupported,
     /// No admitted exact certificate checker supports this predicate or arithmetic origin.

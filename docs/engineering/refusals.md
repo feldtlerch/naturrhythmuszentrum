@@ -39,12 +39,40 @@ Wrappers retain their underlying numerical or symbolic cause. Recovery stop enum
 |DOCGEN|`Error`|`JsonSyntax`|failure|A committed JSON document is syntactically invalid.|`tools/docgen/src/error.rs`|
 |DOCGEN|`Error`|`Manifest`|failure|The declared output inventory is invalid.|`tools/docgen/src/error.rs`|
 |DOCGEN|`Error`|`Membership`|failure|Workspace membership or a supported manifest fact is invalid.|`tools/docgen/src/error.rs`|
+|DOCGEN|`Error`|`Oracle`|failure|A bounded oracle input failed; its path and original typed oracle cause are retained.|`tools/docgen/src/error.rs`|
 |DOCGEN|`Error`|`OrdinalCode`|failure|A tracked path or text line contains an ordinal schedule code; the refusal retains its path, line and exact matched spelling.|`tools/docgen/src/error.rs`|
 |DOCGEN|`Error`|`Payload`|failure|A typed record or its semantic constraints are invalid.|`tools/docgen/src/error.rs`|
 |DOCGEN|`Error`|`Template`|failure|A template cannot be loaded or evaluated.|`tools/docgen/src/error.rs`|
 |DOCGEN|`Error`|`TemplateHeader`|failure|A template header violates the declared source contract.|`tools/docgen/src/error.rs`|
 |DOCGEN|`Error`|`TomlSyntax`|failure|An input TOML document is syntactically invalid.|`tools/docgen/src/error.rs`|
 |DOCGEN|`Error`|`TrackedText`|failure|Git cannot supply the tracked-file inventory, or that inventory contains a path that is not UTF-8.|`tools/docgen/src/error.rs`|
+|DOCGEN|`oracle::Cause`|`Association`|failure|Evidence is missing, repeated, stray, reordered or bound to another input.|`tools/docgen/src/oracle.rs`|
+|DOCGEN|`oracle::Cause`|`Bytes`|resource|The byte ceiling was exceeded before parsing.|`tools/docgen/src/oracle.rs`|
+|DOCGEN|`oracle::Cause`|`Depth`|resource|JSON nesting exceeds the declared ceiling or the hard maximum.|`tools/docgen/src/oracle.rs`|
+|DOCGEN|`oracle::Cause`|`EmptyIntersection`|failure|The two route intervals are disjoint.|`tools/docgen/src/oracle.rs`|
+|DOCGEN|`oracle::Cause`|`Entries`|resource|The entry ceiling was exceeded before JSON tree allocation.|`tools/docgen/src/oracle.rs`|
+|DOCGEN|`oracle::Cause`|`EntryId`|failure|Entry identifiers are empty or repeated.|`tools/docgen/src/oracle.rs`|
+|DOCGEN|`oracle::Cause`|`Envelope`|failure|The owner, license, sources or labels are invalid.|`tools/docgen/src/oracle.rs`|
+|DOCGEN|`oracle::Cause`|`Exact`|failure|A promised exact result is not the required singleton.|`tools/docgen/src/oracle.rs`|
+|DOCGEN|`oracle::Cause`|`Expected`|failure|The expected-result form or refusal reason is unknown or operation-incompatible.|`tools/docgen/src/oracle.rs`|
+|DOCGEN|`oracle::Cause`|`Exponent`|failure|A power exponent is incompatible with its expected outcome.|`tools/docgen/src/oracle.rs`|
+|DOCGEN|`oracle::Cause`|`Fields`|failure|An object has missing, extra or wrongly typed fields.|`tools/docgen/src/oracle.rs`|
+|DOCGEN|`oracle::Cause`|`Intersection`|failure|The published interval differs from the exact intersection.|`tools/docgen/src/oracle.rs`|
+|DOCGEN|`oracle::Cause`|`Json`|failure|Invalid JSON or a duplicate object member.|`tools/docgen/src/oracle.rs`|
+|DOCGEN|`oracle::Cause`|`Literal`|resource|A decoded rational spelling exceeds its ceiling before JSON tree allocation.|`tools/docgen/src/oracle.rs`|
+|DOCGEN|`oracle::Cause`|`Namespace`|failure|The namespace is not the prepared-binary64 namespace.|`tools/docgen/src/oracle.rs`|
+|DOCGEN|`oracle::Cause`|`Operation`|failure|The operation is not one of the five laws.|`tools/docgen/src/oracle.rs`|
+|DOCGEN|`oracle::Cause`|`Ordering`|failure|An input or oracle interval has reversed endpoints.|`tools/docgen/src/oracle.rs`|
+|DOCGEN|`oracle::Cause`|`Rational`|failure|A number is not a canonical reduced rational string.|`tools/docgen/src/oracle.rs`|
+|DOCGEN|`oracle::Cause`|`RouteKind`|failure|A route kind is outside the closed pair.|`tools/docgen/src/oracle.rs`|
+|DOCGEN|`oracle::Cause`|`Routes`|failure|Route metadata or ordered references are invalid.|`tools/docgen/src/oracle.rs`|
+|DOCGEN|`oracle::Cause`|`Target`|failure|A target does not match its operation.|`tools/docgen/src/oracle.rs`|
+|DOCGEN|`oracle::Cause`|`TargetBits`|resource|Target precision exceeds the declared encoding ceiling.|`tools/docgen/src/oracle.rs`|
+|DOCGEN|`oracle::Cause`|`Version`|failure|Only the exact version triple is admitted.|`tools/docgen/src/oracle.rs`|
+|DOCGEN|`oracle::Cause`|`Width`|failure|The published endpoint interval exceeds the width ceiling.|`tools/docgen/src/oracle.rs`|
+|DOCGEN|`oracle::Error`|`Arithmetic`|failure|The exact engine refused arithmetic; its original Fault and caller-owned cumulative ledger are preserved.|`tools/docgen/src/oracle.rs`|
+|DOCGEN|`oracle::Error`|`Invalid`|failure|An oracle structure or explicit parser ceiling failed, with a closed Cause and JSON location.|`tools/docgen/src/oracle.rs`|
+|DOCGEN|`oracle::Error`|`Io`|failure|Reading the bounded input stream failed.|`tools/docgen/src/oracle.rs`|
 |SCALAR|`ArithmeticFailure`|`InvalidLiteral`|failure|Text is outside the bounded numeric grammar.|`crates/scalar/src/error.rs`|
 |SCALAR|`ArithmeticFailure`|`InvertedEndpoints`|failure|The lower endpoint exceeds the upper endpoint.|`crates/scalar/src/error.rs`|
 |SCALAR|`ArithmeticFailure`|`LengthMismatch`|failure|Dot-product slices differ in length.|`crates/scalar/src/error.rs`|

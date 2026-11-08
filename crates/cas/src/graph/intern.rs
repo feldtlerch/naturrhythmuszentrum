@@ -161,6 +161,14 @@ impl fmt::Debug for InternIndex {
 }
 
 impl InternIndex {
+    /// Test the actual retained allocation, not an equivalent local reconstruction.
+    #[cfg(test)]
+    pub(crate) fn shares_key(&self, id: LogicalId, bytes: &[u8]) -> bool {
+        self.entries
+            .iter()
+            .any(|(key, value)| *value == id && std::ptr::eq(key.bytes.parts()[0], bytes))
+    }
+
     /// Probe without copying key bytes or allocating a diagnostic owner.
     pub(crate) fn get<'a>(&'a self, bytes: &'a [u8]) -> Option<&'a LogicalId> {
         self.entries.get(&Key {

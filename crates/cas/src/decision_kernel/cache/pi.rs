@@ -70,7 +70,9 @@ fn lookup(
             PendingJudgment::NewScalar(_)
             | PendingJudgment::RecheckedScalar(_)
             | PendingJudgment::NewEnclosure(_)
-            | PendingJudgment::RecheckedEnclosure(_) => continue,
+            | PendingJudgment::RecheckedEnclosure(_)
+            | PendingJudgment::NewExpm1(_)
+            | PendingJudgment::RecheckedExpm1(_) => continue,
         };
         if certificate
             .canonical_key()?

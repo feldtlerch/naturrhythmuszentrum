@@ -197,7 +197,9 @@ pub(super) fn lookup(
             PendingJudgment::NewPi(_)
             | PendingJudgment::RecheckedPi(_)
             | PendingJudgment::NewEnclosure(_)
-            | PendingJudgment::RecheckedEnclosure(_) => continue,
+            | PendingJudgment::RecheckedEnclosure(_)
+            | PendingJudgment::NewExpm1(_)
+            | PendingJudgment::RecheckedExpm1(_) => continue,
         };
         if inventory.key.as_ref() == key {
             return Ok(Some(Arc::clone(&inventory.values)));

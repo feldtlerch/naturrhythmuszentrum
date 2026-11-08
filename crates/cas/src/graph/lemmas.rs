@@ -2,7 +2,9 @@
 //! Checked anonymous judgments use the graph's canonical index and evidence edges.
 
 mod enclosure;
+mod prepared_expm1;
 pub(crate) use enclosure::EnclosureInventory;
+pub(crate) use prepared_expm1::Expm1Inventory;
 mod pi;
 pub(crate) use pi::{PiIndex, PiInventory};
 mod scalar;
@@ -33,6 +35,8 @@ pub(crate) enum AnonymousLemma {
     Pi(pi::PiLemma),
     /// Independently checked original-scope rational enclosure.
     Enclosure(enclosure::EnclosureLemma),
+    /// Checked native schedule under its original claim and arithmetic environment.
+    PreparedExpm1(prepared_expm1::Expm1Lemma),
 }
 
 impl AnonymousLemma {
@@ -43,6 +47,7 @@ impl AnonymousLemma {
             Self::Series(node) => node.key.len(),
             Self::Constant(node) => node.key.len(),
             Self::Enclosure(node) => node.inventory.key.len(),
+            Self::PreparedExpm1(node) => node.inventory.key.len(),
             Self::Scalar(node) => node.inventory.key.len(),
             Self::Pi(node) => node
                 .inventory
@@ -61,6 +66,7 @@ impl AnonymousLemma {
             Self::Scalar(node) => Ok(node.inventory.bytes),
             Self::Pi(node) => Ok(node.inventory.bytes),
             Self::Enclosure(node) => Ok(node.inventory.bytes),
+            Self::PreparedExpm1(node) => Ok(node.inventory.bytes),
         }
     }
 
@@ -70,6 +76,7 @@ impl AnonymousLemma {
             Self::Series(node) => out.raw(&node.key),
             Self::Constant(node) => out.raw(&node.key[1..]),
             Self::Enclosure(node) => out.raw(&node.inventory.key[1..]),
+            Self::PreparedExpm1(node) => out.raw(&node.inventory.key[1..]),
             Self::Scalar(node) => {
                 out.byte(1)?;
                 out.unsigned(u64::from(crate::proof::RETAINED_SCHEMAS[1].version))?;

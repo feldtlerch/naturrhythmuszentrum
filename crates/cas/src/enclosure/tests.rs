@@ -7,6 +7,7 @@ mod clamps;
 mod derivatives;
 mod exponentials;
 mod powers;
+mod prepared_observation;
 mod sigmoids;
 mod tangents;
 use crate::budget::{Budget, Limits};

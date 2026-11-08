@@ -16,6 +16,8 @@ const HEADER_PREFIX: [u8; 2] = [VertexKind::Header.tag(), 0];
 pub(crate) enum StoredKey {
     /// Existing contiguous encoding for ordinary graph records.
     Plain(Vec<u8>),
+    /// Immutable complete key shared by a judgment, index and rollback record.
+    Shared(std::sync::Arc<[u8]>),
     /// Fresh header framing around its existing immutable signature allocation.
     Header {
         /// The same checked owner retained by the graph's header payload.
@@ -60,6 +62,7 @@ impl StoredKey {
     pub(crate) fn parts(&self) -> [&[u8]; 3] {
         match self {
             Self::Plain(bytes) => [bytes, &[], &[]],
+            Self::Shared(bytes) => [bytes, &[], &[]],
             Self::Header {
                 environment,
                 suffix,
@@ -78,5 +81,45 @@ impl StoredKey {
 impl From<Vec<u8>> for StoredKey {
     fn from(bytes: Vec<u8>) -> Self {
         Self::Plain(bytes)
+    }
+}
+
+impl From<std::sync::Arc<[u8]>> for StoredKey {
+    fn from(bytes: std::sync::Arc<[u8]>) -> Self {
+        Self::Shared(bytes)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::StoredKey;
+    use crate::graph::intern::{InternIndex, StoreToken};
+    use crate::graph::{LogicalId, VertexKind};
+    use std::sync::Arc;
+
+    /// Large immutable bytes have one owner allocation across inventory, index and journal.
+    /// # Panics
+    /// Panics if index or journal retention copies the key rather than its owner.
+    /// ´claim:cas:prepared-expm1-shared-key´
+    /// ´test:unit:prepared-expm1-shared-key´
+    #[test]
+    fn prepared_expm1_shared_key() {
+        let inventory: Arc<[u8]> = vec![5; 65_536].into();
+        let mut index = InternIndex::default();
+        let id = LogicalId {
+            kind: VertexKind::AnonymousLemma,
+            serial: 0,
+        };
+        index.insert_key(
+            Arc::clone(&inventory).into(),
+            id,
+            &Arc::new(StoreToken::default()),
+        );
+        let journal: StoredKey = Arc::clone(&inventory).into();
+        assert_eq!(Arc::strong_count(&inventory), 3);
+        assert_eq!(journal.parts()[0].as_ptr(), inventory.as_ptr());
+        assert_eq!(index.get(&inventory), Some(&id));
+        drop(journal);
+        assert_eq!(Arc::strong_count(&inventory), 2);
     }
 }
