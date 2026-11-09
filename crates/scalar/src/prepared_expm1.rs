@@ -9,6 +9,10 @@
 
 use crate::{ArithmeticContext, ArithmeticFailure, Enclosure, Finite};
 
+#[path = "prepared_exp.rs"]
+mod exp;
+pub use exp::{ExpFailure, ExpInput, ExpOutput, ExpProgram};
+
 /// Structural and native application refusals, without an exact Work ledger.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum Expm1Failure {

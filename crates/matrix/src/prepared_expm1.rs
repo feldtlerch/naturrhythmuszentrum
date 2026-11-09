@@ -15,6 +15,10 @@ use nrz_scalar::{
 };
 use std::cmp::Ordering;
 
+#[path = "prepared_exp.rs"]
+mod exp;
+pub use exp::{ExpEvaluation, ExpPreparationPolicy, PreparedExp, PreparedExpError};
+
 /// Shared preparation and admission accounting location.
 const AT: Location = Location::new("prepared expm1 lowering");
 

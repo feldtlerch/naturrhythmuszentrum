@@ -13,6 +13,75 @@ use tracing::{
 /// Shared interest-rebuild guard for every subscriber in this integration target.
 static DISPATCHERS: Mutex<()> = Mutex::new(());
 
+/// Exp composition reuses authority; a spent ledger never enters either kernel span.
+/// Six spans is a regression pin for three exp and three basis calls, not a Work tariff.
+/// # Panics
+/// Panics if native reuse emits construction events or unpaid traversal reaches a kernel.
+/// ´claim:matrix:prepared-exp-observed-reuse´
+/// ´test:integration:prepared-exp-observed-reuse´
+#[test]
+fn prepared_exp_observed_reuse() -> TestResult {
+    use nrz_matrix::PreparedExp;
+    use nrz_scalar::ExpInput;
+    let _guard = DISPATCHERS.lock().map_err(|_| "subscriber guard")?;
+    let observer = Observer::default();
+    tracing::subscriber::with_default(observer.clone(), || -> TestResult {
+        let mut f = Fixture::new()?;
+        let r = broad(&mut f, 40)?;
+        let context = ArithmeticContext::new()?;
+        let mut counts = Counts::default();
+        let plan = PreparedExp::new(
+            &mut f.cas,
+            &r,
+            [-2.0, 0.0],
+            Policy::default(),
+            &context,
+            &mut ledger()?,
+            &mut counts,
+        )
+        .map_err(|e| e.to_string())?;
+        let before = counts.clone();
+        let events = observer.events.load(Ordering::Relaxed);
+        let constructions = observer.constructions.load(Ordering::Relaxed);
+        assert!(constructions > 1);
+        let point = |x| ExpInput {
+            endpoints: [x, x],
+            center: x,
+            bits: 40,
+        };
+        for x in [-0.25, -1.0, -0.5] {
+            plan.evaluate(point(x), &context)?;
+        }
+        assert_eq!(counts, before);
+        assert_eq!(observer.events.load(Ordering::Relaxed), events);
+        assert_eq!(
+            observer.constructions.load(Ordering::Relaxed),
+            constructions
+        );
+        let kernels = observer.kernels.load(Ordering::Relaxed);
+        assert_eq!(kernels, 6);
+        let mut empty = Budget::new(Limits {
+            work: 7,
+            ..Limits::default()
+        })?;
+        empty.work(7, nrz_bindings::readings::algebra::Location::new("caller"))?;
+        assert_eq!(
+            plan.evaluate_batch(&[point(-0.125)], &context, &mut empty)
+                .expect_err("prepaid walk")
+                .kind,
+            FaultKind::Exhausted {
+                reason: nrz_bindings::readings::algebra::Exhaustion::Limit,
+                budget: BudgetKind::Work,
+                limit: 7,
+                needed: 8
+            }
+        );
+        assert_eq!(empty.usage().work, 7);
+        assert_eq!(observer.kernels.load(Ordering::Relaxed), kernels);
+        Ok(())
+    })
+}
+
 /// Fixed counters distinguish an observed native call from an empty event stream.
 #[derive(Clone, Debug, Default)]
 struct Observer {
