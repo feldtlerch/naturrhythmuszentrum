@@ -249,6 +249,7 @@ fn compose_independent_goldens() -> TestResult {
 #[test]
 fn compose_wire_reader_boundaries() -> TestResult {
     use nrz_cas::{FaultKind, InvalidCode};
+    super::series_residual_wire::payload_control()?;
     let bytes = golden(false)?;
     let records = crate::testing::answer::records(&bytes)?;
     let (_, statement) = records
@@ -266,13 +267,15 @@ fn compose_wire_reader_boundaries() -> TestResult {
     assert_eq!(bytes[statement + 10], 0);
     let mut mutations = Vec::new();
     for offset in [statement, certificate] {
-        for mode in [6, 7, 11, 255] {
+        for mode in [6, 7, 255] {
             mutations.push((offset, mode));
         }
         for form in [1, 2] {
             mutations.push((offset + 1, form));
         }
     }
+    // Mode eleven is live; these unchanged Compose payloads lack its residual fields.
+    mutations.extend([(statement, 11), (certificate, 11)]);
     mutations.push((statement + 10, 3));
     for (offset, value) in mutations {
         let mut changed = bytes.clone();

@@ -115,6 +115,7 @@ pub(crate) fn check(
     premises: &[CheckedApplication],
     budget: &mut Budget,
 ) -> Result<ScopedConditions, Fault> {
+    crate::series::residual_adapter::gate(cas, draft, premises, budget)?;
     let crate::proof_model::Certificate::Solve(certificate) = &draft.certificate else {
         return Err(invalid());
     };

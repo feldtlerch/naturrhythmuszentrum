@@ -37,8 +37,12 @@ fn preflight(cas: &Cas, steps: &[ApplicationDraft], budget: &mut Budget) -> Resu
                 crate::series::check::precision(cas, value, budget)?;
             }
             if let Statement::Series(value) = &step.conclusion
-                && let crate::series::SeriesStatement::Source(value) = value.as_ref()
-                && step.premises.len() != value.clause.arity()
+                && matches!(
+                    value.as_ref(),
+                    crate::series::SeriesStatement::Source(_)
+                        | crate::series::SeriesStatement::EvaluatedResidual { .. }
+                )
+                && step.premises.len() != crate::series::check::premise_count(cas, value)?
             {
                 return Err(invalid());
             }
@@ -86,7 +90,7 @@ pub(crate) fn check_supplied(
         let proof = proofs
             .get(usize::try_from(*index).map_err(|_| invalid())?)
             .ok_or_else(invalid)?;
-        ids.push(proof.logical_id());
+        ids.push(cas.checked(proof)?);
     }
     let bytes = crate::proof_view::premises_bytes(cas, &ids, budget, AT)?;
     budget.with_retained_payload(bytes, AT, |budget| {
@@ -170,6 +174,7 @@ fn rule_conditions(
         | Primitive::SeriesSource
         | Primitive::SeriesIntegrate
         | Primitive::SeriesMul
+        | Primitive::SeriesResidual
         | Primitive::SeriesCompose
         | Primitive::SeriesCoefficient => {
             crate::series::check::check(cas, draft, premises, budget)?

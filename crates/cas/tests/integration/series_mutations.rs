@@ -454,7 +454,10 @@ fn series_independent_wrong_expectation() -> TestResult {
                 return Err("series".into());
             };
             match value.as_mut() {
-                nrz_cas::series::SeriesStatement::Source(_) => return Err("object fixture".into()),
+                nrz_cas::series::SeriesStatement::Source(_)
+                | nrz_cas::series::SeriesStatement::EvaluatedResidual { .. } => {
+                    return Err("object fixture".into());
+                }
                 nrz_cas::series::SeriesStatement::Truncate { input, output }
                 | nrz_cas::series::SeriesStatement::Scale { input, output, .. }
                 | nrz_cas::series::SeriesStatement::Derive { input, output }

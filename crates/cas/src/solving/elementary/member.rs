@@ -76,6 +76,7 @@ pub(crate) fn check(
     premises: &[CheckedApplication],
     budget: &mut Budget,
 ) -> Result<(), Fault> {
+    crate::series::residual_adapter::gate(cas, draft, premises, budget)?;
     let Statement::Solve(statement) = &draft.conclusion else {
         return Err(invalid());
     };

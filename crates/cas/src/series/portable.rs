@@ -365,7 +365,10 @@ fn decode_certificate(
     let Statement::Series(statement) = &claim.judgment.statement else {
         return Err(invalid());
     };
-    let count = if matches!(statement.as_ref(), super::SeriesStatement::Source(_)) {
+    let count = if matches!(
+        statement.as_ref(),
+        super::SeriesStatement::Source(_) | super::SeriesStatement::EvaluatedResidual { .. }
+    ) {
         let count = usize::try_from(reader.index()?).map_err(|_| invalid())?;
         if count != super::check::premise_count(cas, statement)? {
             return Err(invalid());

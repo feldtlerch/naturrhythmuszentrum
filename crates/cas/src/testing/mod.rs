@@ -5,6 +5,16 @@
 //!
 //! Inline unit tests keep their setup local and never import this harness.
 
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "residual ownership tests share public fixtures"
+)]
+#[expect(
+    dead_code,
+    reason = "the public client suite exercises the remaining fixture methods"
+)]
+pub(crate) mod series_residual;
+
 #[expect(clippy::redundant_pub_crate, reason = "shared graph resource ceilings")]
 pub(crate) mod trig_limits;
 #[expect(

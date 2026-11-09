@@ -29,6 +29,15 @@ pub(crate) mod series_compose;
 pub(crate) mod series_proof;
 #[expect(
     clippy::redundant_pub_crate,
+    reason = "public residual fixtures are shared by client tests"
+)]
+#[expect(
+    dead_code,
+    reason = "exact ancestor-frame mutation uses the internal shared checker"
+)]
+pub(crate) mod series_residual;
+#[expect(
+    clippy::redundant_pub_crate,
     reason = "shared source evidence fixtures"
 )]
 pub(crate) mod series_source;

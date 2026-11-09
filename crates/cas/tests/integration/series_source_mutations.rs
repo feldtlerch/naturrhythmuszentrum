@@ -93,7 +93,10 @@ fn series_source_wire_mutations() -> TestResult {
     assert_eq!(&bytes[row..row + 11], &[0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 1]);
     mutations.push((byte(&bytes, row, 0, 1), InvalidCode::Rule));
     super::series_compose_golden::payload_control()?;
-    for mode in [6, 7, 11, 255] {
+    super::series_residual_wire::payload_control()?;
+    // The mode-eleven reinterpretation of this source payload is malformed, not unavailable.
+    mutations.push((byte(&bytes, cursor, 10, 11), InvalidCode::SeriesUnsupported));
+    for mode in [6, 7, 255] {
         mutations.push((
             byte(&bytes, cursor, 10, mode),
             InvalidCode::SeriesUnsupported,
@@ -475,7 +478,10 @@ fn series_source_quotient_wire_refused() -> TestResult {
     let mut mutations = vec![(quotient, InvalidCode::Rule)];
     mutations.push((byte(&bytes, cursor, 1, 5), InvalidCode::SeriesUnsupported));
     super::series_compose_golden::payload_control()?;
-    for mode in [6, 7, 11] {
+    super::series_residual_wire::payload_control()?;
+    // A nonzero source form is still not a residual form.
+    mutations.push((byte(&bytes, cursor, 1, 11), InvalidCode::SeriesUnsupported));
+    for mode in [6, 7] {
         mutations.push((
             byte(&bytes, cursor, 1, mode),
             InvalidCode::SeriesUnsupported,

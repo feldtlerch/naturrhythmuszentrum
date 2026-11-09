@@ -15,6 +15,13 @@ pub(crate) mod codec;
 mod compose;
 mod model;
 mod produce;
+mod residual;
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "the typed solving gate is kernel-private"
+)]
+pub(crate) mod residual_adapter;
+pub use residual_adapter::{ResidualReference, ResidualSolve};
 mod source;
 pub use produce::SeriesOperation;
 pub use source::{SourceCertificate, SourceClause, SourceRequest, SourceStatement, SourceUnitRow};
@@ -24,8 +31,8 @@ pub use source::{SourceCertificate, SourceClause, SourceRequest, SourceStatement
 )]
 pub(crate) mod portable;
 pub use model::{
-    SeriesBinaryRow, SeriesCertificate, SeriesDerivativeRow, SeriesIntegralRow, SeriesPowerRow,
-    SeriesProductRow, SeriesStatement,
+    ResidualRow, ResidualSubject, SeriesBinaryRow, SeriesCertificate, SeriesDerivativeRow,
+    SeriesIntegralRow, SeriesPowerRow, SeriesProductRow, SeriesStatement,
 };
 
 use crate::budget::{Budget, BudgetKind};

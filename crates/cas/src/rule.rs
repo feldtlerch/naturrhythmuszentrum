@@ -20,6 +20,8 @@ pub enum Primitive {
     SeriesMul,
     /// Exact zero-constant object composition.
     SeriesCompose,
+    /// Evaluate an original differential polynomial at a checked finite subject.
+    SeriesResidual,
     /// Exact extraction within the available coefficient range.
     SeriesCoefficient,
     /// Oddness of sine on its original defined Real operand.
@@ -289,6 +291,7 @@ impl Primitive {
                 | Self::SeriesSource
                 | Self::SeriesIntegrate
                 | Self::SeriesMul
+                | Self::SeriesResidual
                 | Self::SeriesCompose
                 | Self::SeriesCoefficient
                 | Self::SinOdd
@@ -344,6 +347,7 @@ impl Primitive {
             Self::SeriesSource => ("series.source", 8),
             Self::SeriesMul => ("series.mul", 8),
             Self::SeriesCompose => ("series.compose", 8),
+            Self::SeriesResidual => ("series.residual", 8),
             Self::SeriesCoefficient => ("series.coefficient", 2),
             Self::SinOdd => ("trig.sin-odd", 2),
             Self::CosEven => ("trig.cos-even", 2),
@@ -444,6 +448,7 @@ impl Primitive {
             | Self::SeriesSource
             | Self::SeriesIntegrate
             | Self::SeriesMul
+            | Self::SeriesResidual
             | Self::SeriesCompose
             | Self::SeriesCoefficient => ConclusionKind::Series,
             Self::LimitCaseRestrict | Self::SeriesCaseRestrict => ConclusionKind::Germ,
@@ -531,7 +536,8 @@ impl Primitive {
             | Self::DifferentiateProduct
             | Self::DifferentiateQuotient
             | Self::DerivativeTransport => PremiseShape::Exact(2),
-            Self::Symmetry
+            Self::SeriesResidual
+            | Self::Symmetry
             | Self::SinOdd
             | Self::CosEven
             | Self::AtanOdd
@@ -556,6 +562,7 @@ impl Primitive {
             | Self::SeriesSource
             | Self::SeriesIntegrate
             | Self::SeriesMul
+            | Self::SeriesResidual
             | Self::SeriesCompose
             | Self::SeriesCoefficient => CertificateSchema::Series,
             Self::HalfPiWitness => CertificateSchema::HalfPiWitness,
@@ -591,7 +598,7 @@ impl Primitive {
 }
 
 /// Every registered primitive, in ASCII key order; availability is separate metadata.
-pub const PRIMITIVES: [Primitive; 98] = [
+pub const PRIMITIVES: [Primitive; 99] = [
     Primitive::CaseCongruence,
     Primitive::CaseDomain,
     Primitive::CaseEliminate,
@@ -670,6 +677,7 @@ pub const PRIMITIVES: [Primitive; 98] = [
     Primitive::SeriesDerive,
     Primitive::SeriesIntegrate,
     Primitive::SeriesMul,
+    Primitive::SeriesResidual,
     Primitive::SeriesScale,
     Primitive::SeriesSource,
     Primitive::SeriesTruncate,
