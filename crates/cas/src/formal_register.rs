@@ -42,7 +42,7 @@ const fn named(
 /// Every native and solving primitive in the same ASCII key order as `PRIMITIVES`.
 ///
 /// Unavailable schemas remain represented assumptions and cannot certify an application.
-pub static PRIMITIVE_SCHEMAS: [PrimitiveSchema; 98] = [
+pub static PRIMITIVE_SCHEMAS: [PrimitiveSchema; 99] = [
     named(
         Primitive::CaseCongruence,
         "thm:cas:primitive-case-congruence",
@@ -512,6 +512,12 @@ pub static PRIMITIVE_SCHEMAS: [PrimitiveSchema; 98] = [
         "Object form: ordered checked truncations for precisely the higher-order inputs. Lifted form: ordered source inputs, matching object computation and original-composite definedness.",
     ),
     named(
+        Primitive::SeriesResidual,
+        "thm:cas:primitive-series-residual",
+        "The original differential polynomial evaluated at the checked finite subject has the retained residual coefficients through order n-r, and the retained problem consists exactly of those coefficient equations.",
+        "One exact Source/Compose fact, complete finite trace, common closed Real/Q frame and exact derived problem. Polynomial powers use p^0=1; no strict definedness or source correspondence follows.",
+    ),
+    named(
         Primitive::SeriesScale,
         "thm:cas:primitive-series-scale",
         "Exact scalar multiplication checks every coefficient product without changing order. Lifted form 1 checks original left/right rational scaling or Neg on an identical domain.",
@@ -644,19 +650,20 @@ impl Primitive {
             Self::SeriesDerive => &PRIMITIVE_SCHEMAS[75],
             Self::SeriesIntegrate => &PRIMITIVE_SCHEMAS[76],
             Self::SeriesMul => &PRIMITIVE_SCHEMAS[77],
-            Self::SeriesScale => &PRIMITIVE_SCHEMAS[78],
-            Self::SeriesSource => &PRIMITIVE_SCHEMAS[79],
-            Self::SeriesTruncate => &PRIMITIVE_SCHEMAS[80],
+            Self::SeriesResidual => &PRIMITIVE_SCHEMAS[78],
+            Self::SeriesScale => &PRIMITIVE_SCHEMAS[79],
+            Self::SeriesSource => &PRIMITIVE_SCHEMAS[80],
+            Self::SeriesTruncate => &PRIMITIVE_SCHEMAS[81],
 
-            Self::AtanOdd => &PRIMITIVE_SCHEMAS[89],
-            Self::AtanOne => &PRIMITIVE_SCHEMAS[90],
-            Self::AtanZero => &PRIMITIVE_SCHEMAS[91],
-            Self::CosEven => &PRIMITIVE_SCHEMAS[92],
-            Self::CosHalfPi => &PRIMITIVE_SCHEMAS[93],
-            Self::TrigDefined => &PRIMITIVE_SCHEMAS[94],
-            Self::HalfPiWitness => &PRIMITIVE_SCHEMAS[95],
-            Self::SinHalfPi => &PRIMITIVE_SCHEMAS[96],
-            Self::SinOdd => &PRIMITIVE_SCHEMAS[97],
+            Self::AtanOdd => &PRIMITIVE_SCHEMAS[90],
+            Self::AtanOne => &PRIMITIVE_SCHEMAS[91],
+            Self::AtanZero => &PRIMITIVE_SCHEMAS[92],
+            Self::CosEven => &PRIMITIVE_SCHEMAS[93],
+            Self::CosHalfPi => &PRIMITIVE_SCHEMAS[94],
+            Self::TrigDefined => &PRIMITIVE_SCHEMAS[95],
+            Self::HalfPiWitness => &PRIMITIVE_SCHEMAS[96],
+            Self::SinHalfPi => &PRIMITIVE_SCHEMAS[97],
+            Self::SinOdd => &PRIMITIVE_SCHEMAS[98],
             Self::Solve(schema) => solving(schema),
             Self::CaseCongruence => &PRIMITIVE_SCHEMAS[0],
             Self::CaseDomain => &PRIMITIVE_SCHEMAS[1],
@@ -716,7 +723,7 @@ impl Primitive {
             Self::RegionConstruct => &PRIMITIVE_SCHEMAS[66],
             Self::RegionDecide => &PRIMITIVE_SCHEMAS[67],
             Self::SeriesCaseRestrict => &PRIMITIVE_SCHEMAS[72],
-            Self::SumCaseSplit => &PRIMITIVE_SCHEMAS[88],
+            Self::SumCaseSplit => &PRIMITIVE_SCHEMAS[89],
         }
     }
 }
@@ -738,13 +745,13 @@ const fn solving(schema: SolveSchema) -> &'static PrimitiveSchema {
         SolveSchema::BinomialCoverage => &PRIMITIVE_SCHEMAS[68],
         SolveSchema::RealIsolationAndOrder => &PRIMITIVE_SCHEMAS[69],
         SolveSchema::RootSelectionRefinement => &PRIMITIVE_SCHEMAS[70],
-        SolveSchema::ParameterImageCoverage => &PRIMITIVE_SCHEMAS[81],
-        SolveSchema::ImplicitFunctionBranch => &PRIMITIVE_SCHEMAS[82],
-        SolveSchema::Membership => &PRIMITIVE_SCHEMAS[83],
-        SolveSchema::MultiplicityTransfer => &PRIMITIVE_SCHEMAS[84],
-        SolveSchema::ProductCompleteness => &PRIMITIVE_SCHEMAS[85],
-        SolveSchema::TotalPredicateSplit => &PRIMITIVE_SCHEMAS[86],
-        SolveSchema::SolutionTransport => &PRIMITIVE_SCHEMAS[87],
+        SolveSchema::ParameterImageCoverage => &PRIMITIVE_SCHEMAS[82],
+        SolveSchema::ImplicitFunctionBranch => &PRIMITIVE_SCHEMAS[83],
+        SolveSchema::Membership => &PRIMITIVE_SCHEMAS[84],
+        SolveSchema::MultiplicityTransfer => &PRIMITIVE_SCHEMAS[85],
+        SolveSchema::ProductCompleteness => &PRIMITIVE_SCHEMAS[86],
+        SolveSchema::TotalPredicateSplit => &PRIMITIVE_SCHEMAS[87],
+        SolveSchema::SolutionTransport => &PRIMITIVE_SCHEMAS[88],
     }
 }
 

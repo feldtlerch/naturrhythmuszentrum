@@ -27,6 +27,15 @@ pub(crate) const fn unsupported() -> Fault {
 
 /// Precision is checked before arity or workspace sizing can misclassify an unavailable request.
 pub(crate) fn precision(cas: &Cas, value: &S, budget: &mut Budget) -> Result<(), Fault> {
+    if let S::EvaluatedResidual {
+        subject,
+        expression,
+        dependent,
+        ..
+    } = value
+    {
+        super::residual::preflight(cas, subject, expression, dependent, budget)?;
+    }
     if let S::Compose {
         left, right, order, ..
     } = value
@@ -57,7 +66,7 @@ pub(crate) fn premise_count(cas: &Cas, value: &S) -> Result<usize, Fault> {
     match value {
         S::Source(value) => Ok(value.clause.arity()),
         S::Truncate { .. } | S::Coefficient { .. } | S::Derive { .. } => Ok(0),
-        S::Scale { .. } | S::Integrate { .. } => Ok(1),
+        S::EvaluatedResidual { .. } | S::Scale { .. } | S::Integrate { .. } => Ok(1),
         S::Add {
             left, right, order, ..
         }
@@ -135,10 +144,13 @@ pub(crate) fn roles(cas: &Cas, value: &S, budget: &mut Budget) -> Result<(), Fau
     if let S::Source(value) = value {
         return super::source::roles(cas, value, budget);
     }
+    if matches!(value, S::EvaluatedResidual { .. }) {
+        return super::residual::roles(cas, value, budget);
+    }
     let input = cas.series_object(value.input())?;
     input.preflight(budget)?;
     match value {
-        S::Source(_) => return Err(invalid()),
+        S::Source(_) | S::EvaluatedResidual { .. } => return Err(invalid()),
         S::Truncate { output, .. } | S::Derive { output, .. } => {
             compatible(input, cas.series_object(output)?, budget)?;
         }
@@ -262,6 +274,10 @@ pub(crate) fn check(
     premises: &[CheckedApplication],
     budget: &mut Budget,
 ) -> Result<ScopedConditions, Fault> {
+    if matches!(&draft.conclusion, Statement::Series(value) if matches!(value.as_ref(), S::EvaluatedResidual { .. }))
+    {
+        return super::residual::check(cas, draft, premises, budget);
+    }
     if matches!(&draft.conclusion, Statement::Series(value) if matches!(value.as_ref(), S::Source(_)))
     {
         return super::source::check(cas, draft, premises, budget);

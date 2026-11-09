@@ -27,12 +27,37 @@ pub(crate) fn source_workspace(
 }
 
 /// Complete local or portable statement payload, independent of its enclosing record.
+#[expect(
+    clippy::too_many_lines,
+    reason = "the closed statement wire layouts remain adjacent"
+)]
 pub(crate) fn statement(
     value: &SeriesStatement,
     out: &mut Encoder<'_>,
     write: &mut impl FnMut(&Handle, &mut Encoder<'_>) -> Result<(), Fault>,
 ) -> Result<(), Fault> {
     use SeriesStatement as S;
+    if let S::EvaluatedResidual {
+        subject,
+        expression,
+        dependent,
+        output,
+        problem,
+        derivative_order,
+        order,
+    } = value
+    {
+        for byte in [11, 0, 3, 0] {
+            out.byte(byte)?;
+        }
+        statement(&subject.statement(), out, write)?;
+        for reference in [expression, dependent, output, problem] {
+            write(reference, out)?;
+        }
+        crate::wire::index(*derivative_order, out)?;
+        crate::wire::index(*order, out)?;
+        return Ok(());
+    }
     if let S::Source(value) = value {
         out.byte(value.clause.mode())?;
         out.byte(value.clause.form())?;
@@ -44,7 +69,7 @@ pub(crate) fn statement(
         return Ok(());
     }
     out.byte(match value {
-        S::Source(_) => return Err(invalid()),
+        S::Source(_) | S::EvaluatedResidual { .. } => return Err(invalid()),
         S::Truncate { .. } => 0,
         S::Add { .. } => 1,
         S::Scale { .. } => 2,
@@ -56,7 +81,7 @@ pub(crate) fn statement(
     })?;
     out.byte(0)?; // Object form, never a source congruence.
     match value {
-        S::Source(_) => return Err(invalid()),
+        S::Source(_) | S::EvaluatedResidual { .. } => return Err(invalid()),
         S::Truncate { input, output } | S::Derive { input, output } => {
             write(input, out)?;
             out.byte(0)?;
@@ -120,6 +145,10 @@ pub(crate) fn statement(
 }
 
 /// Read only supported forms; result kind is checked before reading a result reference.
+#[expect(
+    clippy::too_many_lines,
+    reason = "the closed mode dispatch retains discriminator order visibly"
+)]
 pub(crate) fn read_statement(
     reader: &mut Reader<'_, '_>,
     records: &[crate::wire_decode::Decoded],
@@ -127,6 +156,49 @@ pub(crate) fn read_statement(
     use crate::wire_decode::object;
     let mode = reader.byte()?;
     let form = reader.byte()?;
+    if mode == 11 {
+        if form != 0 || reader.byte()? != 3 || reader.byte()? != 0 {
+            return Err(unsupported());
+        }
+        let mode = reader.byte()?;
+        let form = reader.byte()?;
+        let subject = if mode == 5 && form == 0 {
+            let left = object(reader, records)?;
+            let right = object(reader, records)?;
+            if reader.byte()? != 0 {
+                return Err(unsupported());
+            }
+            super::ResidualSubject::Compose {
+                left,
+                right,
+                output: object(reader, records)?,
+                order: reader.index()?,
+                default_order: reader.boolean()?,
+            }
+        } else {
+            let clause = super::SourceClause::read(mode, form, reader.byte()?)?;
+            let source = object(reader, records)?;
+            let domain = object(reader, records)?;
+            if reader.byte()? != 2 {
+                return Err(unsupported());
+            }
+            super::ResidualSubject::Source(super::SourceStatement {
+                clause,
+                source,
+                domain,
+                output: object(reader, records)?,
+            })
+        };
+        return Ok(SeriesStatement::EvaluatedResidual {
+            subject,
+            expression: object(reader, records)?,
+            dependent: object(reader, records)?,
+            output: object(reader, records)?,
+            problem: object(reader, records)?,
+            derivative_order: reader.index()?,
+            order: reader.index()?,
+        });
+    }
     if mode == 10 || form != 0 {
         let clause = super::SourceClause::read(mode, form, reader.byte()?)?;
         let source = object(reader, records)?;
@@ -212,10 +284,22 @@ pub(crate) fn read_statement(
 }
 
 /// Every row operand is retained; no omitted zero or partial convolution has authority.
+#[expect(
+    clippy::too_many_lines,
+    reason = "the closed certificate layouts remain adjacent"
+)]
 pub(crate) fn certificate(value: &SeriesCertificate, out: &mut Encoder<'_>) -> Result<(), Fault> {
     out.byte(value.mode())?;
     out.byte(value.form())?;
     match value {
+        SeriesCertificate::EvaluatedResidual { stage, rows, .. } => {
+            out.byte(*stage)?;
+            out.count(rows.len())?;
+            for row in rows {
+                crate::wire::index(row.ordinal, out)?;
+                crate::split_wire::numbers(&row.coefficients, out)?;
+            }
+        }
         SeriesCertificate::Source(value) => {
             out.byte(value.clause.selector())?;
             crate::split_wire::numbers(&value.coefficients, out)?;
@@ -328,6 +412,38 @@ fn binary_rows(rows: &[SeriesBinaryRow], out: &mut Encoder<'_>) -> Result<(), Fa
 pub(crate) fn read_certificate(reader: &mut Reader<'_, '_>) -> Result<SeriesCertificate, Fault> {
     let mode = reader.byte()?;
     let form = reader.byte()?;
+    if mode == 11 {
+        if form != 0 || reader.byte()? != 0 {
+            return Err(unsupported());
+        }
+        let count = reader.count(BudgetKind::JetEntries, 8, 32)?;
+        let mut rows = Vec::new();
+        rows.try_reserve_exact(count)
+            .map_err(|_| Fault::allocation(AT))?;
+        for _ in 0..count {
+            let ordinal = reader.index()?;
+            let count = reader.count(BudgetKind::JetEntries, 9, 96)?;
+            reader
+                .budget
+                .specialized(BudgetKind::JetEntries, size(count, AT)?, true, AT)?;
+            let mut coefficients = Vec::new();
+            coefficients
+                .try_reserve_exact(count)
+                .map_err(|_| Fault::allocation(AT))?;
+            for _ in 0..count {
+                coefficients.push(reader.rational()?);
+            }
+            rows.push(super::ResidualRow {
+                ordinal,
+                coefficients,
+            });
+        }
+        return Ok(SeriesCertificate::EvaluatedResidual {
+            form,
+            stage: 0,
+            rows,
+        });
+    }
     if mode == 10 || form != 0 {
         let clause = super::SourceClause::read(mode, form, reader.byte()?)?;
         let coefficients = read_coefficients(reader)?;
@@ -491,6 +607,15 @@ fn read_binary(reader: &mut Reader<'_, '_>) -> Result<Vec<SeriesBinaryRow>, Faul
 /// Meter the full owned row copy before generic proof admission clones it.
 pub(crate) fn measure(value: &SeriesCertificate, budget: &mut Budget) -> Result<(), Fault> {
     let count = match value {
+        SeriesCertificate::EvaluatedResidual { rows, .. } => {
+            // Empty coefficient vectors still require one visit per supplied row.
+            budget.work(size(rows.len(), AT)?, AT)?;
+            rows.iter().try_fold(0_usize, |total, row| {
+                total
+                    .checked_add(row.coefficients.len())
+                    .ok_or_else(invalid)
+            })?
+        }
         SeriesCertificate::Source(value) => value
             .coefficients
             .len()

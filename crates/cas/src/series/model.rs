@@ -8,6 +8,23 @@ use crate::rule::Primitive;
 /// Finite object computations and registered correspondence with an exact original source.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SeriesStatement {
+    /// Polynomial interpretation of the complete original syntax at one checked finite subject.
+    EvaluatedResidual {
+        /// Exact original checked source or composition.
+        subject: ResidualSubject,
+        /// Original differential polynomial, including dead syntax.
+        expression: Handle,
+        /// Distinct declared Real formal dependent placeholder.
+        dependent: Handle,
+        /// Complete computed residual object, which may be nonzero.
+        output: Handle,
+        /// Exact ordered coefficient equations in the original coefficient region.
+        problem: Handle,
+        /// Maximum derivative-chain length in the original syntax.
+        derivative_order: u32,
+        /// Positive retained coefficient count.
+        order: u32,
+    },
     /// Exact original source correspondence, separate from object arithmetic.
     Source(super::source::SourceStatement),
     /// Formal object derivative with exactly one fewer known coefficient.
@@ -164,6 +181,15 @@ pub struct SeriesIntegralRow {
 /// Untrusted finite evidence; only a registered checker can establish a judgment.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SeriesCertificate {
+    /// Mode eleven, evaluated stage zero with a complete postorder occurrence trace.
+    EvaluatedResidual {
+        /// Only object form zero is supported.
+        form: u8,
+        /// Only evaluated stage zero is supported.
+        stage: u8,
+        /// Every occurrence and repeated-power round, in exact schedule order.
+        rows: Vec<ResidualRow>,
+    },
     /// Closed source theorem, polynomial seed or finite source inference.
     Source(super::source::SourceCertificate),
     /// Reserved mode eight, with no ordinary-proof slots.
@@ -249,6 +275,7 @@ impl SeriesStatement {
     #[must_use]
     pub const fn primitive(&self) -> Primitive {
         match self {
+            Self::EvaluatedResidual { .. } => Primitive::SeriesResidual,
             Self::Source(value) => value.clause.primitive(),
             Self::Derive { .. } => Primitive::SeriesDerive,
             Self::Integrate { .. } => Primitive::SeriesIntegrate,
@@ -264,6 +291,18 @@ impl SeriesStatement {
     /// Every original expression, domain, object and result, in semantic role order.
     pub(crate) fn objects(&self) -> Vec<&Handle> {
         match self {
+            Self::EvaluatedResidual {
+                subject,
+                expression,
+                dependent,
+                output,
+                problem,
+                ..
+            } => {
+                let mut objects = subject.objects();
+                objects.extend([expression, dependent, output, problem]);
+                objects
+            }
             Self::Source(value) => vec![&value.source, &value.domain, &value.output],
             Self::Truncate { input, output } | Self::Derive { input, output } => {
                 vec![input, output]
@@ -303,6 +342,7 @@ impl SeriesStatement {
     /// The first original operand; source clauses obtain their interpretation from the output.
     pub(crate) const fn input(&self) -> &Handle {
         match self {
+            Self::EvaluatedResidual { subject, .. } => subject.output(),
             Self::Source(value) => &value.source,
             Self::Truncate { input, .. }
             | Self::Derive { input, .. }
@@ -319,6 +359,7 @@ impl SeriesCertificate {
     #[must_use]
     pub const fn mode(&self) -> u8 {
         match self {
+            Self::EvaluatedResidual { .. } => 11,
             Self::Source(value) => value.clause.mode(),
             Self::Derive { .. } => 8,
             Self::Integrate { .. } => 9,
@@ -336,7 +377,8 @@ impl SeriesCertificate {
     pub const fn form(&self) -> u8 {
         match self {
             Self::Source(value) => value.clause.form(),
-            Self::Truncate { form, .. }
+            Self::EvaluatedResidual { form, .. }
+            | Self::Truncate { form, .. }
             | Self::Derive { form, .. }
             | Self::Integrate { form, .. }
             | Self::Add { form, .. }
@@ -346,4 +388,76 @@ impl SeriesCertificate {
             | Self::Coefficient { form, .. } => *form,
         }
     }
+}
+
+/// Closed original provenance; residual computations cannot be nested as subjects.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ResidualSubject {
+    /// Exact source correspondence with its original clause and domain.
+    Source(super::SourceStatement),
+    /// Exact object composition, retaining both original inputs and precision choice.
+    Compose {
+        /// Original outer object.
+        left: Handle,
+        /// Original inner object.
+        right: Handle,
+        /// Checked candidate object.
+        output: Handle,
+        /// Original common coefficient count.
+        order: u32,
+        /// Original minimum-order choice.
+        default_order: bool,
+    },
+}
+
+impl ResidualSubject {
+    /// Checked candidate object without any provenance erasure.
+    pub(crate) const fn output(&self) -> &Handle {
+        match self {
+            Self::Source(value) => &value.output,
+            Self::Compose { output, .. } => output,
+        }
+    }
+
+    /// Retain every original subject reference in wire role order.
+    pub(crate) fn objects(&self) -> Vec<&Handle> {
+        match self {
+            Self::Source(value) => vec![&value.source, &value.domain, &value.output],
+            Self::Compose {
+                left,
+                right,
+                output,
+                ..
+            } => vec![left, right, output],
+        }
+    }
+
+    /// The unique ordinary statement required in premise slot zero.
+    pub(crate) fn statement(&self) -> SeriesStatement {
+        match self {
+            Self::Source(value) => SeriesStatement::Source(value.clone()),
+            Self::Compose {
+                left,
+                right,
+                output,
+                order,
+                default_order,
+            } => SeriesStatement::Compose {
+                left: left.clone(),
+                right: right.clone(),
+                output: output.clone(),
+                order: *order,
+                default_order: *default_order,
+            },
+        }
+    }
+}
+
+/// One dense vector in the deterministic postorder occurrence schedule.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ResidualRow {
+    /// Zero-based exact schedule position.
+    pub ordinal: u32,
+    /// Complete ascending vector at the uniform retained order.
+    pub coefficients: Vec<Rational>,
 }

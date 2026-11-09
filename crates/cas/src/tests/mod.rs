@@ -13,6 +13,7 @@ mod distributions;
 mod scalar_transport;
 mod series_live;
 mod series_object;
+mod series_residual;
 mod trig_minus_one_transport;
 
 mod region_cache;

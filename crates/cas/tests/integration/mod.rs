@@ -16,6 +16,9 @@ mod scalar_transport;
 mod series;
 mod series_compose_golden;
 mod series_compose_limits;
+mod series_residual_golden;
+mod series_residual_limits;
+mod series_residual_wire;
 
 /// Share the independently authored refused import with its public conformance control.
 #[expect(
