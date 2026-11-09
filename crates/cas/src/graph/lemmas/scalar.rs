@@ -141,12 +141,11 @@ impl Cas {
                 .try_reserve_exact(count)
                 .map_err(|_| Fault::allocation(AT))?;
         }
-        let mut serial = self
-            .state
-            .next
-            .get(&VertexKind::AnonymousLemma)
-            .copied()
-            .unwrap_or(0);
+        let first =
+            self.token
+                .identities
+                .reserve(VertexKind::AnonymousLemma, size(count, AT)?, AT)?;
+        let mut serial = first;
         for entry in pending.iter() {
             let id = LogicalId {
                 kind: VertexKind::AnonymousLemma,
@@ -179,15 +178,33 @@ impl Cas {
             self.state.record(undo)?;
             serial += 1;
         }
-        for entry in std::mem::take(pending) {
+        self.append_staged_judgments(std::mem::take(pending), first);
+        Ok(bytes)
+    }
+
+    /// Publish only the fully reserved and journaled suffix, with no fallible steps remaining.
+    fn append_staged_judgments(&mut self, pending: Vec<PendingJudgment>, mut serial: u64) {
+        for entry in pending {
+            let id = LogicalId {
+                kind: VertexKind::AnonymousLemma,
+                serial,
+            };
             match entry {
-                PendingJudgment::NewScalar(inventory) => append(self, inventory),
-                PendingJudgment::NewPi(inventory) => super::pi::append(self, inventory),
+                PendingJudgment::NewScalar(inventory) => {
+                    append(self, id, inventory);
+                    serial += 1;
+                }
+                PendingJudgment::NewPi(inventory) => {
+                    super::pi::append(self, id, inventory);
+                    serial += 1;
+                }
                 PendingJudgment::NewEnclosure(inventory) => {
-                    super::enclosure::append(self, inventory);
+                    super::enclosure::append(self, id, inventory);
+                    serial += 1;
                 }
                 PendingJudgment::NewExpm1(inventory) => {
-                    super::prepared_expm1::append(self, inventory);
+                    super::prepared_expm1::append(self, id, inventory);
+                    serial += 1;
                 }
                 PendingJudgment::RecheckedExpm1(id) => self.refresh_expm1(id),
                 PendingJudgment::RecheckedEnclosure(id) => self.refresh_enclosure(id),
@@ -203,7 +220,6 @@ impl Cas {
                 }
             }
         }
-        Ok(bytes)
     }
 }
 
@@ -244,13 +260,6 @@ fn preflight(
     if nodes >= u64::from(u32::MAX) || edges >= u64::from(u32::MAX) {
         return Err(Fault::capacity(BudgetKind::Vertices, AT));
     }
-    cas.state
-        .next
-        .get(&VertexKind::AnonymousLemma)
-        .copied()
-        .unwrap_or(0)
-        .checked_add(count)
-        .ok_or_else(|| Fault::capacity(BudgetKind::Vertices, AT))?;
     for entry in pending {
         match entry {
             PendingJudgment::NewEnclosure(inventory) => {
@@ -298,17 +307,8 @@ fn preflight(
 }
 
 /// The already checked payload moves once into the authoritative graph after complete preflight.
-fn append(cas: &mut Cas, inventory: ScalarInventory) {
+fn append(cas: &mut Cas, id: LogicalId, inventory: ScalarInventory) {
     let state: &mut State = &mut cas.state;
-    let serial = state
-        .next
-        .get(&VertexKind::AnonymousLemma)
-        .copied()
-        .unwrap_or(0);
-    let id = LogicalId {
-        kind: VertexKind::AnonymousLemma,
-        serial,
-    };
     let [original, context, family] = inventory.scope.map(|id| state.indices[&id]);
     let key = Arc::clone(&inventory.key);
     let bytes = inventory.bytes;
@@ -329,7 +329,7 @@ fn append(cas: &mut Cas, inventory: ScalarInventory) {
     state.graph.add_edge(original, index, Edge::CheckedEvidence);
     state.indices.insert(id, index);
     state.scalar_judgments.insert(key, id);
-    state.next.insert(VertexKind::AnonymousLemma, serial + 1);
+    state.retain(VertexKind::AnonymousLemma);
     state.payload = state.payload.saturating_add(bytes);
     state.judgment_bytes = state.judgment_bytes.saturating_add(bytes);
     state.judgment_count += 1;

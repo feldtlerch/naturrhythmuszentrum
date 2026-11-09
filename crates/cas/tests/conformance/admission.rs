@@ -66,7 +66,7 @@ fn witness_store() -> TestResult<(Cas, VerifiedWitness)> {
     Ok((fixture.cas, witness))
 }
 
-/// Distinct source inserts expose rollback of interning, source keys and serial allocation.
+/// Distinct source inserts expose rollback of interning and source keys, with gaps in serial allocation.
 fn sources() -> Vec<Draft> {
     [("first", 1), ("second", 1_000), ("third", 1)]
         .into_iter()
@@ -77,7 +77,7 @@ fn sources() -> Vec<Draft> {
         .collect()
 }
 
-/// Invalid middle input cannot affect canonical state, prior proof bytes or the next source ID.
+/// Invalid middle input preserves retained state and prior proof bytes while spending source IDs.
 /// ´test:integration:invalid-admission-preserves-witness´
 #[test]
 fn invalid_admission_preserves_witness() -> TestResult {
@@ -104,20 +104,16 @@ fn invalid_admission_preserves_witness() -> TestResult {
     let (mut control, _) = witness_store()?;
     let expected = control.admit(&sources(), &mut default_budget()?)?;
     let actual = cas.admit(&sources(), &mut default_budget()?)?;
-    assert_eq!(
-        actual
-            .iter()
-            .map(nrz_cas::Handle::logical_id)
-            .collect::<Vec<_>>(),
-        expected
-            .iter()
-            .map(nrz_cas::Handle::logical_id)
-            .collect::<Vec<_>>()
-    );
+    assert_eq!(actual.len(), expected.len());
+    for (actual, expected) in actual.iter().zip(&expected) {
+        assert_eq!(cas.source(actual)?, control.source(expected)?);
+        assert!(actual.logical_id().serial > expected.logical_id().serial);
+    }
+    assert_eq!(cas.counts(), control.counts());
     Ok(())
 }
 
-/// A middle-draft Work refusal leaves a previous witness and all future logical IDs unchanged.
+/// A middle-draft Work refusal leaves a previous witness intact and spends discarded logical IDs.
 /// ´test:integration:exhausted-admission-preserves-witness´
 #[test]
 fn exhausted_admission_preserves_witness() -> TestResult {
@@ -153,15 +149,11 @@ fn exhausted_admission_preserves_witness() -> TestResult {
     assert_eq!(cas.canonical_snapshot(&mut default_budget()?)?, before);
     assert_eq!(cas.export_witness(&witness, &mut default_budget()?)?, bytes);
     let actual = cas.admit(&sources(), &mut default_budget()?)?;
-    assert_eq!(
-        actual
-            .iter()
-            .map(nrz_cas::Handle::logical_id)
-            .collect::<Vec<_>>(),
-        expected
-            .iter()
-            .map(nrz_cas::Handle::logical_id)
-            .collect::<Vec<_>>()
-    );
+    assert_eq!(actual.len(), expected.len());
+    for (actual, expected) in actual.iter().zip(&expected) {
+        assert_eq!(cas.source(actual)?, control.source(expected)?);
+        assert!(actual.logical_id().serial > expected.logical_id().serial);
+    }
+    assert_eq!(cas.counts(), control.counts());
     Ok(())
 }

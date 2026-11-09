@@ -19,7 +19,7 @@ const AT: Location = Location::new("reading proof memo");
 pub(crate) struct Cache {
     /// Store identity is retained, so an allocator cannot recycle it into a false match.
     owner: Option<Arc<()>>,
-    /// Rollbacks invalidate every citation before a logical serial can be reused.
+    /// Rollbacks invalidate citation eligibility; discarded graph identities stay absent.
     epoch: u64,
     /// Complete statements cite the original checked proof, never a reconstructed weaker claim.
     entries: BTreeMap<Vec<u8>, Entry>,

@@ -29,7 +29,7 @@ const AT: Location = Location::new("checked scalar records");
 pub(crate) struct Cache {
     /// Strong ownership prevents namespace recycling by the allocator.
     owner: Option<Arc<()>>,
-    /// Any rollback invalidates the complete inventory before logical IDs can recur.
+    /// Any rollback invalidates inventory eligibility; discarded graph identities stay absent.
     epoch: u64,
     /// Attempt-local checked inventories move into the graph only after final receipt copying.
     pending: Vec<PendingJudgment>,

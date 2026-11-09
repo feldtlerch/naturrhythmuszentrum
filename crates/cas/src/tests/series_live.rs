@@ -2526,3 +2526,104 @@ fn series_source_conclusion_arity() -> TestResult {
     );
     Ok(())
 }
+
+/// A series lemma's new-publication test follows occupancy even when its serial has gaps.
+/// ´test:crate:logical-identity-series-publication´
+#[test]
+fn logical_identity_series_publication() -> TestResult {
+    let mut f = fixture(false)?;
+    let input = object(&mut f.base, &f.field, &["1", "2", "3"])?;
+    let operation = O::Truncate {
+        input: input.clone(),
+        order: 2,
+    };
+    let before = f.base.cas.canonical_snapshot(&mut default_budget()?)?;
+    let counts = f.base.cas.counts();
+    let proof_count = f.base.cas.state.proof_count();
+    let fault = crate::Fault::invalid(
+        InvalidCode::Rule,
+        crate::Location::new("series identity control"),
+    );
+    let mut stale = None;
+    let mut abandoned = Vec::new();
+    let result: Result<(), crate::Fault> =
+        f.base
+            .cas
+            .transaction(&mut default_budget()?, |cas, budget| {
+                stale = Some(cas.compute_series(&operation, &[], budget)?);
+                abandoned.extend(
+                    cas.state
+                        .indices
+                        .keys()
+                        .filter(|id| id.kind == crate::graph::VertexKind::AnonymousLemma)
+                        .map(|id| cas.handle(*id)),
+                );
+                Err(fault.clone())
+            });
+    assert_eq!(result.as_ref(), Err(&fault));
+    assert_eq!(f.base.cas.counts(), counts);
+    assert_eq!(f.base.cas.state.proof_count(), proof_count);
+    assert_eq!(f.base.cas.retained_judgment_count(), 0);
+    assert_eq!(
+        f.base.cas.canonical_snapshot(&mut default_budget()?)?,
+        before
+    );
+    let stale = stale.ok_or("discarded series witness")?;
+    assert_eq!(
+        f.base
+            .cas
+            .checked(stale.proof())
+            .err()
+            .ok_or("discarded series proof")?
+            .kind,
+        FaultKind::Invalid(InvalidCode::Reference)
+    );
+    let mut budget = Budget::new(Limits {
+        proof_nodes: proof_count + 1,
+        ..Limits::default()
+    })?;
+    let kept = f.base.cas.compute_series(&operation, &[], &mut budget)?;
+    assert_eq!(kept.bytes, stale.bytes);
+    assert_ne!(kept.proof(), stale.proof());
+    assert!(kept.proof().logical_id().serial > stale.proof().logical_id().serial);
+    assert_eq!(f.base.cas.state.proof_count(), proof_count + 1);
+    assert_eq!(f.base.cas.retained_judgment_count(), 1);
+    assert_eq!(abandoned.len(), 1);
+    for handle in &abandoned {
+        assert_eq!(
+            f.base
+                .cas
+                .checked(handle)
+                .err()
+                .ok_or("series lemma reincarnated")?
+                .kind,
+            FaultKind::Invalid(InvalidCode::Reference)
+        );
+    }
+    let lemma = f
+        .base
+        .cas
+        .state
+        .indices
+        .keys()
+        .find(|id| id.kind == crate::graph::VertexKind::AnonymousLemma)
+        .copied()
+        .ok_or("retained series lemma")?;
+    f.base.cas.series_application(lemma)?;
+    assert!(lemma.serial > abandoned[0].logical_id().serial);
+    let counts = f.base.cas.counts();
+    let again = f
+        .base
+        .cas
+        .compute_series(&operation, &[], &mut default_budget()?)?;
+    assert_eq!(again.proof(), kept.proof());
+    assert_eq!(f.base.cas.counts(), counts);
+    f.base.cas.checked(&input)?;
+    let mut fresh = crate::Cas::new(Limits::default())?;
+    let imported = fresh.inspect(&kept.bytes, &mut default_budget()?)?;
+    assert_eq!(
+        fresh.export_witness(&imported, &mut default_budget()?)?,
+        kept.bytes
+    );
+    Ok(())
+}

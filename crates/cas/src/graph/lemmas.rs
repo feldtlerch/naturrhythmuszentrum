@@ -328,11 +328,10 @@ fn publish(
     }
     let original = state.indices[&cas.checked_in(state, constant.original())?];
     let context = state.indices[&cas.checked_in(state, constant.context())?];
-    let serial = state
-        .next
-        .get(&VertexKind::AnonymousLemma)
-        .copied()
-        .unwrap_or(0);
+    let serial = cas
+        .token
+        .identities
+        .reserve(VertexKind::AnonymousLemma, 1, AT)?;
     let id = LogicalId {
         kind: VertexKind::AnonymousLemma,
         serial,
@@ -358,7 +357,7 @@ fn publish(
     state.graph.add_edge(index, context, Edge::InContext);
     state.graph.add_edge(original, index, Edge::CheckedEvidence);
     state.indices.insert(id, index);
-    state.next.insert(VertexKind::AnonymousLemma, serial + 1);
+    state.retain(VertexKind::AnonymousLemma);
     state.intern.insert(key, id, &cas.token);
     state.payload = payload;
     state.judgment_bytes = total;

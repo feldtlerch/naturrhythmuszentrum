@@ -82,7 +82,7 @@ impl AnonymousLemmaCache {
     /// Key construction, comparisons and retained storage remain metered. A hit
     /// performs no rule checking or publication. An error never creates an entry.
     /// This replay commits its own cache entry; a later enclosing graph rollback
-    /// keeps that entry owned but invalidates its generation before identifiers recur.
+    /// keeps that entry owned but invalidates its generation; discarded identities never recur.
     /// # Errors
     /// Refuses invalid or foreign judgments, altered proof bytes, false rules and
     /// exhausted caller/store limits with the ordinary replay error.

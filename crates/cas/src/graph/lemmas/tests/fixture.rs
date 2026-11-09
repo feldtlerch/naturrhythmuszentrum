@@ -97,32 +97,50 @@ impl Fixture {
 
     /// Admit each graph-owned kind through its independent public or internal checking route.
     pub(super) fn retain_graph(&mut self, budget: &mut Budget) -> TestResult {
-        self.cas
-            .prepare_constant(&self.context, &self.one, budget)?;
-        self.cas.check_rational_enclosure(&self.scalar, budget)?;
-        machin(&mut self.cas, &self.pi, budget)?;
-        let report = self.cas.enclose(
-            &EnclosureRequest {
-                target: self.one.clone(),
-                context: self.context.clone(),
-                coordinates: Vec::new(),
-                goal: EnclosureGoal::Width,
-            },
-            RefinementPolicy {
-                version: 1,
-                precision: 4,
-                grid_ceiling: 64,
-                rounds: 2,
-                reduction_ceiling: 16,
-                term_ceiling: 64,
-                checking_work: 50_000,
-            },
+        Ok(retain_graph(
+            &mut self.cas,
+            &self.context,
+            &self.one,
+            &self.pi,
+            &self.scalar,
             budget,
-            &mut |_| false,
-        )?;
-        assert!(report.checked.is_some());
-        Ok(())
+        )?)
     }
+}
+
+/// Run the same independent checkers inside an enclosing transaction control.
+pub(super) fn retain_graph(
+    cas: &mut Cas,
+    context: &Handle,
+    one: &Handle,
+    pi: &Handle,
+    scalar: &RationalEnclosure,
+    budget: &mut Budget,
+) -> Result<(), Fault> {
+    cas.prepare_constant(context, one, budget)?;
+    cas.check_rational_enclosure(scalar, budget)?;
+    machin(cas, pi, budget)?;
+    let report = cas.enclose(
+        &EnclosureRequest {
+            target: one.clone(),
+            context: context.clone(),
+            coordinates: Vec::new(),
+            goal: EnclosureGoal::Width,
+        },
+        RefinementPolicy {
+            version: 1,
+            precision: 4,
+            grid_ceiling: 64,
+            rounds: 2,
+            reduction_ceiling: 16,
+            term_ceiling: 64,
+            checking_work: 50_000,
+        },
+        budget,
+        &mut |_| false,
+    )?;
+    assert!(report.checked.is_some());
+    Ok(())
 }
 
 /// The scalar inventory has one exact rational record and its original scope.

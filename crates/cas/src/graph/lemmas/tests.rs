@@ -2,6 +2,7 @@
 //! Mixed retention measures each authority owner and its caller reservation separately.
 
 mod fixture;
+mod identity;
 mod retained_graph;
 
 use crate::budget::{Budget, BudgetKind, Limits};

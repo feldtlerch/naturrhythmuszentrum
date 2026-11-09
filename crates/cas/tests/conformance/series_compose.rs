@@ -302,7 +302,7 @@ fn compose_refusal_owned_evidence() -> TestResult {
     Ok(())
 }
 
-/// Refused imported identities remain historical when rollback serials are readmitted.
+/// Refused imported identities stay historical as later admissions get fresh serials.
 /// ´test:integration:compose-import-refusal-identity-reuse´
 #[test]
 fn compose_import_refusal_identity_reuse() -> TestResult {
@@ -327,24 +327,27 @@ fn compose_import_refusal_identity_reuse() -> TestResult {
     assert_eq!(saved.value, rational("2/3")?);
     assert_eq!(saved.index, 0);
     assert!(saved.input.same_attempt(&saved.coefficient));
-    // The same wire records reuse their serials, but have a different retained attempt.
+    // The same wire records receive fresh logical IDs and a distinct refusal attempt.
     let second = f
         .cas
         .inspect(&bytes, &mut budget)
         .expect_err("second refused import");
     let second = second.series_constant().ok_or("second evidence")?;
-    assert_eq!(saved.input.logical_id(), second.input.logical_id());
+    assert_ne!(saved.input.logical_id(), second.input.logical_id());
+    assert_ne!(
+        saved.coefficient.logical_id(),
+        second.coefficient.logical_id()
+    );
     assert_ne!(saved.input, second.input);
+    assert_ne!(saved.coefficient, second.coefficient);
+    assert!(!saved.input.same_attempt(&second.input));
+    assert!(second.input.same_attempt(&second.coefficient));
     assert_eq!(before, f.cas.canonical_snapshot(&mut default_budget()?)?);
-    let replacement_coefficient = loop {
-        let serial = budget.usage().work;
-        let candidate = f.number(&format!("{}", serial + 100))?;
-        if candidate.logical_id().serial >= saved.coefficient.logical_id().serial {
-            break candidate;
-        }
-        budget.work(1, nrz_cas::Location::new("replacement coefficient"))?;
-    };
-    assert_eq!(
+    let replacement_coefficient = f.number("1000")?;
+    let coefficient_advanced =
+        replacement_coefficient.logical_id().serial > saved.coefficient.logical_id().serial;
+    assert!(coefficient_advanced);
+    assert_ne!(
         replacement_coefficient.logical_id(),
         saved.coefficient.logical_id()
     );
@@ -357,18 +360,28 @@ fn compose_import_refusal_identity_reuse() -> TestResult {
             &mut default_budget()?,
         )?
         .remove(0);
-    let mut replacement = None;
-    for serial in 0..=saved.input.logical_id().serial {
-        let input =
-            crate::testing::series_proof::object(&mut f, &field, &[&(1000 + serial).to_string()])?;
-        assert_eq!(input.logical_id().serial, serial);
-        replacement = Some(input);
-    }
-    let replacement = replacement.ok_or("replacement object")?;
-    assert_eq!(replacement.logical_id(), saved.input.logical_id());
-    assert_eq!(f.cas.series_object(&replacement)?.order, 1);
-    // Only the new Handle authenticates that lookup; SeriesDiagnosticIdentity cannot
+    let replacement = crate::testing::series_proof::object(&mut f, &field, &["1000"])?;
+    let input_advanced = replacement.logical_id().serial > saved.input.logical_id().serial;
+    assert!(input_advanced);
+    assert_ne!(replacement.logical_id(), saved.input.logical_id());
+    let object = f.cas.series_object(&replacement)?;
+    assert_eq!(object.order, 1);
+    assert_eq!(object.coefficients, [replacement_coefficient]);
+    // Only the new handle authenticates that lookup; `SeriesDiagnosticIdentity` cannot
     // be passed to it (the public compile-fail control checks this type boundary).
+    let after_replacement = f.cas.canonical_snapshot(&mut default_budget()?)?;
+    let later = f
+        .cas
+        .inspect(&bytes, &mut budget)
+        .expect_err("refused import after replacement");
+    let later = later.series_constant().ok_or("later evidence")?;
+    assert_ne!(saved.input, later.input);
+    assert_ne!(saved.coefficient, later.coefficient);
+    assert!(!saved.input.same_attempt(&later.input));
+    assert_eq!(
+        after_replacement,
+        f.cas.canonical_snapshot(&mut default_budget()?)?
+    );
     drop(f);
     assert_eq!(saved.value, rational("2/3")?);
     assert_eq!(saved.input, saved.input.clone());

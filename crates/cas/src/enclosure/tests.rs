@@ -511,7 +511,7 @@ fn enclosure_cold_warm_work() -> TestResult {
     Ok(())
 }
 
-/// Enclosing rollback preserves earlier receipts and invalidates reused source serials.
+/// Enclosing rollback preserves earlier receipts and invalidates discarded source identities.
 /// ´test:unit:enclosure-enclosing-rollback´
 /// ´claim:cas:enclosure-enclosing-rollback´
 #[test]

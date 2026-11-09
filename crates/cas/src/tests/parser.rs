@@ -60,7 +60,7 @@ fn parsed_graph_occurrences() -> TestResult {
     Ok(())
 }
 
-/// Syntax, numeric and admission failures consume no logical identifiers or source keys.
+/// Syntax, numeric and declaration preflight failures consume no logical identifiers or source keys.
 /// ´test:crate:parsed-rollback-identifiers´
 #[test]
 fn parsed_rollback_identifiers() -> TestResult {

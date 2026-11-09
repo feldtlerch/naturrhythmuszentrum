@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Finite series judgments have one graph owner and an authenticated evidence edge.
 
-use super::{AnonymousLemma, Cas, Edge, EdgeIndex, LogicalId, Vertex, VertexKind};
+use super::{AnonymousLemma, Cas, Edge, EdgeIndex, LogicalId, Vertex};
 use crate::budget::{Budget, BudgetKind};
 use crate::error::{Fault, InvalidCode, Location};
 use crate::graph::{Handle, size, storage_check};
@@ -102,11 +102,7 @@ impl Cas {
                 .checked_add(bytes)
                 .ok_or_else(invalid)?;
             budget.check(BudgetKind::OutputBytes, total, AT)?;
-            let next = state
-                .next
-                .get(&VertexKind::AnonymousLemma)
-                .copied()
-                .unwrap_or(0);
+            let before = state.graph.node_count();
             let id = cas.insert(
                 state,
                 Vertex::AnonymousLemma(Box::new(AnonymousLemma::Series(Box::new(SeriesLemma {
@@ -122,7 +118,7 @@ impl Cas {
                 budget,
             )?;
             let index = state.indices[&id];
-            if id.serial == next {
+            if state.graph.node_count() > before {
                 let source = state.indices[&original];
                 let citation = state.graph.add_edge(source, index, Edge::CheckedEvidence);
                 let Vertex::AnonymousLemma(node) = &mut state.graph[index] else {

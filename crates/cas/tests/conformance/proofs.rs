@@ -1284,7 +1284,11 @@ fn proof_transaction_exact_work_boundary() -> TestResult {
         let actual = fixture
             .cas
             .check_proof(&fixture.context, &[proposal], &mut exact)?;
-        assert_eq!(actual.proof().logical_id(), expected.proof().logical_id());
+        assert_eq!(
+            actual.proof().logical_id().kind,
+            expected.proof().logical_id().kind
+        );
+        assert!(actual.proof().logical_id().serial > expected.proof().logical_id().serial);
         assert_eq!(
             fixture.cas.export_witness(&actual, &mut budget()?)?,
             control.cas.export_witness(&expected, &mut budget()?)?

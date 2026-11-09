@@ -178,17 +178,8 @@ impl Cas {
 }
 
 /// Move the already preflighted payload into the common graph and rollback journal.
-pub(super) fn append(cas: &mut Cas, inventory: Expm1Inventory) {
+pub(super) fn append(cas: &mut Cas, id: LogicalId, inventory: Expm1Inventory) {
     let state = &mut cas.state;
-    let serial = state
-        .next
-        .get(&VertexKind::AnonymousLemma)
-        .copied()
-        .unwrap_or(0);
-    let id = LogicalId {
-        kind: VertexKind::AnonymousLemma,
-        serial,
-    };
     let [original, context] = inventory.scope.map(|id| state.indices[&id]);
     let key = Arc::clone(&inventory.key);
     let bytes = inventory.bytes;
@@ -206,7 +197,7 @@ pub(super) fn append(cas: &mut Cas, inventory: Expm1Inventory) {
     state.graph.add_edge(original, index, Edge::CheckedEvidence);
     state.indices.insert(id, index);
     state.intern.insert_key(key.into(), id, &cas.token);
-    state.next.insert(VertexKind::AnonymousLemma, serial + 1);
+    state.retain(VertexKind::AnonymousLemma);
     state.payload = state.payload.saturating_add(bytes);
     state.judgment_bytes = state.judgment_bytes.saturating_add(bytes);
     state.judgment_count += 1;

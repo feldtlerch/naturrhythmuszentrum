@@ -88,17 +88,8 @@ impl Cas {
 }
 
 /// Move the complete preflighted payload into the authoritative graph without a fallible suffix.
-pub(super) fn append(cas: &mut Cas, inventory: PiInventory) {
+pub(super) fn append(cas: &mut Cas, id: LogicalId, inventory: PiInventory) {
     let state = &mut cas.state;
-    let serial = state
-        .next
-        .get(&VertexKind::AnonymousLemma)
-        .copied()
-        .unwrap_or(0);
-    let id = LogicalId {
-        kind: VertexKind::AnonymousLemma,
-        serial,
-    };
     let original = state.indices[&inventory.original];
     let certificate = Arc::clone(&inventory.certificate);
     let bytes = inventory.bytes;
@@ -118,7 +109,7 @@ pub(super) fn append(cas: &mut Cas, inventory: PiInventory) {
     state.indices.insert(id, index);
     state.pi_judgments.insert(certificate, id);
     state.pi_judgments.refresh(&cas.memo_owner, cas.memo_epoch);
-    state.next.insert(VertexKind::AnonymousLemma, serial + 1);
+    state.retain(VertexKind::AnonymousLemma);
     state.payload = state.payload.saturating_add(bytes);
     state.judgment_bytes = state.judgment_bytes.saturating_add(bytes);
     state.judgment_count += 1;

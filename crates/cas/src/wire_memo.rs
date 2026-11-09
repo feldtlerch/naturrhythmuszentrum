@@ -19,7 +19,7 @@ pub(crate) struct Cache {
     pub(crate) enabled: bool,
     /// A different store or test fork cannot interpret these canonical graph references.
     owner: Option<Arc<()>>,
-    /// Any rollback invalidates references before their serials can be reused.
+    /// Any rollback invalidates memo eligibility; discarded graph identities stay absent.
     epoch: u64,
     /// Exact local canonical records; their graph edges include every original dependency.
     entries: BTreeMap<Key, Arc<Record>>,

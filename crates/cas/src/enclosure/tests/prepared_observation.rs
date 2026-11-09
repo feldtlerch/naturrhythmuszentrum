@@ -178,6 +178,8 @@ fn prepared_expm1_production_key() -> TestResult {
             &mut budget,
             &mut Counts::default(),
         )?;
+        let before = f.cas.counts();
+        let mut stale = None;
         let mut owner = None;
         let result = f.cas.transaction(&mut budget, |cas, budget| {
             cas.check_expm1(
@@ -192,6 +194,7 @@ fn prepared_expm1_production_key() -> TestResult {
             assert!(journal);
             assert_eq!(weak.strong_count(), 3);
             owner = Some(weak);
+            stale = Some(schedule(cas)?);
             if rollback {
                 Err(Fault::invalid(
                     InvalidCode::Expm1Claim,
@@ -209,6 +212,14 @@ fn prepared_expm1_production_key() -> TestResult {
             );
             assert_eq!(weak.strong_count(), 0);
             assert!(weak.upgrade().is_none());
+            assert_eq!(f.cas.counts(), before);
+            check_identity(
+                &mut f,
+                &request,
+                &proof,
+                &mut budget,
+                &stale.ok_or("schedule")?,
+            )?;
         } else {
             result?;
             assert_eq!(weak.strong_count(), 2);
@@ -216,5 +227,70 @@ fn prepared_expm1_production_key() -> TestResult {
             assert_eq!(weak.strong_count(), 0);
         }
     }
+    Ok(())
+}
+
+/// This zero-input fixture publishes exactly one anonymous schedule.
+fn schedule(cas: &Cas) -> Result<Handle, Fault> {
+    let mut ids = cas
+        .state
+        .indices
+        .keys()
+        .filter(|id| id.kind == crate::graph::VertexKind::AnonymousLemma);
+    let id = ids.next().ok_or_else(|| {
+        Fault::invalid(
+            InvalidCode::Reference,
+            crate::Location::new("schedule identity"),
+        )
+    })?;
+    assert!(ids.next().is_none());
+    Ok(cas.handle(*id))
+}
+
+/// Rechecking the same prepared proof cannot revive its discarded graph handle.
+fn check_identity(
+    f: &mut Fixture,
+    request: &Request,
+    proof: &crate::enclosure::prepared_expm1::Proof,
+    budget: &mut Budget,
+    stale: &Handle,
+) -> TestResult {
+    assert_eq!(
+        f.cas
+            .checked(stale)
+            .err()
+            .ok_or("discarded schedule survived")?
+            .kind,
+        FaultKind::Invalid(InvalidCode::Reference)
+    );
+    f.cas.check_expm1(
+        request,
+        Policy::default(),
+        proof,
+        budget,
+        &mut Counts::default(),
+    )?;
+    let replacement = schedule(&f.cas)?;
+    assert_ne!(&replacement, stale);
+    assert!(replacement.logical_id().serial > stale.logical_id().serial);
+    assert_eq!(
+        f.cas
+            .checked(stale)
+            .err()
+            .ok_or("schedule reincarnated")?
+            .kind,
+        FaultKind::Invalid(InvalidCode::Reference)
+    );
+    let counts = f.cas.counts();
+    f.cas.check_expm1(
+        request,
+        Policy::default(),
+        proof,
+        budget,
+        &mut Counts::default(),
+    )?;
+    assert_eq!(schedule(&f.cas)?, replacement);
+    assert_eq!(f.cas.counts(), counts);
+    f.cas.checked(&f.context)?;
     Ok(())
 }

@@ -39,7 +39,7 @@ fn admission_work_locality() -> TestResult {
     Ok(())
 }
 
-/// An invalid middle draft restores every internal map and serial as well as graph bytes.
+/// An invalid middle draft restores every retained map and count as well as graph bytes.
 /// ´test:crate:journal-invalid-middle-draft´
 #[test]
 fn journal_invalid_middle_draft() -> TestResult {
@@ -78,10 +78,9 @@ fn journal_invalid_middle_draft() -> TestResult {
         snapshot
     );
     let valid = fixture.batch();
-    assert_eq!(
-        fixture.cas.admit(&valid, &mut default_budget()?)?,
-        control.admit(&valid, &mut default_budget()?)?
-    );
+    let actual = fixture.cas.admit(&valid, &mut default_budget()?)?;
+    let expected = control.admit(&valid, &mut default_budget()?)?;
+    same_results(&fixture.cas, &actual, &control, &expected)?;
     Ok(())
 }
 
@@ -129,10 +128,8 @@ fn journal_work_middle_draft() -> TestResult {
             .export_witness(&witness, &mut default_budget()?)?,
         bytes
     );
-    assert_eq!(
-        fixture.cas.admit(&drafts, &mut default_budget()?)?,
-        expected
-    );
+    let actual = fixture.cas.admit(&drafts, &mut default_budget()?)?;
+    same_results(&fixture.cas, &actual, &control, &expected)?;
     Ok(())
 }
 
@@ -147,6 +144,68 @@ fn same_store(actual: &crate::Cas, expected: &crate::Cas) -> TestResult {
         actual.canonical_snapshot(&mut default_budget()?)?,
         expected.canonical_snapshot(&mut default_budget()?)?
     );
+    Ok(())
+}
+
+/// Retried records keep their contents and occupancy while copied stores allocate distinct IDs.
+fn same_results(
+    actual: &crate::Cas,
+    actual_handles: &[crate::Handle],
+    expected: &crate::Cas,
+    expected_handles: &[crate::Handle],
+) -> TestResult {
+    use crate::graph::{Vertex, vertex_key};
+    assert_eq!(actual.counts(), expected.counts());
+    assert_eq!(actual_handles.len(), expected_handles.len());
+    for (left, right) in actual_handles.iter().zip(expected_handles) {
+        let left_id = actual.checked(left)?;
+        let right_id = expected.checked(right)?;
+        assert_eq!(left_id.kind, right_id.kind);
+        match (actual.state.node(left_id)?, expected.state.node(right_id)?) {
+            (Vertex::Source(_), Vertex::Source(_)) => {
+                assert_eq!(actual.source(left)?, expected.source(right)?);
+            }
+            (Vertex::Occurrence(left), Vertex::Occurrence(right)) => {
+                assert_eq!(left.span, right.span);
+                assert_eq!(left.binder_names, right.binder_names);
+                assert_eq!(left.children.len(), right.children.len());
+                assert_eq!(left.provenance, right.provenance);
+                assert_eq!(
+                    left.source
+                        .map(|id| actual
+                            .source(&actual.handle(id))
+                            .map(|(key, text)| (key.to_owned(), text.to_owned())))
+                        .transpose()?,
+                    right
+                        .source
+                        .map(|id| expected
+                            .source(&expected.handle(id))
+                            .map(|(key, text)| (key.to_owned(), text.to_owned())))
+                        .transpose()?
+                );
+                assert_eq!(
+                    crate::wire_build::syntax_key(actual, left.expression, &mut default_budget()?)?,
+                    crate::wire_build::syntax_key(
+                        expected,
+                        right.expression,
+                        &mut default_budget()?
+                    )?
+                );
+            }
+            (left @ Vertex::Policy(_), right @ Vertex::Policy(_)) => {
+                assert_eq!(
+                    vertex_key(left, &actual.state, &mut default_budget()?)?,
+                    vertex_key(right, &expected.state, &mut default_budget()?)?
+                );
+            }
+            _ => {
+                assert_eq!(
+                    crate::wire_build::syntax_key(actual, left_id, &mut default_budget()?)?,
+                    crate::wire_build::syntax_key(expected, right_id, &mut default_budget()?)?
+                );
+            }
+        }
+    }
     Ok(())
 }
 
@@ -207,6 +266,7 @@ const fn transaction_refusal() -> crate::Fault {
 fn journal_outer_rollback_includes_inner_commit() -> TestResult {
     let (mut fixture, witness) = Fixture::with_witness()?;
     let mut control = fixture.cas.full_copy_for_test();
+    let prefix: Vec<_> = control.state.indices.keys().copied().collect();
     let drafts = fixture.batch();
     let context = &witness.judgment().context;
     let mut ledger = default_budget()?;
@@ -219,11 +279,16 @@ fn journal_outer_rollback_includes_inner_commit() -> TestResult {
     assert_eq!(result, Err(transaction_refusal()));
     assert!(ledger.usage().work > 512);
     same_store(&fixture.cas, &control)?;
-    assert_eq!(
-        transaction_edits(&mut fixture.cas, &drafts, context, &mut default_budget()?)?,
-        transaction_edits(&mut control, &drafts, context, &mut default_budget()?)?
-    );
-    same_store(&fixture.cas, &control)
+    let actual = transaction_edits(&mut fixture.cas, &drafts, context, &mut default_budget()?)?;
+    let expected = transaction_edits(&mut control, &drafts, context, &mut default_budget()?)?;
+    let normalized = crate::graph::retry_comparison::normalized(
+        &prefix,
+        &fixture.cas,
+        &actual,
+        &control,
+        &expected,
+    )?;
+    same_store(&normalized, &control)
 }
 
 /// An inner refusal drops only its edits; the outer transaction can continue and commit.
@@ -232,6 +297,7 @@ fn journal_outer_rollback_includes_inner_commit() -> TestResult {
 fn journal_inner_rollback_outer_commit() -> TestResult {
     let (mut fixture, witness) = Fixture::with_witness()?;
     let mut control = fixture.cas.full_copy_for_test();
+    let prefix: Vec<_> = control.state.indices.keys().copied().collect();
     let drafts = fixture.batch();
     let context = &witness.judgment().context;
     let outer = Draft::Source {
@@ -250,13 +316,29 @@ fn journal_inner_rollback_outer_commit() -> TestResult {
         assert!(ledger.usage().work > spent);
         Ok(())
     })?;
-    control.admit(&[outer], &mut default_budget()?)?;
-    same_store(&fixture.cas, &control)?;
-    assert_eq!(
-        transaction_edits(&mut fixture.cas, &drafts, context, &mut default_budget()?)?,
-        transaction_edits(&mut control, &drafts, context, &mut default_budget()?)?
-    );
-    same_store(&fixture.cas, &control)
+    let mut expected = control.admit(std::slice::from_ref(&outer), &mut default_budget()?)?;
+    let mut actual = fixture.cas.admit(&[outer], &mut default_budget()?)?;
+    same_results(&fixture.cas, &actual, &control, &expected)?;
+    actual.extend(transaction_edits(
+        &mut fixture.cas,
+        &drafts,
+        context,
+        &mut default_budget()?,
+    )?);
+    expected.extend(transaction_edits(
+        &mut control,
+        &drafts,
+        context,
+        &mut default_budget()?,
+    )?);
+    let normalized = crate::graph::retry_comparison::normalized(
+        &prefix,
+        &fixture.cas,
+        &actual,
+        &control,
+        &expected,
+    )?;
+    same_store(&normalized, &control)
 }
 
 /// A real admission failure propagates through several nested checkpoints without losing a log.
@@ -265,6 +347,7 @@ fn journal_inner_rollback_outer_commit() -> TestResult {
 fn journal_deep_failure_restores_all_indexes() -> TestResult {
     let (mut fixture, witness) = Fixture::with_witness()?;
     let mut control = fixture.cas.full_copy_for_test();
+    let prefix: Vec<_> = control.state.indices.keys().copied().collect();
     let drafts = fixture.batch();
     let context = &witness.judgment().context;
     let mut ledger = default_budget()?;
@@ -295,14 +378,72 @@ fn journal_deep_failure_restores_all_indexes() -> TestResult {
     );
     assert!(ledger.usage().work > 768);
     same_store(&fixture.cas, &control)?;
-    assert_eq!(
-        transaction_edits(&mut fixture.cas, &drafts, context, &mut default_budget()?)?,
-        transaction_edits(&mut control, &drafts, context, &mut default_budget()?)?
-    );
-    same_store(&fixture.cas, &control)
+    let actual = transaction_edits(&mut fixture.cas, &drafts, context, &mut default_budget()?)?;
+    let expected = transaction_edits(&mut control, &drafts, context, &mut default_budget()?)?;
+    let normalized = crate::graph::retry_comparison::normalized(
+        &prefix,
+        &fixture.cas,
+        &actual,
+        &control,
+        &expected,
+    )?;
+    same_store(&normalized, &control)
 }
 
-/// A refusal after native proof insertion restores moved state and the next proof serial.
+/// Swapped equal-syntax children escape the content comparison but not full normalization.
+/// ´test:crate:journal-retry-comparison-rejects-swapped-children´
+#[test]
+fn journal_retry_comparison_rejects_swapped_children() -> TestResult {
+    let (mut fixture, witness) = Fixture::with_witness()?;
+    let mut control = fixture.cas.full_copy_for_test();
+    let prefix: Vec<_> = control.state.indices.keys().copied().collect();
+    let drafts = fixture.batch();
+    let context = &witness.judgment().context;
+    let result: Result<(), crate::Fault> =
+        fixture
+            .cas
+            .transaction(&mut default_budget()?, |cas, ledger| {
+                cas.transaction(ledger, |cas, ledger| {
+                    transaction_edits(cas, &drafts, context, ledger)
+                })?;
+                Err(transaction_refusal())
+            });
+    assert_eq!(result, Err(transaction_refusal()));
+    same_store(&fixture.cas, &control)?;
+    let mut swapped = fixture.batch();
+    let Some(Draft::Occurrence(parent)) = swapped.get_mut(3) else {
+        return Err("missing parent occurrence".into());
+    };
+    assert_eq!(
+        parent.children,
+        [
+            crate::Reference::Existing(fixture.root.clone()),
+            crate::Reference::Local(2)
+        ]
+    );
+    parent.children.reverse();
+    let actual = transaction_edits(&mut fixture.cas, &swapped, context, &mut default_budget()?)?;
+    let expected = transaction_edits(&mut control, &drafts, context, &mut default_budget()?)?;
+    same_results(&fixture.cas, &actual, &control, &expected)?;
+    let normalized = crate::graph::retry_comparison::normalized(
+        &prefix,
+        &fixture.cas,
+        &actual,
+        &control,
+        &expected,
+    )?;
+    assert_ne!(
+        format!("{:?}", normalized.state),
+        format!("{:?}", control.state)
+    );
+    assert_ne!(
+        normalized.canonical_snapshot(&mut default_budget()?)?,
+        control.canonical_snapshot(&mut default_budget()?)?
+    );
+    Ok(())
+}
+
+/// A refusal after native proof insertion restores retained state without recycling proof identities.
 /// ´test:crate:journal-proof-publication-refusal´
 #[test]
 fn journal_proof_publication_refusal() -> TestResult {
@@ -332,6 +473,9 @@ fn journal_proof_publication_refusal() -> TestResult {
             .cas
             .check_proof(context, std::slice::from_ref(&step), &mut default_budget()?)?;
     let expected = control.check_proof(context, &[step], &mut default_budget()?)?;
-    assert_eq!(actual.proof(), expected.proof());
-    same_store(&fixture.cas, &control)
+    assert_ne!(actual.proof(), expected.proof());
+    assert_eq!(actual.bytes, expected.bytes);
+    assert_eq!(fixture.cas.state.proof_count(), 2);
+    assert_eq!(fixture.cas.counts(), control.counts());
+    Ok(())
 }

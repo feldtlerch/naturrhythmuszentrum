@@ -63,7 +63,7 @@ fn fixture() -> TestResult<Fixture> {
     })
 }
 
-/// Generate a fresh product whose logical identifiers can be reused after rollback.
+/// Generate a fresh product whose logical identifiers remain spent after rollback.
 fn product(
     cas: &mut Cas,
     header: &Handle,
@@ -111,9 +111,25 @@ fn constant_cache_rollback_generation() -> TestResult {
         })
     ));
     assert_eq!(case.cas.canonical_snapshot(&mut ledger()?)?, snapshot);
-    let changed = product(&mut case.cas, &case.header, &case.pi, 3, &mut ledger()?)?;
     let stale = stale.ok_or("transient original")?;
-    assert_eq!(stale.logical_id(), changed.logical_id());
+    assert_eq!(
+        case.cas
+            .checked(&stale)
+            .err()
+            .ok_or("discarded handle accepted")?
+            .kind,
+        crate::FaultKind::Invalid(InvalidCode::Reference)
+    );
+    let changed = product(&mut case.cas, &case.header, &case.pi, 3, &mut ledger()?)?;
+    assert_ne!(stale, changed);
+    assert!(changed.logical_id().serial > stale.logical_id().serial);
+    assert_eq!(
+        ExactConstant::from_expression(&case.cas, &stale, &mut ledger()?)
+            .err()
+            .ok_or("discarded expression authenticated replacement")?
+            .kind,
+        crate::FaultKind::Invalid(InvalidCode::Reference)
+    );
     let mut direct = ledger()?;
     let expected = ExactConstant::from_expression(&case.cas, &changed, &mut direct)?;
     let mut measured = ledger()?;
@@ -127,7 +143,7 @@ fn constant_cache_rollback_generation() -> TestResult {
     Ok(())
 }
 
-/// Even a saturated generation never permits reuse after serial recycling.
+/// Even a saturated generation never permits a retained cache hit.
 /// ´test:unit:constant-cache-saturated-generation´
 /// ´claim:cas:constant-cache-saturated-generation´
 #[test]

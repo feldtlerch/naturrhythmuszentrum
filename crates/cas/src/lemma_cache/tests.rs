@@ -310,7 +310,7 @@ fn lemma_cache_schema_is_documented() {
     }
 }
 
-/// A graph rollback invalidates cache authority before another proof can reuse its serial.
+/// A graph rollback invalidates captured roots and wrappers permanently, and clears cache authority.
 /// ´test:unit:lemma-cache-recycled-proof-refusal´
 #[test]
 fn lemma_cache_recycled_proof_refusal() -> TestResult {
@@ -333,13 +333,43 @@ fn lemma_cache_recycled_proof_refusal() -> TestResult {
             super::AT,
         ))
     });
-    assert!(result.is_err());
+    assert_eq!(
+        result,
+        Err(crate::Fault::invalid(
+            crate::InvalidCode::Reference,
+            super::AT
+        ))
+    );
     let original = original.ok_or("rolled-back witness")?;
+    let retained = retained.ok_or("cached root")?;
+    for stale in [&retained, original.proof()] {
+        assert_eq!(
+            cas.checked(stale)
+                .err()
+                .ok_or("discarded proof accepted")?
+                .kind,
+            crate::FaultKind::Invalid(crate::InvalidCode::Reference)
+        );
+    }
     proof(&mut cas, Change::Relation)?;
     let changed = proof(&mut cas, Change::Declarations)?;
+    for stale in [&retained, original.proof()] {
+        assert_ne!(stale, changed.proof());
+        assert!(changed.proof().logical_id().serial > stale.logical_id().serial);
+        assert_eq!(
+            cas.checked(stale)
+                .err()
+                .ok_or("stale proof authenticated replacement")?
+                .kind,
+            crate::FaultKind::Invalid(crate::InvalidCode::Reference)
+        );
+    }
     assert_eq!(
-        retained.ok_or("cached root")?.logical_id(),
-        changed.proof().logical_id()
+        cas.export_witness(&original, &mut budget()?)
+            .err()
+            .ok_or("discarded witness wrapper accepted")?
+            .kind,
+        crate::FaultKind::Invalid(crate::InvalidCode::Reference)
     );
     let (result, rows) = crate::testing::work_trace::measured(|| {
         cache
@@ -354,7 +384,7 @@ fn lemma_cache_recycled_proof_refusal() -> TestResult {
     let proof = result?;
     assert!(
         rows.iter().any(|row| row.rule != "replay"),
-        "recycled serial returned a warm cache hit"
+        "rolled-back entry returned a warm cache hit"
     );
     assert_ne!(&proof, changed.proof());
     Ok(())
@@ -363,3 +393,43 @@ fn lemma_cache_recycled_proof_refusal() -> TestResult {
 mod lifecycle;
 mod limits;
 mod literals;
+
+/// Portable syntax, theorem and reuse bytes exclude failed and unrelated allocation histories.
+/// ´test:unit:logical-identity-portable-histories´
+#[test]
+fn logical_identity_portable_histories() -> TestResult {
+    let mut baseline = None;
+    for history in 0..3 {
+        let mut cas = Cas::new(budget()?.limits().clone())?;
+        if history > 0 {
+            let fault = crate::Fault::invalid(crate::InvalidCode::Rule, super::AT);
+            let result: Result<(), crate::Fault> = cas.transaction(&mut budget()?, |cas, _| {
+                proof(cas, Change::Declarations).expect("discarded proof fixture");
+                Err(fault.clone())
+            });
+            assert_eq!(result.as_ref(), Err(&fault));
+        }
+        if history > 1 {
+            proof(&mut cas, Change::Declarations)?;
+            proof(&mut cas, Change::Relation)?;
+        }
+        let witness = proof(&mut cas, Change::None)?;
+        let Statement::Equality { left, .. } = &witness.judgment().statement else {
+            return Err("equality fixture".into());
+        };
+        let syntax = crate::wire_build::syntax_key(&cas, cas.checked(left)?, &mut budget()?)?;
+        let theorem = cas.export_witness(&witness, &mut budget()?)?;
+        let reuse = cas.witness_reuse_key(&witness, &mut budget()?)?;
+        let mut fresh = Cas::new(budget()?.limits().clone())?;
+        let imported = fresh.inspect(&theorem, &mut budget()?)?;
+        assert_eq!(fresh.export_witness(&imported, &mut budget()?)?, theorem);
+        assert_eq!(fresh.witness_reuse_key(&imported, &mut budget()?)?, reuse);
+        let contents = (syntax, theorem, reuse);
+        if let Some(expected) = &baseline {
+            assert_eq!(&contents, expected);
+        } else {
+            baseline = Some(contents);
+        }
+    }
+    Ok(())
+}

@@ -57,7 +57,7 @@ fn graph_determinism() -> TestResult {
     Ok(())
 }
 
-/// A bad UTF-8 span rolls back an earlier source draft and its namespace serial.
+/// A bad UTF-8 span rolls back an earlier source draft while spending its namespace serial.
 /// ´test:integration:transaction-rollback´
 #[test]
 fn transaction_rollback() -> TestResult {
@@ -89,7 +89,7 @@ fn transaction_rollback() -> TestResult {
             text: "π".into(),
         },
     )?;
-    assert_eq!(source.logical_id().serial, 0);
+    assert_eq!(source.logical_id().serial, 1);
     Ok(())
 }
 
@@ -547,7 +547,7 @@ fn storage_boundary_rollback() -> TestResult {
     assert!(cas.admit(&drafts, &mut ledger).is_err());
     assert_eq!(cas.counts().vertices, 0);
     let handle = admit(&mut cas, drafts.first().ok_or("missing draft")?.clone())?;
-    assert_eq!(handle.logical_id().serial, 0);
+    assert_eq!(handle.logical_id().serial, 1);
     assert_eq!(cas.counts().vertices, 1);
     Ok(())
 }

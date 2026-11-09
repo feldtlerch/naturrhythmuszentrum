@@ -3,9 +3,9 @@
 //!
 //! # Atomic construction and rollback
 //!
-//! `Cas::admit` validates flat child-before-parent drafts and publishes them atomically. Handles carry a private store identity; public logical identifiers never authorize a lookup in another store. Graph-owned expression records share exact syntax, while each original operand use keeps a distinct occurrence, optional checked UTF-8 byte span and ordered child links. Sources with conflicting bytes under one key are refused. Failed admission preserves the published graph and all next identifiers.
+//! `Cas::admit` validates flat child-before-parent drafts and publishes them atomically. Handles carry a private store identity; public logical identifiers never authorize a lookup in another store. Graph-owned expression records share exact syntax, while each original operand use keeps a distinct occurrence, optional checked UTF-8 byte span and ordered child links. Sources with conflicting bytes under one key are refused. Failed admission preserves the published graph. Allocated logical identities are never reused under the same store token, including after rollback.
 //!
-//! Draft admission, proof checking and replay, and producer transactions use one append-only rollback journal instead of copying the accumulated store. Each checkpoint restores node and edge indices, logical indexes and next identifiers, interning keys, policy identities, source keys, parent claims and all payload counters on refusal. An inner refusal undoes only its edits; an inner commit remains reversible by its enclosing transaction. Work covers touched payload, a fixed 256-unit counter checkpoint, logical key probes and validation, without a transaction charge proportional to unrelated records. Storage checks still include retained occupancy, pending drafts and journal reservation; nested transaction checkpoints reserve their bounded counter inventory under the existing staged-payload ceiling. Spent work is never refunded. Earlier witness bytes and future logical identifiers survive invalid input and mid-batch exhaustion unchanged. Full store copies are available only to tests needing an untouched control. Copying a checked application charges its own typed payload and optional scalar cache. Substitution prepays each reached record and copied scope, accumulating draft and memo workspace under the existing staged-payload limit; unrelated stored syntax contributes no work.
+//! Draft admission, proof checking and replay, and producer transactions use one append-only rollback journal instead of copying the accumulated store. Each checkpoint restores node and edge indices, logical indexes and retained counts, interning keys, policy identities, source keys, parent claims and all payload counters on refusal. An inner refusal undoes only its edits; an inner commit remains reversible by its enclosing transaction. Work covers touched payload, a fixed 256-unit counter checkpoint, logical key probes and validation, without a transaction charge proportional to unrelated records. Storage checks still include retained occupancy, pending drafts and journal reservation; nested transaction checkpoints reserve their bounded counter inventory under the existing staged-payload ceiling. Spent work is never refunded. Earlier handles and witness bytes survive invalid input and mid-batch exhaustion unchanged. Token-owned allocation high-water marks survive rollback so a captured discarded handle cannot authenticate a later object; retries can leave gaps in logical identifiers. Full store copies are available only to tests needing an untouched control. Copying a checked application charges its own typed payload and optional scalar cache. Substitution prepays each reached record and copied scope, accumulating draft and memo workspace under the existing staged-payload limit; unrelated stored syntax contributes no work.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -23,8 +23,11 @@ use crate::error::{Fault, InvalidCode, Location};
 use crate::model::{Binding, Environment, Operator, PredicateKind, Scope, Sort, Span};
 use crate::source_model::{SourceForm, SourceFormDraft};
 
+mod identity;
 mod intern;
 mod lemmas;
+#[cfg(test)]
+pub(crate) mod retry_comparison;
 pub(crate) use lemmas::{PendingJudgment, PiIndex, PiInventory, ScalarInventory};
 
 pub(crate) use intern::InterningSnapshot;
@@ -176,7 +179,7 @@ impl VertexKind {
 pub struct LogicalId {
     /// Vertex kind.
     pub kind: VertexKind,
-    /// Consecutive admission serial, beginning with zero in each namespace.
+    /// Admission serial, beginning with zero; discarded allocations leave permanent gaps.
     pub serial: u64,
 }
 
@@ -190,7 +193,7 @@ pub struct Handle {
 }
 
 impl Handle {
-    /// Read a portable logical identifier, without conferring store ownership.
+    /// Read a diagnostic logical identifier, without conferring store ownership.
     #[must_use]
     pub const fn logical_id(&self) -> LogicalId {
         self.id
@@ -846,8 +849,8 @@ struct Journal {
     judgment_bytes: u64,
     /// Number of retained anonymous nodes under this checkpoint or state.
     judgment_count: usize,
-    /// At most one next serial per fixed vertex kind.
-    next: BTreeMap<VertexKind, u64>,
+    /// At most one retained count per fixed vertex kind.
+    retained: BTreeMap<VertexKind, u64>,
     /// First undo entry owned by this checkpoint.
     start: usize,
     /// A parent checkpoint retains committed inner edits.
@@ -870,8 +873,8 @@ pub(crate) struct State {
     pub(crate) pi_judgments: PiIndex,
     /// Immutable policy identity lookup, independent of unrelated graph records.
     pub(crate) policies: BTreeMap<(String, u32), LogicalId>,
-    /// Next serial per kind, independent of graph indices.
-    next: BTreeMap<VertexKind, u64>,
+    /// Retained records per kind, independent of logical serial high-water marks.
+    retained: BTreeMap<VertexKind, u64>,
     /// Source key lookup used to reject conflicting source bytes.
     sources: BTreeMap<String, LogicalId>,
     /// Parent uniqueness for all occurrence records.
@@ -900,7 +903,7 @@ impl State {
             scalar_judgments: BTreeMap::new(),
             pi_judgments: PiIndex::default(),
             policies: BTreeMap::new(),
-            next: BTreeMap::new(),
+            retained: BTreeMap::new(),
             sources: BTreeMap::new(),
             parents: BTreeMap::new(),
             source_bytes: 0,
@@ -924,7 +927,7 @@ impl State {
             },
             judgment_bytes: self.judgment_bytes,
             judgment_count: self.judgment_count,
-            next: self.next.clone(),
+            retained: self.retained.clone(),
             start: self.journal.as_ref().map_or(0, Vec::len),
             nested: self.journal.is_some(),
         };
@@ -976,7 +979,7 @@ impl State {
         }
         self.judgment_bytes = checkpoint.judgment_bytes;
         self.judgment_count = checkpoint.judgment_count;
-        self.next = checkpoint.next;
+        self.retained = checkpoint.retained;
         self.payload = checkpoint.counts.payload_bytes;
         self.source_bytes = checkpoint.counts.source_bytes;
         self.originals = checkpoint.counts.original_occurrences;
@@ -1011,9 +1014,14 @@ impl State {
         }
     }
 
-    /// Append-only proof serials count retained proofs without walking unrelated objects.
+    /// Count retained proofs without walking unrelated objects or counting discarded identities.
     pub(crate) fn proof_count(&self) -> u64 {
-        self.next.get(&VertexKind::Proof).copied().unwrap_or(0)
+        self.retained.get(&VertexKind::Proof).copied().unwrap_or(0)
+    }
+
+    /// Record an append after preflight bounds total graph occupancy below `u32::MAX`.
+    fn retain(&mut self, kind: VertexKind) {
+        *self.retained.entry(kind).or_default() += 1;
     }
 
     /// Meter one structural-key probe by its own bytes, independent of retained payload.
@@ -1212,7 +1220,7 @@ impl Cas {
         let at = Location::new("proof transaction");
         crate::work_observation::observe!(budget, at, {
             budget.work(256, at)?;
-            let bytes = size(self.state.next.len(), at)?
+            let bytes = size(self.state.retained.len(), at)?
                 .checked_mul(64)
                 .ok_or_else(|| Fault::capacity(BudgetKind::StagedPayloadBytes, at))?;
             let previous = budget.reserve_temporary(bytes, at)?;
@@ -1243,7 +1251,7 @@ impl Cas {
         result
     }
 
-    /// Unmetered full copy for tests requiring an untouched control store.
+    /// Unmetered retained-state copy; the shared token also shares allocation high-water marks.
     #[cfg(test)]
     pub(crate) fn full_copy_for_test(&self) -> Self {
         Self {
@@ -1286,7 +1294,7 @@ impl Cas {
         Ok(handle.id)
     }
 
-    /// Mint a handle only after its logical record exists in a committed store.
+    /// Mint a handle after its record exists; an enclosing rollback permanently invalidates it.
     pub(crate) fn handle(&self, id: LogicalId) -> Handle {
         Handle {
             token: Arc::clone(&self.token),
@@ -1347,7 +1355,7 @@ impl Cas {
     ///
     /// # Errors
     /// Refuses malformed drafts, foreign/forward references, or exhausted budgets;
-    /// the published graph and next logical identifiers remain unchanged.
+    /// the published graph remains unchanged and discarded identities are never reused.
     pub fn admit(&mut self, drafts: &[Draft], budget: &mut Budget) -> Result<Vec<Handle>, Fault> {
         let previous = budget.restrict_storage(&self.limits);
         let result = self.admit_batch(drafts, budget);
@@ -1372,7 +1380,7 @@ impl Cas {
             }
             let payload = crate::validation::draft_payload(drafts, budget)?;
             let pending = payload.bytes;
-            let reserved = size(self.state.next.len(), at)?
+            let reserved = size(self.state.retained.len(), at)?
                 .checked_mul(64)
                 .and_then(|n| n.checked_add(pending))
                 .ok_or_else(|| Fault::capacity(BudgetKind::StagedPayloadBytes, at))?;
@@ -1983,10 +1991,6 @@ impl Cas {
                 .ok_or_else(|| Fault::capacity(BudgetKind::StagedPayloadBytes, at))?,
             at,
         )?;
-        let serial = state.next.get(&kind).copied().unwrap_or(0);
-        let next = serial
-            .checked_add(1)
-            .ok_or_else(|| Fault::capacity(BudgetKind::Vertices, at))?;
         let mut targets = Vec::new();
         targets
             .try_reserve_exact(edges.len())
@@ -1999,6 +2003,7 @@ impl Cas {
                 .ok_or_else(|| Fault::invalid(InvalidCode::Reference, at))?;
             targets.push((index, *role));
         }
+        let serial = self.token.identities.reserve(kind, 1, at)?;
         let id = LogicalId { kind, serial };
         state.record(Undo::Vertex {
             id,
@@ -2013,7 +2018,7 @@ impl Cas {
             let _edge = state.graph.add_edge(index, target, role);
         }
         state.indices.insert(id, index);
-        state.next.insert(kind, next);
+        state.retain(kind);
         if interned {
             state.intern.insert_key(key, id, &self.token);
         }

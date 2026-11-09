@@ -65,7 +65,7 @@ fn reading_memo_separates_every_statement_component() -> TestResult {
     Ok(())
 }
 
-/// Rolled-back checked proofs cannot be cited after a different theorem reuses their serial.
+/// Rolled-back checked proofs cannot be cited after a different theorem is admitted.
 /// ´test:crate:reading-memo-invalidates-rolled-back-proof´
 #[test]
 fn reading_memo_invalidates_rolled_back_proof() -> TestResult {
@@ -104,10 +104,7 @@ fn reading_memo_invalidates_rolled_back_proof() -> TestResult {
         }],
         &mut ledger()?,
     )?;
-    assert_eq!(
-        replacement.proof().logical_id(),
-        former.ok_or("original proof")?
-    );
+    assert!(replacement.proof().logical_id().serial > former.ok_or("original proof")?.serial);
     let actual =
         fixture
             .cas

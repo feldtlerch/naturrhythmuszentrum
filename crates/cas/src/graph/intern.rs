@@ -55,6 +55,8 @@ pub(crate) struct InterningSnapshot {
 /// Its address and counters never participate in key ordering or canonical encoding.
 #[derive(Debug, Default)]
 pub(crate) struct StoreToken {
+    /// Logical identities belong to this token even when records are rolled back.
+    pub(super) identities: super::identity::Identities,
     /// Monotone number of actual comparator calls.
     comparisons: AtomicU64,
     /// Monotone number of byte pairs examined by those calls.
@@ -265,6 +267,7 @@ mod tests {
         let owner = Arc::new(StoreToken {
             comparisons: AtomicU64::new(u64::MAX - 1),
             compared_bytes: AtomicU64::new(u64::MAX - 1),
+            ..StoreToken::default()
         });
         let retained = Key {
             bytes: KeyBytes::Flat(Cow::Owned(vec![1, 2])),

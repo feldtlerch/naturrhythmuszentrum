@@ -229,8 +229,9 @@ pub enum FaultKind {
 
 /// Historical diagnostic identity, never a capability to access a graph object.
 ///
-/// A private shared attempt token distinguishes refusals even when rollback reuses
-/// logical identifiers. Clones preserve that identity; no store token is retained.
+/// A private shared attempt token distinguishes refusals of the same retained object
+/// or matching logical identifiers in different stores. Rollback never reuses logical
+/// identifiers within a store. Clones preserve diagnostic identity; no store token is retained.
 ///
 /// ```compile_fail,E0308
 /// fn lookup(cas: &nrz_cas::Cas, identity: &nrz_cas::SeriesDiagnosticIdentity) {

@@ -86,7 +86,7 @@ fn canonical_record_memo_separates_stores() -> TestResult {
     Ok(())
 }
 
-/// Rolled-back nodes cannot survive as facts when admission reuses their logical serials.
+/// Rolled-back nodes cannot survive as facts after later admission.
 /// ´test:crate:canonical-record-memo-invalidates-rollback´
 #[test]
 fn canonical_record_memo_invalidates_rollback() -> TestResult {
@@ -115,7 +115,7 @@ fn canonical_record_memo_invalidates_rollback() -> TestResult {
     assert!(cas.memo_epoch > 0);
     let (former, bytes) = abandoned.ok_or("abandoned root")?;
     let replacement = header(&mut cas, "replacement", &mut ledger()?)?;
-    assert_eq!(former, replacement.logical_id());
+    assert!(replacement.logical_id().serial > former.serial);
     let current = crate::wire_build::syntax_key(&cas, replacement.logical_id(), &mut budget)?;
     assert_ne!(current, bytes);
     assert_eq!(
