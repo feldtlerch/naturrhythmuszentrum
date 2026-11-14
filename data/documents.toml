@@ -287,6 +287,10 @@ output = "docs/design/prepared-binary64-golden-values-schema.md"
 requires = []
 
 [[document]]
+output = "docs/design/clamp-floor-golden-values-schema.md"
+requires = []
+
+[[document]]
 output = "tools/docgen/src/golden/README.md"
 requires = []
 
