@@ -13,7 +13,7 @@ use nrz_bindings::Budget;
 /// This native map carries no physical independence or numerical broadcast authority.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CellProduct {
-    /// Fresh product identity and checked logical capacity.
+    /// Complete ordered tuple identity and checked logical capacity.
     axis: CellAxis,
     /// Original outer and inner axes, in row-major order.
     factors: [CellAxis; 2],
@@ -46,6 +46,21 @@ impl CellProduct {
     #[must_use]
     pub const fn factors(self) -> [CellAxis; 2] {
         self.factors
+    }
+    /// Reassociate ((instance,sample),branch) as (instance,(sample,branch)).
+    /// The identical complete axis and both original factor identities are required;
+    /// this changes native coordinates only and creates no independence assertion.
+    pub(crate) fn reassociate_outer(self, outer: Self, inner: Self) -> Result<Self, MaskError> {
+        if self.factors[0] != outer.axis
+            || self.factors[1] != inner.factors[1]
+            || outer.factors[1] != inner.factors[0]
+        {
+            return Err(MaskError::LayoutMismatch);
+        }
+        Ok(Self {
+            axis: self.axis,
+            factors: [outer.factors[0], inner.axis],
+        })
     }
     /// Recover the original factor coordinates from one row-major product cell.
     /// # Errors
