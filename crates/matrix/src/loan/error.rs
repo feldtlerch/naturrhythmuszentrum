@@ -40,6 +40,9 @@ pub enum LoanError {
     /// The declaration is outside the closed independent host adapter.
     #[error("unsupported host contract")]
     UnsupportedContract,
+    /// Endpoint conversion requires complete ordinary center/total/error readings.
+    #[error("unsupported endpoint read representation")]
+    UnsupportedEndpointRepresentation,
     /// A selected initialized component fails its declared numerical validator.
     #[error("invalid payload in {channel:?} at cell {cell}, component {component}")]
     InvalidPayload {

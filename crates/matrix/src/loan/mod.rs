@@ -6,6 +6,7 @@ mod abi;
 mod account;
 mod application;
 mod declaration;
+mod endpoint_view;
 mod error;
 #[cfg(test)]
 pub(crate) mod fault;
@@ -28,6 +29,7 @@ pub use application::{
     PointwiseBinaryRequest, PointwiseExpm1Request, PointwiseRequest, PreparedExpm1Operation,
 };
 pub use declaration::{HostChannel, HostTileDeclaration};
+pub use endpoint_view::{EndpointReadError, EndpointReading, EndpointTileReader};
 pub use error::LoanError;
 pub use inventory::LoanInventory;
 pub use lifecycle::{CancelOutcome, HandbackOutcome, LoanRequest, OwnedLoan};

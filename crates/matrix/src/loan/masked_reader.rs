@@ -15,7 +15,7 @@ pub(super) enum Projection {
 }
 impl Projection {
     /// Project one already selected product cell to its original factor coordinate.
-    fn original(self, cell: usize) -> Result<usize, LoanError> {
+    pub(super) fn original(self, cell: usize) -> Result<usize, LoanError> {
         match self {
             Self::Original => Ok(cell),
             Self::Product(product, factor) => Ok(product.coordinates(cell)?[factor.index()]),
@@ -29,11 +29,11 @@ impl Projection {
 /// The view allocates nothing and cannot outlive either its source reader or mask.
 pub struct MaskedTileReader<'a, P: Scalar> {
     /// Existing reader borrow keeps its complete bundle pin alive.
-    source: TileReader<'a, P>,
+    pub(super) source: TileReader<'a, P>,
     /// Immutable selected words and any retained original-index map.
-    selection: MaskView<'a>,
+    pub(super) selection: MaskView<'a>,
     /// Checked original-source projection, fixed at binding.
-    projection: Projection,
+    pub(super) projection: Projection,
 }
 impl<P: Scalar> std::fmt::Debug for MaskedTileReader<'_, P> {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

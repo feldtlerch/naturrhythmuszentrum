@@ -4,6 +4,7 @@
 mod authority;
 mod bytes;
 mod correspondence;
+mod endpoint_view;
 mod gating;
 mod lifecycle;
 mod mask_origin;

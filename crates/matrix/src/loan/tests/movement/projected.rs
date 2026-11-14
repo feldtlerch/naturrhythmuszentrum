@@ -9,6 +9,7 @@ mod affine;
 mod boundaries;
 mod continuation;
 mod coverage;
+mod endpoints;
 mod observation;
 mod unary;
 

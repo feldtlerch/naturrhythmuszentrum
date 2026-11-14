@@ -3,6 +3,7 @@
 
 mod affine;
 mod boundaries;
+mod endpoint_view;
 mod invariants;
 mod mapped;
 mod mapped_kernels;
