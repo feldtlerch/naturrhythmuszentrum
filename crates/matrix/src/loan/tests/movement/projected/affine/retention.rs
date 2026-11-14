@@ -208,7 +208,7 @@ fn shared_pi<P: Scalar + 'static>(coefficient_bytes: usize, initial_bytes: usize
         mut heap,
         mut account,
         mut request,
-        ..
+        demand,
     } = super::super::super::setup::<P>()?;
     let context = nrz_scalar::ArithmeticContext::new()?;
     let circle = super::circle::<P>(&context, &mut account.ledger)?;
@@ -222,11 +222,20 @@ fn shared_pi<P: Scalar + 'static>(coefficient_bytes: usize, initial_bytes: usize
     let owner = candidate(owner, &mut account)?;
     let tile = publish(&mut heap, &mut account, owner)?;
     let mut request = super::super::super::next_copy(&mut heap, &mut account, tile.into_pin())?;
+    let next_demand = request.demand;
     operation(&mut request, &second)?;
     let owner = ready(heap.request_projected_affine(request, &mut account))?;
     assert_eq!(constants(&heap), (3, initial_bytes + coefficient_bytes));
     let owner = candidate(owner, &mut account)?;
     drop(publish(&mut heap, &mut account, owner)?);
+    drop(first);
+    drop(second);
+    drop(circle);
+    heap.retire_mask(next_demand, &mut account.ledger)?;
+    heap.retire_mask(demand, &mut account.ledger)?;
+    super::super::super::retire_copy_layout(&mut heap, &mut account, demand.layout())?;
+    super::super::super::empty(&mut heap, &mut account)?;
+    assert_eq!(constants(&heap), (0, 0));
     Ok(())
 }
 
