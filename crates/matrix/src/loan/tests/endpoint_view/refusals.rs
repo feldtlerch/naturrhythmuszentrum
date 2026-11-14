@@ -70,7 +70,7 @@ fn attached<P: Scalar + 'static>() -> TestResult {
         heap.residence(&mut account, 100_000)?,
         crate::Residence::Pending {
             elements: Some([0, 0]),
-            ..
+            bytes: Some(31_832)
         }
     ));
     empty(&mut heap, &mut account)

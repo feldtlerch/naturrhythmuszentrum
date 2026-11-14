@@ -52,7 +52,8 @@ pub enum EndpointReadError {
     Loan(#[from] LoanError),
     /// Conservative outward arithmetic failed, including finite exact range-limit results.
     /// Subtracting zero from a nonzero center still requires finite outward neighbours;
-    /// an exact endpoint at either maximum finite magnitude can therefore be refused.
+    /// an endpoint whose round-to-nearest value is either maximum finite magnitude
+    /// is refused, including exact range-limit targets.
     #[error("endpoint arithmetic: {0}")]
     Arithmetic(#[from] ArithmeticFailure),
 }

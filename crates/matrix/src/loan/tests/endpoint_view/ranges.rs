@@ -11,6 +11,7 @@ pub(super) fn finite_edges<P: Scalar + 'static>() -> TestResult {
     let half = maximum / P::from_u8(2);
     let inputs = [
         [maximum.next_down(), P::ZERO, P::ZERO],
+        [maximum.next_down(), P::ONE, P::ZERO],
         [(-maximum).next_up(), -P::ZERO, P::ZERO],
         [maximum, P::ZERO, P::ZERO],
         [-maximum, -P::ZERO, P::ZERO],
@@ -26,7 +27,7 @@ pub(super) fn finite_edges<P: Scalar + 'static>() -> TestResult {
         crate::loan::fault::reset_reads();
         let result = reader.read_component(cell, 0, &mut account);
         assert_eq!(crate::loan::fault::reads(), 3);
-        if cell < 2 {
+        if cell < 3 {
             oracle(&result?, input)?;
         } else {
             assert!(matches!(result, Err(EndpointReadError::Arithmetic(_))));
