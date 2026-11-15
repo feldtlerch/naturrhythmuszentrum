@@ -116,6 +116,7 @@ fn authority<P: Scalar + 'static>() -> TestResult {
         let references = members.references();
         crate::loan::fault::reset_reads();
         let injection = crate::loan::fault::Injection::after(0);
+        let before = [account.usage().work, other.usage().work];
         let result = match case {
             0 => inventory.readers(&heap, &references, &mut other),
             1 => inventory.readers(&foreign, &references, &mut account),
@@ -136,6 +137,16 @@ fn authority<P: Scalar + 'static>() -> TestResult {
             ],
             [0; 2]
         );
+        // Membership 11; four current readers 100; last pin 3, owner 9,
+        // origin/layout 4 and first descriptor 1 before the stale root refuses.
+        let expected = match case {
+            0 => 0,
+            1 => 12,
+            2 => 128,
+            _ => return Err("fixture case".into()),
+        };
+        assert_eq!(account.usage().work - before[0], expected);
+        assert_eq!(other.usage().work - before[1], 0);
         drop(injection);
         drop(references);
         if case == 2 {

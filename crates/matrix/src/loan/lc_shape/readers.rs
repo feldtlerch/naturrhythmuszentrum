@@ -50,6 +50,9 @@ impl<P: Scalar + 'static, const N: usize> LcInputInventory<P, N> {
         tiles: &[&LcShapeTile<'_, P>],
         account: &mut ExecutionAccount,
     ) -> Result<LcShapeAxes, LoanError> {
+        if let Some(member) = self.input(0) {
+            account.authenticate(member.account)?;
+        }
         account
             .ledger
             .with_work_phase(crate::loan::FAMILY, "LC inventory membership", |budget| {
