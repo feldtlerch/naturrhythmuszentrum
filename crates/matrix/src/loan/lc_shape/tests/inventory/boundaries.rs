@@ -123,6 +123,7 @@ fn work<P: Scalar, const N: usize>(repeated: bool, required: u64) -> TestResult 
             assert_eq!(account.usage().work - before, required);
         } else {
             assert!(matches!(result, Err(crate::LoanError::Budget(_))));
+            assert_eq!(account.usage().work - before, remaining);
         }
         assert_eq!(
             [

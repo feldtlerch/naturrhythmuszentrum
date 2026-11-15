@@ -139,23 +139,9 @@ fn inventory_phases<P: nrz_scalar::Scalar + 'static>() -> TestResult {
         let phases = phases
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let inventory: Vec<_> = phases
-            .iter()
-            .filter(|phase| phase.operation == "LC input inventory")
-            .collect();
-        assert_eq!(inventory.len(), 1);
-        assert_eq!(
-            inventory[0].last - inventory[0].first.ok_or("initial work")?,
-            6
-        );
-        assert_eq!(
-            phases
-                .iter()
-                .filter(|phase| phase.operation == "LC shape schema")
-                .count(),
-            5
-        );
+        inventory_receipts(&phases)?;
     }
+
     let mut heap = crate::Heap::new(crate::HeapLimits::default())?;
     let axes = fixture::axes(&heap, &mut account)?;
     for index in 0..5 {
@@ -193,5 +179,79 @@ fn inventory_phases<P: nrz_scalar::Scalar + 'static>() -> TestResult {
         drop(candidate);
         fixture::retire(&mut heap, &mut account, demand)?;
     }
+    Ok(())
+}
+
+/// Declaration spans begin in order; merely counting them does not establish preflight ordering.
+fn inventory_receipts(phases: &[Phase]) -> TestResult {
+    let position = phases
+        .iter()
+        .position(|phase| phase.operation == "LC input inventory")
+        .ok_or("inventory span")?;
+    let schemas: Vec<_> = phases
+        .iter()
+        .enumerate()
+        .filter(|(_, phase)| phase.operation == "LC shape schema")
+        .collect();
+    assert_eq!(
+        phases
+            .iter()
+            .filter(|phase| phase.operation == "LC input inventory")
+            .count(),
+        1
+    );
+    assert_eq!(schemas.len(), 5);
+    assert!(position < schemas[0].0);
+    let inventory = &phases[position];
+    assert_eq!(inventory.last - inventory.first.ok_or("initial work")?, 6);
+    Ok(())
+}
+
+/// A fixed 30,000-Work remainder exercises public construction after at least one member
+/// completes. This is a refusal fixture, not an asserted symbolic-declaration tariff.
+/// Ordered schema spans prove partial construction; the public result exposes no inventory.
+/// ´test:unit:loan-lc-input-inventory-partial-construction-refusal´
+#[test]
+fn loan_lc_input_inventory_partial_construction_refusal() -> TestResult {
+    partial_construction::<f32>()?;
+    partial_construction::<f64>()
+}
+fn partial_construction<P: nrz_scalar::Scalar>() -> TestResult {
+    let mut budget = nrz_bindings::Budget::new(nrz_bindings::Limits::default())?;
+    let question = fixture::inventory_question(true, true, &mut budget)?;
+    let mut account = crate::ExecutionAccount::new(budget)?;
+    let spend = account.limits().work - account.usage().work - 30_000;
+    account.ledger.work(spend, crate::loan::AT)?;
+    let phases = Arc::new(Mutex::new(Vec::<Phase>::new()));
+    crate::loan::fault::reset_reads();
+    let injection = crate::loan::fault::Injection::after(0);
+    let result = tracing::subscriber::with_default(Observer(Arc::clone(&phases)), || {
+        crate::LcInputInventory::<P, 5>::declare(&question, [2, 3, 2], &mut account)
+    });
+    assert!(matches!(
+        result,
+        Err(crate::LcShapeError::Declaration(
+            nrz_bindings::AdmissionError::Algebra(_)
+        ))
+    ));
+    let phases = phases
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let schemas: Vec<_> = phases
+        .iter()
+        .filter(|phase| phase.operation == "LC shape schema")
+        .collect();
+    assert!(schemas.len() > 1);
+    assert!(schemas.len() < 5);
+    assert!(schemas[0].last <= schemas[1].first.ok_or("second schema start")?);
+    drop(phases);
+    assert_eq!(
+        [
+            crate::loan::fault::reads(),
+            crate::loan::fault::Injection::attempts()
+        ],
+        [0; 2]
+    );
+    drop(injection);
     Ok(())
 }

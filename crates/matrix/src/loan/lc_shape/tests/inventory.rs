@@ -21,13 +21,13 @@ const ROLES: [LcQuantity; 5] = [
     LcQuantity::Inductance,
 ];
 /// Exact source centers, total radii and errors in units of 1/32, independently chosen
-/// inside the original supports L,C=[1/4,1], alpha=0, E=1 and repeated L=[1/4,1].
+/// inside the original supports L,C=[1/4,1], alpha=[0,1/4], E=1 and repeated L=[1/4,49/64].
 const VALUES: [[[u8; 3]; 2]; 5] = [
-    [[20, 2, 1], [24, 2, 1]],
+    [[18, 2, 1], [22, 2, 1]],
     [[12, 2, 1], [20, 2, 1]],
-    [[0, 0, 0], [0, 0, 0]],
+    [[2, 1, 1], [4, 1, 1]],
     [[32, 0, 0], [32, 0, 0]],
-    [[20, 2, 1], [24, 2, 1]],
+    [[18, 2, 1], [22, 2, 1]],
 ];
 
 /// Original role enumeration and exact dyadic images cover sparse/empty/full demands and reuse.
@@ -161,8 +161,9 @@ fn original_support<P: Scalar>(
     account: &mut ExecutionAccount,
 ) -> TestResult {
     let expected = match index {
-        0 | 1 | 4 => [(1, 4), (1, 1)],
-        2 => [(0, 1), (0, 1)],
+        0 | 1 => [(1, 4), (1, 1)],
+        2 => [(0, 1), (1, 4)],
+        4 => [(1, 4), (49, 64)],
         3 => [(1, 1), (1, 1)],
         _ => return Err("unknown original role".into()),
     };

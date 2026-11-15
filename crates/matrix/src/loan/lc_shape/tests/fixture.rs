@@ -38,13 +38,19 @@ pub(super) fn inventory_question(
         (LcQuantity::Capacitance, ["1/4", "1"]),
         (LcQuantity::InitialPhase, ["0", "0"]),
     ] {
+        let phase = quantity == LcQuantity::InitialPhase;
+        let bounds = if repeated && phase {
+            ["0", "1/4"]
+        } else {
+            bounds
+        };
         inputs.push(input(quantity, bounds, budget)?);
     }
     if energy {
         inputs.push(input(LcQuantity::Energy, ["1", "1"], budget)?);
     }
     if repeated {
-        inputs.push(input(LcQuantity::Inductance, ["1/4", "1"], budget)?);
+        inputs.push(input(LcQuantity::Inductance, ["1/4", "49/64"], budget)?);
     }
     let relation = LcRelation::new("original LC shape epoch".into(), 0, inputs, budget)?;
     let time = input(LcQuantity::Time(0), ["2", "2"], budget)?;
