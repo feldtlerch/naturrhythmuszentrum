@@ -15,11 +15,16 @@ fn loan_lc_shape_schema_refusals() -> TestResult {
     refusals::<f64>()
 }
 fn refusals<P: Scalar>() -> TestResult {
+    let native_max = usize::try_from(u32::MAX)?;
     for (input, counts) in [
         (4, [2, 3, 2]),
         (0, [2, 3, 0]),
         (0, [2, 3, 1]),
         (0, [usize::MAX, 2, 2]),
+        // Product fits usize on the supported 64-bit target but exceeds native u32 rows.
+        (0, [1, native_max, 2]),
+        // Zero samples isolate conversion of the source row count itself.
+        (0, [native_max + 1, 0, 2]),
     ] {
         let mut budget = Budget::new(Limits::default())?;
         let question = fixture::question(&mut budget)?;
@@ -33,7 +38,7 @@ fn refusals<P: Scalar>() -> TestResult {
                 error,
                 LcShapeError::Loan(LoanError::UnsupportedContract)
             ));
-        } else if counts[0] == usize::MAX {
+        } else if counts[0] > native_max || counts[1] == native_max {
             assert!(matches!(
                 error,
                 LcShapeError::Loan(LoanError::CountOverflow)

@@ -63,8 +63,9 @@ pub struct LcInputShape<P: Scalar> {
 impl<P: Scalar> LcInputShape<P> {
     /// Declare the narrow input transport schema from the original checked question.
     /// # Errors
-    /// Refuses missing inputs, empty branch domains, mismatched branch cardinality,
-    /// unsupported indexed inputs, overflowing extents and exhausted original resources.
+    /// Refuses missing inputs, mismatched branch cardinality, overflowing extents
+    /// and exhausted original resources. Empty-domain and indexed-input checks are
+    /// defence in depth: checked forward-cover admission already excludes them.
     pub fn declare(
         question: LcForwardCover,
         input: usize,

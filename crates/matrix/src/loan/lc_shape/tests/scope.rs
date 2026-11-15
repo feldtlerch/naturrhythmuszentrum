@@ -7,6 +7,7 @@ use fixture::{TestResult, request, setup};
 use nrz_scalar::Scalar;
 
 /// Original symbols with a changed coverage assumption or derived producer still refuse.
+/// The literal 7+9 binding Work detects either guard half bypassing to the downstream gate.
 /// ´test:unit:loan-lc-shape-original-scope-refusals´
 #[test]
 fn loan_lc_shape_original_scope_refusals() -> TestResult {
@@ -42,6 +43,7 @@ fn scope<P: Scalar + 'static>() -> TestResult {
         }
         crate::loan::fault::reset_reads();
         let injection = crate::loan::fault::Injection::after(0);
+        let before = account.usage().work;
         let candidate = match schema.request(&mut heap, &axes, candidate, &mut account) {
             LcShapeRequest::Refused(crate::ApplicationError::Loan(error), candidate) => {
                 if derived {
@@ -53,6 +55,7 @@ fn scope<P: Scalar + 'static>() -> TestResult {
             }
             other => return Err(format!("{other:?}").into()),
         };
+        assert_eq!(account.usage().work - before, 16);
         assert_eq!(
             [
                 crate::loan::fault::reads(),
