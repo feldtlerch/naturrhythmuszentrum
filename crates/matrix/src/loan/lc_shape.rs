@@ -3,12 +3,14 @@
 
 mod inventory;
 mod lifecycle;
+mod readers;
 use super::{ExecutionAccount, HostTileDeclaration, LoanError, charge};
 use crate::{CellAxis, CellProduct, Coverage};
 pub use inventory::LcInputInventory;
 pub use lifecycle::{LcShapeApplication, LcShapeRequest, LcShapeTile};
 use nrz_bindings::{BindingSymbols, LcForwardCover};
 use nrz_scalar::Scalar;
+pub use readers::LcInputReaders;
 use std::marker::PhantomData;
 
 /// Refusal of the closed original-input transport schema, without a physical conclusion.

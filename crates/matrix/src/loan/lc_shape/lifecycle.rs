@@ -201,6 +201,15 @@ impl<'a, P: Scalar + 'static> LcShapeApplication<'a, P> {
     }
 }
 impl<P: Scalar + 'static> LcShapeTile<'_, P> {
+    /// Complete-inventory admission borrows the heap through every current native reader.
+    pub(super) fn current_reader<'a>(
+        &'a self,
+        heap: &'a Heap,
+        account: &mut ExecutionAccount,
+    ) -> Result<TileReader<'a, P>, LoanError> {
+        self.tile.reader(heap, account)
+    }
+
     /// Original schema retained by this publication and every independent outside pin.
     #[must_use]
     pub const fn schema(&self) -> &LcInputShape<P> {

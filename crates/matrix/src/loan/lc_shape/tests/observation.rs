@@ -255,3 +255,24 @@ fn partial_construction<P: nrz_scalar::Scalar>() -> TestResult {
     drop(injection);
     Ok(())
 }
+
+/// Return completed span receipts without exposing the observer's lock or deriving an oracle.
+pub(super) fn recorded<T>(action: impl FnOnce() -> T) -> TestResult<(T, Vec<(String, u64)>)> {
+    let phases = Arc::new(Mutex::new(Vec::<Phase>::new()));
+    let result = tracing::subscriber::with_default(Observer(Arc::clone(&phases)), action);
+    let receipts = {
+        let phases = phases
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        phases
+            .iter()
+            .map(|phase| {
+                Ok((
+                    phase.operation.clone(),
+                    phase.last - phase.first.ok_or("initial work")?,
+                ))
+            })
+            .collect::<TestResult<Vec<_>>>()?
+    };
+    Ok((result, receipts))
+}
