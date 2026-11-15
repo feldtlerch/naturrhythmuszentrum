@@ -118,3 +118,80 @@ fn phases<P: nrz_scalar::Scalar + 'static>() -> TestResult {
     drop(candidate);
     fixture::retire(&mut heap, &mut account, demand)
 }
+
+/// The inventory preflight is one count plus five original roles, once before all declarations.
+/// Per-member role and application spans remain individually visible with the original tariffs.
+/// ´test:unit:loan-lc-input-inventory-phase-receipts´
+#[test]
+fn loan_lc_input_inventory_phase_receipts() -> TestResult {
+    inventory_phases::<f32>()?;
+    inventory_phases::<f64>()
+}
+fn inventory_phases<P: nrz_scalar::Scalar + 'static>() -> TestResult {
+    let mut budget = nrz_bindings::Budget::new(nrz_bindings::Limits::default())?;
+    let question = fixture::inventory_question(true, true, &mut budget)?;
+    let mut account = crate::ExecutionAccount::new(budget)?;
+    let phases = Arc::new(Mutex::new(Vec::<Phase>::new()));
+    let inventory = tracing::subscriber::with_default(Observer(Arc::clone(&phases)), || {
+        crate::LcInputInventory::<P, 5>::declare(&question, [2, 3, 2], &mut account)
+    })?;
+    {
+        let phases = phases
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let inventory: Vec<_> = phases
+            .iter()
+            .filter(|phase| phase.operation == "LC input inventory")
+            .collect();
+        assert_eq!(inventory.len(), 1);
+        assert_eq!(
+            inventory[0].last - inventory[0].first.ok_or("initial work")?,
+            6
+        );
+        assert_eq!(
+            phases
+                .iter()
+                .filter(|phase| phase.operation == "LC shape schema")
+                .count(),
+            5
+        );
+    }
+    let mut heap = crate::Heap::new(crate::HeapLimits::default())?;
+    let axes = fixture::axes(&heap, &mut account)?;
+    for index in 0..5 {
+        let schema = inventory.input(index).ok_or("original input")?;
+        let input = source(schema, &axes, &mut heap, &mut account, 0)?;
+        let candidate = request(
+            schema,
+            &axes,
+            input.into_pin(),
+            &[0, 3, 5],
+            &mut heap,
+            &mut account,
+        )?;
+        phases
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clear();
+        tracing::subscriber::with_default(Observer(Arc::clone(&phases)), || {
+            schema.check(&heap, &axes, &candidate, &mut account)
+        })?;
+        {
+            let phases = phases
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            assert_eq!(phases.len(), 2);
+            for (phase, (name, work)) in phases
+                .iter()
+                .zip([("LC shape roles", 7), ("LC shape application", 9)])
+            {
+                assert_eq!(phase.operation, name);
+                assert_eq!(phase.last - phase.first.ok_or("initial work")?, work);
+            }
+        }
+        let demand = candidate.demand;
+        drop(candidate);
+        fixture::retire(&mut heap, &mut account, demand)?;
+    }
+    Ok(())
+}

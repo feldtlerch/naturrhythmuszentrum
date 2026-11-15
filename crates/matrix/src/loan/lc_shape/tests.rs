@@ -4,6 +4,7 @@
 mod authority;
 mod boundaries;
 mod fixture;
+mod inventory;
 mod observation;
 mod refusals;
 mod schema;

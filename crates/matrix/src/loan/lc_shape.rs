@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Original LC input transport retains the checked question and complete tuple roles.
 
+mod inventory;
 mod lifecycle;
 use super::{ExecutionAccount, HostTileDeclaration, LoanError, charge};
 use crate::{CellAxis, CellProduct, Coverage};
+pub use inventory::LcInputInventory;
 pub use lifecycle::{LcShapeApplication, LcShapeRequest, LcShapeTile};
 use nrz_bindings::{BindingSymbols, LcForwardCover};
 use nrz_scalar::Scalar;

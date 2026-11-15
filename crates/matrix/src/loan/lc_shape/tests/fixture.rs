@@ -23,14 +23,28 @@ fn input(quantity: LcQuantity, endpoints: [&str; 2], budget: &mut Budget) -> Tes
 }
 /// Independent original element, phase and energy supports produce exactly branches zero and one.
 pub(super) fn question(budget: &mut Budget) -> TestResult<LcForwardCover> {
+    inventory_question(true, false, budget)
+}
+
+/// Optional energy and repeated L constraints retain their original positional identities.
+pub(super) fn inventory_question(
+    energy: bool,
+    repeated: bool,
+    budget: &mut Budget,
+) -> TestResult<LcForwardCover> {
     let mut inputs = Vec::new();
     for (quantity, bounds) in [
         (LcQuantity::Inductance, ["1/4", "1"]),
         (LcQuantity::Capacitance, ["1/4", "1"]),
         (LcQuantity::InitialPhase, ["0", "0"]),
-        (LcQuantity::Energy, ["1", "1"]),
     ] {
         inputs.push(input(quantity, bounds, budget)?);
+    }
+    if energy {
+        inputs.push(input(LcQuantity::Energy, ["1", "1"], budget)?);
+    }
+    if repeated {
+        inputs.push(input(LcQuantity::Inductance, ["1/4", "1"], budget)?);
     }
     let relation = LcRelation::new("original LC shape epoch".into(), 0, inputs, budget)?;
     let time = input(LcQuantity::Time(0), ["2", "2"], budget)?;
@@ -55,6 +69,12 @@ pub(super) fn setup<P: Scalar + 'static>()
     let mut account = ExecutionAccount::new(budget)?;
     let schema = LcInputShape::declare(question, 0, [2, 3, 2], &mut account)?;
     let heap = Heap::new(crate::HeapLimits::default())?;
+    let axes = axes(&heap, &mut account)?;
+    Ok((heap, account, schema, axes))
+}
+
+/// The fixed native history shared by single-role and complete-inventory tests.
+pub(super) fn axes(heap: &Heap, account: &mut ExecutionAccount) -> TestResult<LcShapeAxes> {
     let instances = heap.create_cell_axis(2, &mut account.ledger)?;
     let samples = heap.create_cell_axis(3, &mut account.ledger)?;
     let branches = heap.create_cell_axis(2, &mut account.ledger)?;
@@ -62,20 +82,16 @@ pub(super) fn setup<P: Scalar + 'static>()
     let sample_branches = heap.create_cell_product(samples, branches, &mut account.ledger)?;
     let combined =
         heap.create_cell_product(instance_samples.axis(), branches, &mut account.ledger)?;
-    Ok((
-        heap,
-        account,
-        schema,
-        LcShapeAxes {
-            instances,
-            samples,
-            branches,
-            instance_samples,
-            combined,
-            sample_branches,
-        },
-    ))
+    Ok(LcShapeAxes {
+        instances,
+        samples,
+        branches,
+        instance_samples,
+        combined,
+        sample_branches,
+    })
 }
+
 /// Native mapped publication is declared before any evaluation or output allocation.
 pub(super) fn request<P: Scalar + 'static>(
     schema: &LcInputShape<P>,
@@ -99,9 +115,9 @@ pub(super) fn request<P: Scalar + 'static>(
         &mut account.ledger,
     )?;
     let owner = crate::conversion_testing::owner()?;
-    let quantity = LcQuantity::Inductance.descriptor()?;
-    let input_shape = crate::conversion_testing::shape(&owner, &quantity, 2)?;
-    let output_shape = crate::conversion_testing::shape(&owner, &quantity, 12)?;
+    let quantity = schema.question().relation().inputs()[schema.input_index()].descriptor();
+    let input_shape = crate::conversion_testing::shape(&owner, quantity, 2)?;
+    let output_shape = crate::conversion_testing::shape(&owner, quantity, 12)?;
     let operation = crate::OperationDraft::map_cell_copy(input_shape, output_shape, map)?
         .check(ExecutionLimits::default())?;
     Ok(PointwiseRequest {
