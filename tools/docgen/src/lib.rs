@@ -70,6 +70,8 @@ mod problem_schema;
 
 pub mod golden;
 
+mod clamp;
+
 pub mod compute;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -131,6 +133,7 @@ pub fn render(root: &Path) -> Result<(), Error> {
 pub fn check(root: &Path) -> Result<Vec<Finding>, Error> {
     // Admit bounded authored inputs before the tracked-text scan can read them whole.
     golden::check_inputs(root)?;
+    clamp::check_input(root)?;
     tracked::check(root)?;
     let owners = envelope::owners(root)?;
     let documents = manifest::read(root, &owners)?;
@@ -148,6 +151,7 @@ pub fn check(root: &Path) -> Result<Vec<Finding>, Error> {
 /// Derive dataset bytes and parsed values together.
 fn datasets(root: &Path, owners: &BTreeSet<String>) -> Result<DatasetGeneration, Error> {
     golden::check_inputs(root)?;
+    clamp::check_input(root)?;
     let (project_bytes, project_value) = project::derive(root, owners)?;
     let (census_bytes, census_value) = census::derive(root)?;
     let (problems_bytes, problems_value) = problems::derive(root, owners)?;
