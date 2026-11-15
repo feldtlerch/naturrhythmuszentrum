@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Complete positional inventory authority accompanies a borrowed current-reader set.
 
+mod cells;
+pub use cells::{LcInputCell, LcInputCells, LcInputReading};
+
 use super::{LcInputInventory, LcShapeAxes, LcShapeTile};
 use crate::{ExecutionAccount, Heap, LoanError, TileReader};
 use nrz_scalar::Scalar;

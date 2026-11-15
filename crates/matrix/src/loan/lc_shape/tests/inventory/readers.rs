@@ -2,6 +2,7 @@
 //! Original positional roles are read only through one complete authenticated inventory.
 
 mod boundaries;
+mod cells;
 mod refusals;
 use super::{TestResult, VALUES, fixture, setup, source};
 use crate::loan::application::tests::binary::oracle::Rational;

@@ -13,8 +13,8 @@ pub(crate) mod fault;
 mod inventory;
 mod lc_shape;
 pub use lc_shape::{
-    LcInputInventory, LcInputReaders, LcInputShape, LcShapeApplication, LcShapeAxes, LcShapeError,
-    LcShapeRequest, LcShapeTile,
+    LcInputCell, LcInputCells, LcInputInventory, LcInputReaders, LcInputReading, LcInputShape,
+    LcShapeApplication, LcShapeAxes, LcShapeError, LcShapeRequest, LcShapeTile,
 };
 mod lifecycle;
 mod masked_reader;
