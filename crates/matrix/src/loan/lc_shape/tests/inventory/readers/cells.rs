@@ -89,6 +89,17 @@ fn member<'a, P: Scalar + 'static>(
     values: &[[[P; 3]; 2]; 5],
 ) -> TestResult<(LcShapeTile<'a, P>, crate::CellLayoutVersion)> {
     let input = source(schema, axes, heap, account, shift, values)?;
+    mapped(schema, axes, heap, account, cells, input)
+}
+/// Map an independently published or repaired original source through the same transport.
+fn mapped<'a, P: Scalar + 'static>(
+    schema: &'a LcInputShape<P>,
+    axes: &LcShapeAxes,
+    heap: &mut Heap,
+    account: &mut ExecutionAccount,
+    cells: &[usize],
+    input: crate::PublishedTile<P>,
+) -> TestResult<(LcShapeTile<'a, P>, crate::CellLayoutVersion)> {
     let index = schema.input_index();
     let (length, offset, stride) = [
         (32, 24, -2),

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Joined attempts preserve native outcomes, resource neighbours and original attachment identity.
 
+mod companion;
 mod evidence;
 mod identity;
 mod subscriber;

@@ -4,7 +4,7 @@
 use super::{LcFrequencyState, LcFrequencyTarget, LcInputProduct, LcProductError};
 use crate::{ExecutionAccount, LoanError};
 use nrz_scalar::Scalar;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::AtomicU64;
 use tracing::Level;
 
 /// Process-local observation identities are distinct even if a subscriber recycles span identifiers.
@@ -33,9 +33,7 @@ impl<P: Scalar + 'static, const N: usize> LcInputProduct<'_, P, N> {
         if span.is_disabled() {
             return run(account);
         }
-        let Ok(attempt) = NEXT_ATTEMPT.try_update(Ordering::Relaxed, Ordering::Relaxed, |next| {
-            next.checked_add(1)
-        }) else {
+        let Ok(attempt) = crate::heap::identity::allocate_identity(&NEXT_ATTEMPT) else {
             tracing::event!(name: "nrz.observer.loss", target: "nrz::lc", parent: &span,
                 Level::TRACE, owner = "nrz-matrix", reason = "attempt-identity-exhausted");
             span.record("outcome", "incomplete");
@@ -144,5 +142,29 @@ const fn refusal(error: &LcProductError) -> &'static str {
         LcProductError::Loan(LoanError::CountOverflow) => "count-overflow",
         LcProductError::Loan(_) => "loan",
         LcProductError::Kernel(_) => "arithmetic",
+    }
+}
+
+/// Isolated allocation checks never mutate the production observation counter.
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    /// Attempts stop before wrap and repeated exhaustion leaves the counter unchanged.
+    /// ´test:unit:loan-lc-sign-attempt-exhaustion´
+    #[test]
+    fn loan_lc_sign_attempt_exhaustion() {
+        let counter = AtomicU64::new(u64::MAX - 1);
+        assert_eq!(
+            crate::heap::identity::allocate_identity(&counter),
+            Ok(u64::MAX - 1)
+        );
+        for _ in 0..2 {
+            assert_eq!(
+                crate::heap::identity::allocate_identity(&counter),
+                Err(crate::HeapError::CounterExhausted)
+            );
+            assert_eq!(counter.load(Ordering::Relaxed), u64::MAX);
+        }
     }
 }
