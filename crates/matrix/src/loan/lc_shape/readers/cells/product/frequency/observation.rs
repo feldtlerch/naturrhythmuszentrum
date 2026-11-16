@@ -18,7 +18,7 @@ impl<P: Scalar + 'static, const N: usize> LcInputProduct<'_, P, N> {
         demand: &'static str,
         account: &mut ExecutionAccount,
         run: impl FnOnce(&mut ExecutionAccount) -> Result<R, LcProductError>,
-        state: impl FnOnce(&R) -> AttemptState,
+        state: impl FnOnce(&R) -> LcRequestedState<P>,
     ) -> Result<R, LcProductError> {
         let span = tracing::span!(target: "nrz::lc", Level::TRACE, "nrz.barrier",
             family = "lc", revision = 2_u64, owner = "nrz-matrix",
@@ -100,36 +100,19 @@ fn decision(
         family = "lc", attempt, outcome, target, reason, continuation, work);
 }
 
-/// Payload-free classification shared by local consumers with distinct numerical results.
-#[derive(Clone, Copy, Debug)]
-pub(super) enum AttemptState {
-    /// The requested local path completed.
-    Ready,
-    /// An original or intermediate target lacks strict positive separation.
-    Undecided(LcFrequencyTarget),
-    /// A strictly negative original box excludes its positive domain.
-    Invalid(LcFrequencyTarget),
-}
-/// Strip payloads without interpreting one consumer's numerical values as another's.
-pub(super) const fn classify<P: Scalar>(state: LcRequestedState<P>) -> AttemptState {
-    match state {
-        LcRequestedState::Ready { .. } => AttemptState::Ready,
-        LcRequestedState::Undecided(target) => AttemptState::Undecided(target),
-        LcRequestedState::Invalid(target) => AttemptState::Invalid(target),
-    }
-}
-
 /// A local native outcome makes no full-feasibility or exact-equality assertion.
-const fn outcome(state: AttemptState) -> (&'static str, &'static str, &'static str, &'static str) {
+const fn outcome<P: Scalar>(
+    state: LcRequestedState<P>,
+) -> (&'static str, &'static str, &'static str, &'static str) {
     match state {
-        AttemptState::Ready => ("completed", "none", "positive", "local-ready"),
-        AttemptState::Undecided(value) => (
+        LcRequestedState::Ready { .. } => ("completed", "none", "positive", "local-ready"),
+        LcRequestedState::Undecided(value) => (
             "undecided",
             target(value),
             "no-strict-positive-separation",
             "retain-unresolved-inputs",
         ),
-        AttemptState::Invalid(value) => (
+        LcRequestedState::Invalid(value) => (
             "invalid",
             target(value),
             "strict-negative-box",

@@ -58,6 +58,7 @@ fn changed<P: Scalar + 'static>() -> TestResult {
         if index == 4 {
             assert_ne!(before["companions"], after["companions"]);
             assert_ne!(before["source_companions"], after["source_companions"]);
+            assert_ne!(before["occupation"], after["occupation"]);
             for field in ["schema", "position", "account", "error_scope"] {
                 assert_eq!(before[field], after[field]);
             }

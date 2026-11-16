@@ -4,7 +4,7 @@
 mod demand;
 use super::{
     LcFrequencyPrelude, LcFrequencyTarget, LcInputCell, LcInputProduct, LcProductCell,
-    LcProductError, Observation, observation, work,
+    LcProductError, Observation, work,
 };
 use crate::{ExecutionAccount, LoanError, NumericalErrorScope};
 pub use demand::LcQuantityDemand;
@@ -122,7 +122,7 @@ impl<'a, P: Scalar + 'static, const N: usize> LcInputProduct<'a, P, N> {
             demand.label(),
             account,
             |account| self.requested_attempt(cell, demand, prelude, account),
-            |result| observation::classify(result.state()),
+            LcRequestedCell::state,
         )
     }
     /// Prepay the complete selected path before compatibility, observation or arithmetic.

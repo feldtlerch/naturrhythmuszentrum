@@ -19,7 +19,7 @@ pub(super) struct Closure<P: Scalar> {
     pub(super) attempt: String,
 }
 
-/// Fresh occupations, unchanged-center companion edits and equal-valued foreign inventories
+/// Fresh occupations and equal-valued foreign inventories
 /// remain distinguishable, including an unused original role and selected repeated inductance.
 /// ´test:unit:loan-lc-sign-attempt-attachments´
 #[test]

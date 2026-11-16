@@ -53,7 +53,7 @@ impl<'a, P: Scalar + 'static, const N: usize> LcInputProduct<'a, P, N> {
         let state = classify([LcFrequencyTarget::Product], [product.values()]);
         Ok((Observation::Product(product), state))
     }
-    /// The same ordinary root kernel serves frequency and period consumers.
+    /// One ordinary root kernel serves every requested quantity subset.
     fn root(&self, product: &LcProductCell<'_, P, N>) -> Result<[P; 3], LcProductError> {
         let values = product.values();
         let tau = crate::kernels::nonlinear::evaluate_selected(
