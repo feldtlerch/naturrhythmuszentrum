@@ -3,8 +3,9 @@
 
 mod cells;
 pub use cells::{
-    LcFrequencyCell, LcFrequencyState, LcFrequencyTarget, LcInputCell, LcInputCells,
-    LcInputProduct, LcInputReading, LcProductCell, LcProductError,
+    LcFrequencyCell, LcFrequencyPrelude, LcFrequencyState, LcFrequencyTarget, LcInputCell,
+    LcInputCells, LcInputProduct, LcInputReading, LcProductCell, LcProductError, LcQuantityCell,
+    LcQuantityValues,
 };
 
 use super::{LcInputInventory, LcShapeAxes, LcShapeTile};

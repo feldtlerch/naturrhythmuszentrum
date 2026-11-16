@@ -3,6 +3,7 @@
 
 mod boundaries;
 mod outcomes;
+mod quantities;
 use super::{Rational, SELECTED, TestResult, VALUES, publish, publish_values, setup};
 use crate::{LcFrequencyCell, LcFrequencyState, LcInputProduct, LcProductError, LoanError};
 use nrz_scalar::Scalar;

@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Complete original boxes authorize only strictly positive local frequency continuations.
 
+mod quantities;
+pub use quantities::{LcFrequencyPrelude, LcQuantityCell, LcQuantityValues};
+
 use super::{LcInputCell, LcInputProduct, LcProductCell, LcProductError, work};
 use crate::{Elementwise, ExecutionAccount, KernelError, LoanError, NumericalErrorScope};
 use nrz_scalar::Scalar;
@@ -107,35 +110,38 @@ impl<'a, P: Scalar + 'static, const N: usize> LcInputProduct<'a, P, N> {
                     .checked_add(7)
                     .ok_or(LoanError::CountOverflow)?;
                 crate::loan::charge(budget, visits)?;
-                let inputs = self.cells.observe(cell)?;
-                let values = self
-                    .positions
-                    .map(|position| inputs.readings()[position].values());
-                let targets = [
-                    LcFrequencyTarget::Inductance,
-                    LcFrequencyTarget::Capacitance,
-                ];
-                if let Some(state) = classify(targets, values) {
-                    return Ok(LcFrequencyCell {
-                        observation: Observation::Inputs(inputs),
-                        positions: self.positions,
-                        state,
-                    });
-                }
-                let product = self.evaluate(inputs)?;
-                let state = if let Some(state) =
-                    classify([LcFrequencyTarget::Product], [product.values()])
-                {
-                    state
-                } else {
-                    self.continue_positive(&product)?
-                };
-                Ok(LcFrequencyCell {
-                    observation: Observation::Product(product),
-                    positions: self.positions,
-                    state,
-                })
+                self.evaluate_frequency(cell)
             })
+    }
+    /// Complete observation and continuation shared by prepaid local consumers.
+    fn evaluate_frequency(&self, cell: usize) -> Result<LcFrequencyCell<'a, P, N>, LcProductError> {
+        let inputs = self.cells.observe(cell)?;
+        let values = self
+            .positions
+            .map(|position| inputs.readings()[position].values());
+        let targets = [
+            LcFrequencyTarget::Inductance,
+            LcFrequencyTarget::Capacitance,
+        ];
+        if let Some(state) = classify(targets, values) {
+            return Ok(LcFrequencyCell {
+                observation: Observation::Inputs(inputs),
+                positions: self.positions,
+                state,
+            });
+        }
+        let product = self.evaluate(inputs)?;
+        let state = if let Some(state) = classify([LcFrequencyTarget::Product], [product.values()])
+        {
+            state
+        } else {
+            self.continue_positive(&product)?
+        };
+        Ok(LcFrequencyCell {
+            observation: Observation::Product(product),
+            positions: self.positions,
+            state,
+        })
     }
     /// Apply ordinary kernels with their own full-box domain and finite-format checks.
     fn continue_positive(

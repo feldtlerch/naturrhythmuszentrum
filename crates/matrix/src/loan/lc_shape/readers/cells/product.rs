@@ -2,7 +2,10 @@
 //! Explicit original L and C positions feed one local enclosed multiplication.
 
 mod frequency;
-pub use frequency::{LcFrequencyCell, LcFrequencyState, LcFrequencyTarget};
+pub use frequency::{
+    LcFrequencyCell, LcFrequencyPrelude, LcFrequencyState, LcFrequencyTarget, LcQuantityCell,
+    LcQuantityValues,
+};
 
 use super::{LcInputCell, LcInputCells, work};
 use crate::{ExecutionAccount, KernelError, LoanError, NumericalErrorScope};

@@ -3,8 +3,8 @@
 
 mod product;
 pub use product::{
-    LcFrequencyCell, LcFrequencyState, LcFrequencyTarget, LcInputProduct, LcProductCell,
-    LcProductError,
+    LcFrequencyCell, LcFrequencyPrelude, LcFrequencyState, LcFrequencyTarget, LcInputProduct,
+    LcProductCell, LcProductError, LcQuantityCell, LcQuantityValues,
 };
 
 use super::{LcInputInventory, LcInputReaders, LcShapeAxes};
