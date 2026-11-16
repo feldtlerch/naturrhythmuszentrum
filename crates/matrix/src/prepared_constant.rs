@@ -66,17 +66,11 @@ pub struct PreparedConstant {
     graph: Cas,
 }
 
-/// Transient imported readings with conversion evidence, not a heap owner.
+/// Transient imported readings, not a heap owner.
 #[derive(Debug, Clone, Copy)]
 pub struct ConstantImport {
     /// Center, total and numerical-only error, in that order.
     readings: [f64; 3],
-    /// Outward conversion evidence; never lower/upper storage slabs.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "retained evidence preserves the import layout")
-    )]
-    evidence: [f64; 2],
     /// Absolute per-endpoint bit target checked by this import.
     bits: u32,
     /// Admitted scalar arithmetic revision.
@@ -88,12 +82,6 @@ impl ConstantImport {
     #[must_use]
     pub const fn readings(self) -> [f64; 3] {
         self.readings
-    }
-    /// Outward evidence used to establish containment and the endpoint target.
-    #[must_use]
-    #[cfg(test)]
-    pub(crate) const fn evidence(self) -> [f64; 2] {
-        self.evidence
     }
     /// Checked absolute per-endpoint precision.
     #[must_use]
@@ -162,6 +150,19 @@ impl PreparedConstant {
         budget: &mut Budget,
         work_used: &mut u64,
     ) -> Result<ConstantImport, PreparedConstantError> {
+        self.import_with_evidence(bits, literals, context, budget, work_used)
+            .map(|(value, _)| value)
+    }
+
+    /// Share the charged conversion with controls without retaining its temporary pair.
+    fn import_with_evidence(
+        &self,
+        bits: u32,
+        literals: LiteralLimits,
+        context: &ArithmeticContext,
+        budget: &mut Budget,
+        work_used: &mut u64,
+    ) -> Result<(ConstantImport, [f64; 2]), PreparedConstantError> {
         let start = budget.usage().work;
         *work_used = 0;
         let result = self.graph.with_retained_graph(budget, |b| {
@@ -186,7 +187,9 @@ impl PreparedConstant {
                     let [lower, upper] = self.authority.endpoints();
                     let lower = decode(lower, literals, context, b)?.lower().get();
                     let upper = decode(upper, literals, context, b)?.upper().get();
-                    finish(&self.authority, [lower, upper], bits, context, b)
+                    let endpoints = [lower, upper];
+                    let value = finish(&self.authority, endpoints, bits, context, b)?;
+                    Ok((value, endpoints))
                 },
             )
         });
@@ -253,7 +256,6 @@ fn finish(
     error_target(error, bits)?;
     Ok(ConstantImport {
         readings: [center.get(), error, error],
-        evidence: endpoints,
         bits,
         arithmetic_revision: context.revision(),
     })
