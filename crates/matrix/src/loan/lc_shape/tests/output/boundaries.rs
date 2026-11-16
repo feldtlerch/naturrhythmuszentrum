@@ -181,8 +181,10 @@ fn declaration_work<P: Scalar>() -> TestResult {
             assert_eq!(budget, BudgetKind::Work);
             assert_eq!(limit, s.account.limits().work);
             assert_eq!(needed, before + 10_923);
-            assert!(s.account.usage().work > before);
-            assert!(s.account.usage().work - before <= 10_922);
+            assert_eq!(fault.location.operation, "interning lookup");
+            // Graph rollback preserves Work; the final 50-byte key lookup plus
+            // one map visit refuses with only 50 Work remaining.
+            assert_eq!(s.account.usage().work - before, 10_872);
         }
         assert_eq!(crate::loan::fault::Injection::attempts(), 0);
         assert_eq!(s.heap.loans.elements()?, [0, 0]);
