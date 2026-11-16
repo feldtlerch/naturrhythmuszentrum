@@ -66,6 +66,7 @@ mod registry;
 )]
 mod sensitivity;
 
+pub use constants::{ExpressionEnclosure, ExpressionEnclosureError};
 pub use nrz_cas::{ExactConstant, PositiveConstant};
 
 pub use nrz_cas::limits::{Budget, Limits, LimitsOverride};

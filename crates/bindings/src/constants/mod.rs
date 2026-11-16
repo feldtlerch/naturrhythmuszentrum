@@ -16,6 +16,7 @@
 mod coordinates;
 mod definitions;
 mod enclosure;
+mod expression;
 mod maps;
 mod model;
 mod schema;
@@ -23,6 +24,7 @@ mod schema;
 pub use coordinates::MapCoordinates;
 pub use definitions::{OriginDefinition, ReferenceDefinition};
 pub use enclosure::{ConstantEnclosureExport, ExactEnclosureExport, PiFactor};
+pub use expression::{ExpressionEnclosure, ExpressionEnclosureError};
 pub use model::{CheckedMap, ConstantKind, DescriptorConstant, MapIdentity, MapKind};
 
 use crate::{SnapshotError, UnitError};

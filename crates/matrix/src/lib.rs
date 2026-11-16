@@ -53,11 +53,13 @@ pub mod sampling;
 pub mod benchmark;
 
 mod lc_relation;
+mod prepared_constant;
 #[expect(
     clippy::redundant_pub_crate,
     reason = "owned preparation parts are shared with managed law retention"
 )]
 mod prepared_expm1;
+pub use prepared_constant::{ConstantImport, PreparedConstant, PreparedConstantError};
 pub use prepared_expm1::{ExpEvaluation, ExpPreparationPolicy, PreparedExp, PreparedExpError};
 pub use prepared_expm1::{Expm1Evaluation, PreparedExpm1, PreparedExpm1Error};
 pub use prepared_expm1::{
