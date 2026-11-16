@@ -107,8 +107,15 @@ pub(super) fn observe<P: Scalar + 'static>(
         .readers(heap, &references, account)?
         .into_cells(account)?
         .into_product(positions, account)?;
-    let (snapshot, records) =
-        subscriber::measured(true, || sample(&cells, prelude, account, 3, true));
+    let (snapshot, records) = subscriber::measured(true, || {
+        sample(
+            &cells,
+            Some(prelude),
+            account,
+            3,
+            crate::LcQuantityDemand::All,
+        )
+    });
     assert_eq!(snapshot.work, 46);
     assert_eq!(snapshot.native, [15, 5]);
     assert_eq!(

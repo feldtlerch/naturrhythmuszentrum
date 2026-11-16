@@ -31,7 +31,9 @@ fn work<P: Scalar + 'static>() -> TestResult {
         let injection = crate::loan::fault::Injection::after(0);
         let cells = readers.into_product([0, 1], &mut account)?;
         let before = limit(&mut account, remaining)?;
-        let result = cells.read_frequency(3, &mut account).map(|_| ());
+        let result = cells
+            .read_requested(3, crate::LcQuantityDemand::Omega, None, &mut account)
+            .map(|_| ());
         let success = remaining == required;
         if success {
             result?;
@@ -79,8 +81,8 @@ fn phases<P: Scalar + 'static>() -> TestResult {
         .into_cells(&mut account)?;
     let (result, phases) = super::super::super::super::super::super::observation::recorded(|| {
         let cells = readers.into_product([0, 1], &mut account)?;
-        cells.read_frequency(0, &mut account)?;
-        cells.read_frequency(11, &mut account)?;
+        cells.read_requested(0, crate::LcQuantityDemand::Omega, None, &mut account)?;
+        cells.read_requested(11, crate::LcQuantityDemand::Omega, None, &mut account)?;
         Ok::<_, LcProductError>(())
     })?;
     result?;
@@ -88,8 +90,8 @@ fn phases<P: Scalar + 'static>() -> TestResult {
         phases,
         vec![
             ("LC input product binding".to_owned(), 4),
-            ("LC frequency continuation".to_owned(), 43),
-            ("LC frequency continuation".to_owned(), 43)
+            ("LC requested quantities".to_owned(), 43),
+            ("LC requested quantities".to_owned(), 43)
         ]
     );
     drop(references);

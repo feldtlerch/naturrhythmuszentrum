@@ -6,7 +6,9 @@ mod evidence;
 mod identity;
 mod subscriber;
 use super::{TestResult, VALUES, publish_values, setup};
-use crate::{ExecutionAccount, LcFrequencyPrelude, LcFrequencyState, LcInputProduct};
+use crate::{
+    ExecutionAccount, LcFrequencyPrelude, LcInputProduct, LcQuantityDemand, LcRequestedState,
+};
 use nrz_bindings::{Budget, Limits};
 use nrz_scalar::{ArithmeticContext, Scalar};
 
@@ -15,8 +17,12 @@ use nrz_scalar::{ArithmeticContext, Scalar};
 struct Image<P: Scalar> {
     /// Local sign outcome and original target, without formatting Ready payloads.
     state: String,
-    /// Frequency uses tau/rate; quantities use omega/f/T.
-    values: Option<[[P; 3]; 3]>,
+    /// Actual common root dependency, absent when the local path stops before Ready.
+    tau: Option<[P; 3]>,
+    /// Actual reciprocal dependency, absent for period-only demand.
+    rate: Option<[P; 3]>,
+    /// Requested omega/f/T slots remain absent when the demand excludes them.
+    values: Option<[Option<[P; 3]>; 3]>,
 }
 /// Numerical effects are measured independently of the tracing subscriber.
 #[derive(Debug, PartialEq)]
@@ -29,7 +35,7 @@ struct Snapshot<P: Scalar> {
     native: [usize; 2],
 }
 
-/// Both public routes retain joined Ready/Invalid/Undecided/refused attempts and exact old tariffs.
+/// Every demand retains joined Ready/Invalid/Undecided/refused attempts and literal tariffs.
 /// Disabled observation preserves values, errors, all budget dimensions and native activity.
 /// ´test:unit:loan-lc-sign-attempt-outcomes´
 #[test]
@@ -38,14 +44,17 @@ fn loan_lc_sign_attempt_outcomes() -> TestResult {
     outcomes::<f64>()
 }
 fn outcomes<P: Scalar + 'static>() -> TestResult {
-    for quantities in [false, true] {
-        for case in 0..10 {
-            case_run::<P>(case, quantities)?;
+    for demand in DEMANDS {
+        for case in 0..11 {
+            if case == 10 && demand == LcQuantityDemand::Omega {
+                continue;
+            }
+            case_run::<P>(case, demand)?;
         }
     }
     Ok(())
 }
-fn case_run<P: Scalar + 'static>(case: usize, quantities: bool) -> TestResult {
+fn case_run<P: Scalar + 'static>(case: usize, demand: LcQuantityDemand) -> TestResult {
     let (mut heap, mut account, inventory, axes) = setup::<P>()?;
     let mut budget = Budget::new(Limits::default())?;
     let context = ArithmeticContext::new()?;
@@ -73,7 +82,7 @@ fn case_run<P: Scalar + 'static>(case: usize, quantities: bool) -> TestResult {
     let mut other = ExecutionAccount::new(Budget::new(Limits::default())?)?;
     let original = account.usage();
     let selected = if case == 8 { &mut other } else { &mut account };
-    let required = if quantities { 46 } else { 43 };
+    let (required, _, _) = spec(demand);
     if case == 9 {
         let spend = selected.limits().work - selected.usage().work - (required - 1);
         selected.ledger.work(spend, crate::loan::AT)?;
@@ -85,10 +94,10 @@ fn case_run<P: Scalar + 'static>(case: usize, quantities: bool) -> TestResult {
         let (snapshot, records) = subscriber::measured(enabled, || {
             sample(
                 &cells,
-                &prelude,
+                if case == 10 { None } else { Some(&prelude) },
                 selected,
                 if case == 7 { 12 } else { 3 },
-                quantities,
+                demand,
             )
         });
         assert_eq!(crate::loan::fault::Injection::attempts(), 0);
@@ -100,7 +109,7 @@ fn case_run<P: Scalar + 'static>(case: usize, quantities: bool) -> TestResult {
             attempts.push(evidence::check(
                 &records,
                 case,
-                quantities,
+                demand,
                 &snapshot,
                 &references,
                 &inventory,
@@ -146,34 +155,31 @@ fn values<P: Scalar>(case: usize) -> [[[P; 3]; 2]; 5] {
 }
 fn sample<P: Scalar + 'static>(
     cells: &LcInputProduct<'_, P, 5>,
-    prelude: &LcFrequencyPrelude<P>,
+    prelude: Option<&LcFrequencyPrelude<P>>,
     account: &mut ExecutionAccount,
     cell: usize,
-    quantities: bool,
+    demand: LcQuantityDemand,
 ) -> Snapshot<P> {
     crate::loan::fault::reset_reads();
     crate::loan::fault::reset_scalars();
     let mut before = account.usage();
-    let image = if quantities {
-        cells
-            .read_quantities(cell, prelude, account)
-            .map(|result| Image {
-                state: state(result.frequency().state()),
+    let image = cells
+        .read_requested(cell, demand, prelude, account)
+        .map(|result| {
+            let (tau, rate) = match result.state() {
+                LcRequestedState::Ready { tau, rate, .. } => (Some(tau), rate),
+                LcRequestedState::Undecided(_) | LcRequestedState::Invalid(_) => (None, None),
+            };
+            Image {
+                state: state(result.state()),
+                tau,
+                rate,
                 values: result
                     .values()
                     .map(|values| [values.omega, values.frequency, values.period]),
-            })
-    } else {
-        cells.read_frequency(cell, account).map(|result| Image {
-            state: state(result.state()),
-            values: if let LcFrequencyState::Ready { tau, rate } = result.state() {
-                Some([tau, rate, [P::ZERO; 3]])
-            } else {
-                None
-            },
+            }
         })
-    }
-    .map_err(|error| format!("{error:?}"));
+        .map_err(|error| format!("{error:?}"));
     let after = account.usage();
     let work = after.work - before.work;
     before.work = after.work;
@@ -184,10 +190,33 @@ fn sample<P: Scalar + 'static>(
         native: [crate::loan::fault::reads(), crate::loan::fault::scalars()],
     }
 }
-fn state<P: Scalar>(state: LcFrequencyState<P>) -> String {
+fn state<P: Scalar>(state: LcRequestedState<P>) -> String {
     match state {
-        LcFrequencyState::Ready { .. } => "Ready".to_owned(),
-        LcFrequencyState::Invalid(target) => format!("Invalid({target:?})"),
-        LcFrequencyState::Undecided(target) => format!("Undecided({target:?})"),
+        LcRequestedState::Ready { .. } => "Ready".to_owned(),
+        LcRequestedState::Invalid(target) => format!("Invalid({target:?})"),
+        LcRequestedState::Undecided(target) => format!("Undecided({target:?})"),
+    }
+}
+
+/// Literal independent request inventory and complete-call expectations.
+pub(super) const DEMANDS: [LcQuantityDemand; 7] = [
+    LcQuantityDemand::Omega,
+    LcQuantityDemand::Frequency,
+    LcQuantityDemand::Period,
+    LcQuantityDemand::OmegaFrequency,
+    LcQuantityDemand::OmegaPeriod,
+    LcQuantityDemand::FrequencyPeriod,
+    LcQuantityDemand::All,
+];
+/// Literal tariffs and scalar entries do not use the production dependency calculation.
+pub(super) const fn spec(demand: LcQuantityDemand) -> (u64, usize, &'static str) {
+    match demand {
+        LcQuantityDemand::Omega => (43, 3, "omega"),
+        LcQuantityDemand::Frequency => (45, 4, "frequency"),
+        LcQuantityDemand::Period => (44, 3, "period"),
+        LcQuantityDemand::OmegaFrequency => (45, 4, "omega-frequency"),
+        LcQuantityDemand::OmegaPeriod => (45, 4, "omega-period"),
+        LcQuantityDemand::FrequencyPeriod => (46, 5, "frequency-period"),
+        LcQuantityDemand::All => (46, 5, "omega-frequency-period"),
     }
 }

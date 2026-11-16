@@ -13,9 +13,9 @@ pub(crate) mod fault;
 mod inventory;
 mod lc_shape;
 pub use lc_shape::{
-    LcFrequencyCell, LcFrequencyPrelude, LcFrequencyState, LcFrequencyTarget, LcInputCell,
-    LcInputCells, LcInputInventory, LcInputProduct, LcInputReaders, LcInputReading, LcInputShape,
-    LcProductCell, LcProductError, LcQuantityCell, LcQuantityValues, LcShapeApplication,
+    LcFrequencyPrelude, LcFrequencyTarget, LcInputCell, LcInputCells, LcInputInventory,
+    LcInputProduct, LcInputReaders, LcInputReading, LcInputShape, LcProductCell, LcProductError,
+    LcQuantityDemand, LcRequestedCell, LcRequestedState, LcRequestedValues, LcShapeApplication,
     LcShapeAxes, LcShapeError, LcShapeRequest, LcShapeTile,
 };
 mod lifecycle;

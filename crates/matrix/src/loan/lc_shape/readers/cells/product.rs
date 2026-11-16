@@ -3,8 +3,8 @@
 
 mod frequency;
 pub use frequency::{
-    LcFrequencyCell, LcFrequencyPrelude, LcFrequencyState, LcFrequencyTarget, LcQuantityCell,
-    LcQuantityValues,
+    LcFrequencyPrelude, LcFrequencyTarget, LcQuantityDemand, LcRequestedCell, LcRequestedState,
+    LcRequestedValues,
 };
 
 use super::{LcInputCell, LcInputCells, work};

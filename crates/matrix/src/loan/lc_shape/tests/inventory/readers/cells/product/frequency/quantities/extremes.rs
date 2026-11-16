@@ -2,7 +2,7 @@
 //! Tiny and large Ready quantities retain exact-rational enclosure and radius evidence.
 
 use super::{Rational, TestResult, VALUES, local, mul, pi, publish_values, setup};
-use crate::{LcFrequencyPrelude, LcFrequencyState, LcQuantityCell};
+use crate::{LcFrequencyPrelude, LcRequestedCell, LcRequestedState};
 use nrz_bindings::{Budget, Limits};
 use nrz_scalar::{ArithmeticContext, Scalar};
 use std::cmp::Ordering;
@@ -50,11 +50,16 @@ fn extremes<P: Scalar + 'static>() -> TestResult {
         crate::loan::fault::reset_scalars();
         let injection = crate::loan::fault::Injection::after(0);
         let before = account.usage().work;
-        let result = product.read_quantities(3, &prelude, &mut account)?;
+        let result = product.read_requested(
+            3,
+            crate::LcQuantityDemand::All,
+            Some(&prelude),
+            &mut account,
+        )?;
         oracle(pair, &result)?;
-        assert_eq!(result.frequency().inputs().cell(), 3);
-        assert_eq!(result.frequency().positions(), [0, 1]);
-        for (reading, original) in result.frequency().inputs().readings().iter().zip(values) {
+        assert_eq!(result.inputs().cell(), 3);
+        assert_eq!(result.positions(), [0, 1]);
+        for (reading, original) in result.inputs().readings().iter().zip(values) {
             assert_eq!(reading.values(), original[0]);
         }
         assert_eq!(account.usage().work - before, 46);
@@ -64,7 +69,12 @@ fn extremes<P: Scalar + 'static>() -> TestResult {
         );
         assert_eq!(crate::loan::fault::Injection::attempts(), 0);
         super::oracle(
-            &product.read_quantities(11, &prelude, &mut account)?,
+            &product.read_requested(
+                11,
+                crate::LcQuantityDemand::All,
+                Some(&prelude),
+                &mut account,
+            )?,
             [0, 1],
             1,
         )?;
@@ -75,28 +85,51 @@ fn extremes<P: Scalar + 'static>() -> TestResult {
     assert_eq!(budget.usage(), prepared);
     Ok(())
 }
-fn oracle<P: Scalar + 'static>(pair: [P; 2], result: &LcQuantityCell<'_, '_, P, 5>) -> TestResult {
+fn oracle<P: Scalar + 'static>(pair: [P; 2], result: &LcRequestedCell<'_, '_, P, 5>) -> TestResult {
     let target = mul(
         &Rational::binary(pair[0].to_f64())?,
         &Rational::binary(pair[1].to_f64())?,
     )?;
-    let LcFrequencyState::Ready { tau, rate } = result.frequency().state() else {
+    let LcRequestedState::Ready {
+        tau,
+        rate: Some(rate),
+        ..
+    } = result.state()
+    else {
         return Err("positive extreme quantities".into());
     };
     let values = result.values().ok_or("ready quantities")?;
-    assert_eq!(values.omega, rate);
+    assert_eq!(values.omega.ok_or("requested omega")?, rate);
     super::super::check(tau, &target, &target, false)?;
-    super::super::check(values.omega, &target, &target, true)?;
+    super::super::check(
+        values.omega.ok_or("requested omega")?,
+        &target,
+        &target,
+        true,
+    )?;
     let turn_low = Rational::fraction(6_283_185_307_179_586_476, 1_000_000_000_000_000_000)?;
     let turn_high = Rational::fraction(6_283_185_307_179_586_478, 1_000_000_000_000_000_000)?;
     let low = mul(&target, &mul(&turn_low, &turn_low)?)?;
     let high = mul(&target, &mul(&turn_high, &turn_high)?)?;
-    super::super::check(values.period, &low, &high, false)?;
-    super::super::check(values.frequency, &low, &high, true)?;
-    let [turn, inverse] = result.prelude().factors();
-    local(values.period, tau[0], turn[0])?;
-    local(values.frequency, rate[0], inverse[0])?;
-    for value in [values.omega, values.frequency, values.period] {
+    super::super::check(values.period.ok_or("requested period")?, &low, &high, false)?;
+    super::super::check(
+        values.frequency.ok_or("requested frequency")?,
+        &low,
+        &high,
+        true,
+    )?;
+    let [turn, inverse] = result.prelude().ok_or("prelude")?.factors();
+    local(values.period.ok_or("requested period")?, tau[0], turn[0])?;
+    local(
+        values.frequency.ok_or("requested frequency")?,
+        rate[0],
+        inverse[0],
+    )?;
+    for value in [
+        values.omega.ok_or("requested omega")?,
+        values.frequency.ok_or("requested frequency")?,
+        values.period.ok_or("requested period")?,
+    ] {
         let ceiling = mul(
             &Rational::binary(value[0].to_f64())?,
             &Rational::fraction(1, 4096)?,

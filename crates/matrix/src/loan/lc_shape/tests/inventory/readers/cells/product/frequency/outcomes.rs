@@ -2,7 +2,7 @@
 //! Original sign obligations distinguish invalid elements from unresolved complete boxes.
 
 use super::{Rational, TestResult, VALUES, check, publish_values, setup};
-use crate::{LcFrequencyState, LcFrequencyTarget, LcProductError, LoanError};
+use crate::{LcFrequencyTarget, LcProductError, LcRequestedState, LoanError};
 use nrz_scalar::Scalar;
 use std::cmp::Ordering;
 
@@ -44,7 +44,8 @@ fn signs<P: Scalar + 'static>() -> TestResult {
         crate::loan::fault::reset_scalars();
         let injection = crate::loan::fault::Injection::after(0);
         let before = account.usage().work;
-        let result = product.read_frequency(0, &mut account)?;
+        let result =
+            product.read_requested(0, crate::LcQuantityDemand::Omega, None, &mut account)?;
         sign_outcome(case, result.state());
         assert_eq!(result.product().is_some(), matches!(case, 5 | 7 | 8 | 10));
         assert_eq!(result.positions(), [0, 1]);
@@ -70,7 +71,11 @@ fn signs<P: Scalar + 'static>() -> TestResult {
         );
         assert_eq!(result.inputs().cell(), 0);
         assert_eq!(result.inputs().readings()[0].values(), left);
-        super::oracle(&product.read_frequency(11, &mut account)?, [0, 1], 1)?;
+        super::oracle(
+            &product.read_requested(11, crate::LcQuantityDemand::Omega, None, &mut account)?,
+            [0, 1],
+            1,
+        )?;
         assert_eq!(crate::loan::fault::Injection::attempts(), 0);
         drop(injection);
         drop(references);
@@ -79,29 +84,29 @@ fn signs<P: Scalar + 'static>() -> TestResult {
     Ok(())
 }
 
-fn sign_outcome<P: Scalar>(case: usize, state: LcFrequencyState<P>) {
+fn sign_outcome<P: Scalar>(case: usize, state: LcRequestedState<P>) {
     match case {
         0 | 2 => assert!(matches!(
             state,
-            LcFrequencyState::Invalid(LcFrequencyTarget::Inductance)
+            LcRequestedState::Invalid(LcFrequencyTarget::Inductance)
         )),
         1 | 6 => assert!(matches!(
             state,
-            LcFrequencyState::Invalid(LcFrequencyTarget::Capacitance)
+            LcRequestedState::Invalid(LcFrequencyTarget::Capacitance)
         )),
         3 | 4 => assert!(matches!(
             state,
-            LcFrequencyState::Undecided(LcFrequencyTarget::Inductance)
+            LcRequestedState::Undecided(LcFrequencyTarget::Inductance)
         )),
         9 => assert!(matches!(
             state,
-            LcFrequencyState::Undecided(LcFrequencyTarget::Capacitance)
+            LcRequestedState::Undecided(LcFrequencyTarget::Capacitance)
         )),
         5 => assert!(matches!(
             state,
-            LcFrequencyState::Undecided(LcFrequencyTarget::Product)
+            LcRequestedState::Undecided(LcFrequencyTarget::Product)
         )),
-        _ => assert!(matches!(state, LcFrequencyState::Ready { .. })),
+        _ => assert!(matches!(state, LcRequestedState::Ready { .. })),
     }
 }
 
@@ -154,12 +159,17 @@ fn availability<P: Scalar + 'static>() -> TestResult {
         crate::loan::fault::reset_scalars();
         let before = [account.usage().work, other.usage().work];
         assert!(matches!(
-            product.read_frequency(3, &mut other),
+            product.read_requested(3, crate::LcQuantityDemand::Omega, None, &mut other),
             Err(LcProductError::Loan(LoanError::ForeignAccount))
         ));
         assert_eq!([account.usage().work, other.usage().work], before);
         let injection = crate::loan::fault::Injection::after(0);
-        let result = product.read_frequency(if missing == 5 { 12 } else { 0 }, &mut account);
+        let result = product.read_requested(
+            if missing == 5 { 12 } else { 0 },
+            crate::LcQuantityDemand::Omega,
+            None,
+            &mut account,
+        );
         if missing == 5 {
             assert!(matches!(
                 result,
@@ -176,7 +186,11 @@ fn availability<P: Scalar + 'static>() -> TestResult {
             [crate::loan::fault::reads(), crate::loan::fault::scalars()],
             [0; 2]
         );
-        super::oracle(&product.read_frequency(3, &mut account)?, [0, 1], 0)?;
+        super::oracle(
+            &product.read_requested(3, crate::LcQuantityDemand::Omega, None, &mut account)?,
+            [0, 1],
+            0,
+        )?;
         assert_eq!(
             [crate::loan::fault::reads(), crate::loan::fault::scalars()],
             [15, 3]
@@ -236,7 +250,7 @@ fn extremes<P: Scalar + 'static>() -> TestResult {
         crate::loan::fault::reset_reads();
         crate::loan::fault::reset_scalars();
         let injection = crate::loan::fault::Injection::after(0);
-        let result = product.read_frequency(3, &mut account);
+        let result = product.read_requested(3, crate::LcQuantityDemand::Omega, None, &mut account);
         extreme_outcome(case, pair, result)?;
         assert_eq!(
             [crate::loan::fault::reads(), crate::loan::fault::scalars()],
@@ -250,7 +264,11 @@ fn extremes<P: Scalar + 'static>() -> TestResult {
             ]
         );
         assert_eq!(crate::loan::fault::Injection::attempts(), 0);
-        super::oracle(&product.read_frequency(11, &mut account)?, [0, 1], 1)?;
+        super::oracle(
+            &product.read_requested(11, crate::LcQuantityDemand::Omega, None, &mut account)?,
+            [0, 1],
+            1,
+        )?;
         drop(injection);
         drop(references);
         members.finish(&mut heap, &mut account)?;
@@ -260,7 +278,7 @@ fn extremes<P: Scalar + 'static>() -> TestResult {
 fn extreme_outcome<P: Scalar>(
     case: usize,
     pair: [P; 2],
-    result: Result<crate::LcFrequencyCell<'_, P, 5>, LcProductError>,
+    result: Result<crate::LcRequestedCell<'_, '_, P, 5>, LcProductError>,
 ) -> TestResult {
     if case == 3 {
         assert!(matches!(
@@ -283,30 +301,35 @@ fn extreme_outcome<P: Scalar>(
     match case {
         4 => assert!(matches!(
             result.state(),
-            LcFrequencyState::Undecided(LcFrequencyTarget::Product)
+            LcRequestedState::Undecided(LcFrequencyTarget::Product)
         )),
         5 => assert!(matches!(
             result.state(),
-            LcFrequencyState::Invalid(LcFrequencyTarget::Inductance)
+            LcRequestedState::Invalid(LcFrequencyTarget::Inductance)
         )),
         6 => assert!(matches!(
             result.state(),
-            LcFrequencyState::Invalid(LcFrequencyTarget::Capacitance)
+            LcRequestedState::Invalid(LcFrequencyTarget::Capacitance)
         )),
         7 => assert!(matches!(
             result.state(),
-            LcFrequencyState::Undecided(LcFrequencyTarget::Inductance)
+            LcRequestedState::Undecided(LcFrequencyTarget::Inductance)
         )),
         _ => extreme_oracle(pair, result.state())?,
     }
     Ok(())
 }
-fn extreme_oracle<P: Scalar>(pair: [P; 2], state: LcFrequencyState<P>) -> TestResult {
+fn extreme_oracle<P: Scalar>(pair: [P; 2], state: LcRequestedState<P>) -> TestResult {
     let target = Rational::binary(pair[0].to_f64())?.image(
         &Rational::binary(pair[1].to_f64())?,
         crate::BinaryElementwise::Product,
     )?;
-    let LcFrequencyState::Ready { tau, rate } = state else {
+    let LcRequestedState::Ready {
+        tau,
+        rate: Some(rate),
+        ..
+    } = state
+    else {
         return Err("positive extreme chain".into());
     };
     check(tau, &target, &target, false)?;

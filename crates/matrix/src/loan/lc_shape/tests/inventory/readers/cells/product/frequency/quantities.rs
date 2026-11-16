@@ -4,7 +4,7 @@
 mod boundaries;
 mod extremes;
 use super::{Rational, TestResult, VALUES, publish, publish_values, setup};
-use crate::{LcFrequencyPrelude, LcFrequencyState, LcQuantityCell, PiConstant};
+use crate::{LcFrequencyPrelude, LcRequestedCell, LcRequestedState, PiConstant};
 use nrz_bindings::{Budget, Limits};
 use nrz_scalar::{ArithmeticContext, Finite, PiLimits, Precision, Scalar};
 use std::cmp::Ordering;
@@ -47,12 +47,17 @@ fn images<P: Scalar + 'static>() -> TestResult {
                 .into_product(positions, &mut account)?;
             let injection = crate::loan::fault::Injection::after(0);
             observe(&cells, &prelude, &mut account, positions, shift)?;
-            let result = cells.read_quantities(0, &prelude, &mut account)?;
+            let result = cells.read_requested(
+                0,
+                crate::LcQuantityDemand::All,
+                Some(&prelude),
+                &mut account,
+            )?;
             assert!(std::ptr::eq(
-                result.frequency().inputs().inventory(),
+                result.inputs().inventory(),
                 &raw const inventory
             ));
-            assert_eq!(result.frequency().inputs().axes(), axes);
+            assert_eq!(result.inputs().axes(), axes);
             assert_eq!(crate::loan::fault::Injection::attempts(), 0);
             drop(injection);
         }
@@ -73,7 +78,8 @@ fn observe<P: Scalar + 'static>(
         crate::loan::fault::reset_reads();
         crate::loan::fault::reset_scalars();
         let before = account.usage().work;
-        let result = cells.read_quantities(cell, prelude, account);
+        let result =
+            cells.read_requested(cell, crate::LcQuantityDemand::All, Some(prelude), account);
         assert_eq!(account.usage().work - before, 46);
         if instance == 1 && shift == 0 {
             assert!(matches!(
@@ -88,10 +94,13 @@ fn observe<P: Scalar + 'static>(
             );
         } else {
             let result = result?;
-            assert!(std::ptr::eq(result.prelude(), std::ptr::from_ref(prelude)));
-            assert_eq!(result.frequency().inputs().cell(), cell);
-            assert_eq!(result.frequency().positions(), positions);
-            super::super::super::oracle(result.frequency().inputs(), instance)?;
+            assert!(std::ptr::eq(
+                result.prelude().ok_or("prelude")?,
+                std::ptr::from_ref(prelude)
+            ));
+            assert_eq!(result.inputs().cell(), cell);
+            assert_eq!(result.positions(), positions);
+            super::super::super::oracle(result.inputs(), instance)?;
             oracle(&result, positions, instance)?;
             assert_eq!(
                 [crate::loan::fault::reads(), crate::loan::fault::scalars()],
@@ -102,16 +111,21 @@ fn observe<P: Scalar + 'static>(
     Ok(())
 }
 fn oracle<P: Scalar + 'static>(
-    result: &LcQuantityCell<'_, '_, P, 5>,
+    result: &LcRequestedCell<'_, '_, P, 5>,
     positions: [usize; 2],
     instance: usize,
 ) -> TestResult {
-    super::oracle(result.frequency(), positions, instance)?;
+    super::oracle(result, positions, instance)?;
     let values = result.values().ok_or("ready quantities")?;
-    let LcFrequencyState::Ready { tau, rate } = result.frequency().state() else {
+    let LcRequestedState::Ready {
+        tau,
+        rate: Some(rate),
+        ..
+    } = result.state()
+    else {
         return Err("ready chain".into());
     };
-    assert_eq!(values.omega, rate);
+    assert_eq!(values.omega.ok_or("requested omega")?, rate);
     assert_eq!(
         result.numerical_error_scope(),
         crate::NumericalErrorScope::LocalOperation
@@ -130,16 +144,25 @@ fn oracle<P: Scalar + 'static>(
     let turn_high = Rational::fraction(6_283_185_307_179_586_478, 1_000_000_000_000_000_000)?;
     let low = mul(&low, &mul(&turn_low, &turn_low)?)?;
     let high = mul(&high, &mul(&turn_high, &turn_high)?)?;
-    super::check(values.period, &low, &high, false)?;
-    super::check(values.frequency, &low, &high, true)?;
-    let [turn, inverse] = result.prelude().factors();
-    local(values.period, tau[0], turn[0])?;
-    local(values.frequency, rate[0], inverse[0])?;
+    super::check(values.period.ok_or("requested period")?, &low, &high, false)?;
+    super::check(
+        values.frequency.ok_or("requested frequency")?,
+        &low,
+        &high,
+        true,
+    )?;
+    let [turn, inverse] = result.prelude().ok_or("prelude")?.factors();
+    local(values.period.ok_or("requested period")?, tau[0], turn[0])?;
+    local(
+        values.frequency.ok_or("requested frequency")?,
+        rate[0],
+        inverse[0],
+    )?;
     for (value, numerator, denominator) in [
-        (values.period[1], 2, 1),
-        (values.frequency[1], 1, 4),
-        (values.period[2], 1, 4096),
-        (values.frequency[2], 1, 4096),
+        (values.period.ok_or("requested period")?[1], 2, 1),
+        (values.frequency.ok_or("requested frequency")?[1], 1, 4),
+        (values.period.ok_or("requested period")?[2], 1, 4096),
+        (values.frequency.ok_or("requested frequency")?[2], 1, 4096),
     ] {
         assert_ne!(
             Rational::binary(value.to_f64())?.compare(&Rational::fraction(numerator, denominator)?),
@@ -148,10 +171,10 @@ fn oracle<P: Scalar + 'static>(
     }
     Ok(())
 }
-fn mul(left: &Rational, right: &Rational) -> TestResult<Rational> {
+pub(super) fn mul(left: &Rational, right: &Rational) -> TestResult<Rational> {
     left.image(right, crate::BinaryElementwise::Product)
 }
-fn local<P: Scalar>(values: [P; 3], left: P, right: P) -> TestResult {
+pub(super) fn local<P: Scalar>(values: [P; 3], left: P, right: P) -> TestResult {
     let exact = mul(
         &Rational::binary(left.to_f64())?,
         &Rational::binary(right.to_f64())?,

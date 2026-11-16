@@ -9,15 +9,15 @@ use nrz_scalar::Scalar;
 pub(super) fn check<P: Scalar + 'static>(
     records: &Records,
     case: usize,
-    quantities: bool,
+    demand: crate::LcQuantityDemand,
     snapshot: &Snapshot<P>,
     tiles: &[&LcShapeTile<'_, P>],
     inventory: &LcInputInventory<P, 5>,
 ) -> TestResult<u64> {
-    let required = if quantities { 46 } else { 43 };
-    let work = if case >= 8 { 0 } else { required };
+    let (required, kernels, label) = super::spec(demand);
+    let work = if matches!(case, 8 | 9) { 0 } else { required };
     let native = match case {
-        0 => [15, if quantities { 5 } else { 3 }],
+        0 => [15, kernels],
         1 | 2 | 4 => [15, 0],
         3 | 5 => [15, 1],
         _ => [0, 0],
@@ -28,16 +28,11 @@ pub(super) fn check<P: Scalar + 'static>(
     let barrier = records.spans.first().ok_or("barrier")?;
     assert_eq!(barrier.name, "nrz.barrier");
     assert_eq!(barrier.fields["family"], "lc");
+    assert_eq!(barrier.fields["revision"], "2");
     assert_eq!(barrier.fields["question"], "frequency");
     assert_eq!(barrier.fields["operation"], "positive-domain");
-    assert_eq!(
-        barrier.fields["consumer"],
-        if quantities {
-            "quantities"
-        } else {
-            "frequency"
-        }
-    );
+    assert_eq!(barrier.fields["consumer"], "requested");
+    assert_eq!(barrier.fields["demand"], label);
     assert_eq!(
         barrier.fields["schema"],
         inventory
@@ -148,7 +143,8 @@ fn terminal<P: Scalar + 'static>(
         6 => ("refused", "none", "coverage", "none"),
         7 => ("refused", "none", "capacity-or-layout", "none"),
         8 => ("refused", "none", "foreign-account", "none"),
-        _ => ("refused", "none", "budget", "none"),
+        9 => ("refused", "none", "budget", "none"),
+        _ => ("refused", "none", "unsupported-contract", "none"),
     };
     let event = &records.events[6];
     assert_eq!(event.name, "nrz.decision");

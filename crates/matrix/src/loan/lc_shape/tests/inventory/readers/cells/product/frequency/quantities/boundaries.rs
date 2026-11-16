@@ -5,7 +5,7 @@ use super::{
     ArithmeticContext, Budget, LcFrequencyPrelude, Limits, Scalar, TestResult, VALUES, pi, publish,
     publish_values, setup,
 };
-use crate::{ExecutionAccount, LcFrequencyState, LcFrequencyTarget, LcProductError, LoanError};
+use crate::{ExecutionAccount, LcFrequencyTarget, LcProductError, LcRequestedState, LoanError};
 
 /// Fixed factor construction prepays five visits and checks its actual fixed storage.
 /// Existing pi storage is shared; renewed construction is separately charged.
@@ -101,7 +101,12 @@ fn work<P: Scalar + 'static>() -> TestResult {
         crate::loan::fault::reset_reads();
         crate::loan::fault::reset_scalars();
         let injection = crate::loan::fault::Injection::after(0);
-        let result = cells.read_quantities(3, &prelude, &mut account);
+        let result = cells.read_requested(
+            3,
+            crate::LcQuantityDemand::All,
+            Some(&prelude),
+            &mut account,
+        );
         if remaining == 45 {
             assert!(matches!(
                 result,
@@ -148,8 +153,18 @@ fn phases<P: Scalar + 'static>() -> TestResult {
     let (result, phases) =
         super::super::super::super::super::super::super::observation::recorded(|| {
             let prelude = LcFrequencyPrelude::new(&pi, &context, &mut account.ledger)?;
-            cells.read_quantities(0, &prelude, &mut account)?;
-            cells.read_quantities(11, &prelude, &mut account)?;
+            cells.read_requested(
+                0,
+                crate::LcQuantityDemand::All,
+                Some(&prelude),
+                &mut account,
+            )?;
+            cells.read_requested(
+                11,
+                crate::LcQuantityDemand::All,
+                Some(&prelude),
+                &mut account,
+            )?;
             Ok::<_, LcProductError>(())
         })?;
     result?;
@@ -157,8 +172,8 @@ fn phases<P: Scalar + 'static>() -> TestResult {
         phases,
         vec![
             ("LC frequency factors".to_owned(), 5),
-            ("LC local quantities".to_owned(), 46),
-            ("LC local quantities".to_owned(), 46)
+            ("LC requested quantities".to_owned(), 46),
+            ("LC requested quantities".to_owned(), 46)
         ]
     );
     drop(references);
@@ -204,9 +219,14 @@ fn refusals<P: Scalar + 'static>() -> TestResult {
         crate::loan::fault::reset_scalars();
         let injection = crate::loan::fault::Injection::after(0);
         let result = if case == 2 {
-            cells.read_quantities(3, &prelude, &mut other)
+            cells.read_requested(3, crate::LcQuantityDemand::All, Some(&prelude), &mut other)
         } else {
-            cells.read_quantities(if case == 1 { 12 } else { 3 }, &prelude, &mut account)
+            cells.read_requested(
+                if case == 1 { 12 } else { 3 },
+                crate::LcQuantityDemand::All,
+                Some(&prelude),
+                &mut account,
+            )
         };
         outcome(case, result)?;
         assert_eq!(
@@ -223,7 +243,12 @@ fn refusals<P: Scalar + 'static>() -> TestResult {
             }
         );
         super::oracle(
-            &cells.read_quantities(11, &prelude, &mut account)?,
+            &cells.read_requested(
+                11,
+                crate::LcQuantityDemand::All,
+                Some(&prelude),
+                &mut account,
+            )?,
             [0, 1],
             1,
         )?;
@@ -257,7 +282,7 @@ fn values<P: Scalar>(case: usize) -> [[[P; 3]; 2]; 5] {
 }
 fn outcome<P: Scalar>(
     case: usize,
-    result: Result<crate::LcQuantityCell<'_, '_, P, 5>, LcProductError>,
+    result: Result<crate::LcRequestedCell<'_, '_, P, 5>, LcProductError>,
 ) -> TestResult {
     match case {
         0 => assert!(matches!(
@@ -283,19 +308,19 @@ fn outcome<P: Scalar>(
         _ => {
             let result = result?;
             assert!(result.values().is_none());
-            assert_eq!(result.frequency().inputs().cell(), 3);
+            assert_eq!(result.inputs().cell(), 3);
             match case {
                 3 => assert!(matches!(
-                    result.frequency().state(),
-                    LcFrequencyState::Invalid(LcFrequencyTarget::Inductance)
+                    result.state(),
+                    LcRequestedState::Invalid(LcFrequencyTarget::Inductance)
                 )),
                 4 => assert!(matches!(
-                    result.frequency().state(),
-                    LcFrequencyState::Undecided(LcFrequencyTarget::Capacitance)
+                    result.state(),
+                    LcRequestedState::Undecided(LcFrequencyTarget::Capacitance)
                 )),
                 _ => assert!(matches!(
-                    result.frequency().state(),
-                    LcFrequencyState::Undecided(LcFrequencyTarget::Product)
+                    result.state(),
+                    LcRequestedState::Undecided(LcFrequencyTarget::Product)
                 )),
             }
         }

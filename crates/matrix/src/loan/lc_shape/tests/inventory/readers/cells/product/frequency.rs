@@ -5,8 +5,9 @@ mod boundaries;
 mod observation;
 mod outcomes;
 mod quantities;
+mod requested;
 use super::{Rational, SELECTED, TestResult, VALUES, publish, publish_values, setup};
-use crate::{LcFrequencyCell, LcFrequencyState, LcInputProduct, LcProductError, LoanError};
+use crate::{LcInputProduct, LcProductError, LcRequestedCell, LcRequestedState, LoanError};
 use nrz_scalar::Scalar;
 use std::cmp::Ordering;
 
@@ -49,7 +50,12 @@ fn images<P: Scalar + 'static>() -> TestResult {
                 let full = mode == 2;
                 let complete_source = shift == 1;
                 if full && complete_source {
-                    let result = product.read_frequency(11, &mut account)?;
+                    let result = product.read_requested(
+                        11,
+                        crate::LcQuantityDemand::Omega,
+                        None,
+                        &mut account,
+                    )?;
                     assert!(std::ptr::eq(
                         result.inputs().inventory(),
                         &raw const inventory
@@ -80,7 +86,7 @@ fn observe<P: Scalar + 'static>(
         let intersection = [0, 3, 11].contains(&cell);
         let demanded = full || (sparse && intersection);
         let present = instance == 0 || shift == 1;
-        let result = product.read_frequency(cell, account);
+        let result = product.read_requested(cell, crate::LcQuantityDemand::Omega, None, account);
         if demanded && present {
             let result = result?;
             assert_eq!(result.positions(), positions);
@@ -109,7 +115,7 @@ fn observe<P: Scalar + 'static>(
     Ok(())
 }
 fn oracle<P: Scalar>(
-    result: &LcFrequencyCell<'_, P, 5>,
+    result: &LcRequestedCell<'_, '_, P, 5>,
     positions: [usize; 2],
     instance: usize,
 ) -> TestResult {
@@ -123,7 +129,12 @@ fn oracle<P: Scalar>(
         1024,
     )?;
     let nominal = Rational::fraction(i64::from(left[0]) * i64::from(right[0]), 1024)?;
-    let LcFrequencyState::Ready { tau, rate } = result.state() else {
+    let LcRequestedState::Ready {
+        tau,
+        rate: Some(rate),
+        ..
+    } = result.state()
+    else {
         return Err("positive chain expected".into());
     };
     check(tau, &low, &high, false)?;
