@@ -90,7 +90,7 @@ def derive(row):
     elif hi is not None:
         hi = outward(hi, True)
     if lo is None or hi is None:
-        return 'FiniteRange', None
+        return 'UnboundedImage', None
     return 'Enclosure', {
         'image': [str(max(value(lo), c-t)), str(max(value(hi), c+t))],
         'nominal': [str(max(x, c-t)), str(max(x, c+t))],

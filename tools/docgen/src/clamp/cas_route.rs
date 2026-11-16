@@ -174,6 +174,91 @@ fn clamp_golden_cas() -> TestResult {
         );
         count += 1;
     }
-    assert!(count > 20, "CAS rows executed");
+    assert_eq!(count, 28, "CAS rows executed");
+    Ok(())
+}
+
+/// The overflow tie encloses the wall but cannot supply its finite nearest center.
+/// # Panics
+/// Panics only if exact reconstruction or fresh CAS replay changes the tie result.
+/// ´claim:docgen:clamp-golden-overflow-tie´
+/// ´test:unit:clamp-golden-overflow-tie´
+#[test]
+fn clamp_golden_overflow_tie() -> TestResult {
+    let mut b = ledger()?;
+    let two = Rational::from_ratio(2, 1, &mut b)?;
+    let total = two.pow(970, &mut b)?;
+    let wall = two.pow(1024, &mut b)?.sub(&total, &mut b)?;
+    let center = dyadic(MAX, &mut b)?;
+    assert_eq!(
+        center.add(&total, &mut b)?,
+        wall,
+        "wall enclosed at upper end"
+    );
+    assert_eq!(
+        nearest(&wall, &mut b)?,
+        None,
+        "overflow tie rounds beyond finite"
+    );
+    let below = wall.sub(&Rational::one(), &mut b)?;
+    assert_eq!(
+        nearest(&below, &mut b)?,
+        Some(MAX),
+        "below overflow tie rounds to largest finite"
+    );
+    assert_eq!(
+        enclosure(&Rational::zero(), &Rational::zero(), &wall)?,
+        [wall.clone(), wall.clone()],
+        "exact CAS wall image"
+    );
+    let row = Row {
+        id: "overflow-tie".into(),
+        input: Input {
+            x: "0000000000000000".into(),
+            r: "0000000000000000".into(),
+        },
+        wall: Wall {
+            a: wall.exact_string(&mut b)?,
+            c: "7fefffffffffffff".into(),
+            t: "7c90000000000000".into(),
+        },
+        expected: "ClampWallCenterMismatch".into(),
+        golden: None,
+        evidence: std::array::from_fn(|_| Evidence {
+            route: String::new(),
+            input: Input {
+                x: "0000000000000000".into(),
+                r: "0000000000000000".into(),
+            },
+            wall: Wall {
+                a: String::new(),
+                c: String::new(),
+                t: String::new(),
+            },
+            golden: None,
+        }),
+    };
+    let payload: Payload =
+        serde_json::from_slice(include_bytes!("../../../../data/clamp/floor.json"))?;
+    let stored = payload
+        .entries
+        .iter()
+        .find(|entry| entry.id == row.id)
+        .ok_or("stored overflow tie")?;
+    assert_eq!(
+        (
+            &stored.input,
+            &stored.wall,
+            &stored.expected,
+            &stored.golden
+        ),
+        (&row.input, &row.wall, &row.expected, &row.golden),
+        "stored overflow tie correspondence"
+    );
+    assert_eq!(
+        outcome(&row, &mut ledger()?)?,
+        ("ClampWallCenterMismatch", None),
+        "overflow tie admission"
+    );
     Ok(())
 }
