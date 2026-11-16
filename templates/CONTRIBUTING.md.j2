@@ -77,7 +77,7 @@ cargo test --locked --workspace --no-fail-fast
 cargo run -q --locked -p nrz-docgen -- check
 ```
 
-After these commands, run `superloop-lint check` and `superloop-lint fmt --check .` from this repository's root on the host. The linter's source is published in [superloop tools](https://github.com/coraxloop/superloop-tools) at tag `v0.1.0`. Vendor that source and build `superloop-lint` from the tools repository with `cargo build -p superloop-lint --release` using its pinned toolchain. Keep your own `Cargo.lock` because the tools project ships neither binaries nor a lockfile.
+After these commands, run `superloop-lint check` and `superloop-lint fmt --check .` from this repository's root on the host. The linter's source is published in [superloop tools](https://github.com/coraxloop/superloop-tools) at tag `v0.5.0`. This release contains the source that builds the gate's linter, so outside contributors can reproduce gate verdicts from public source. Vendor that source and build `superloop-lint` from the tools repository with `cargo build -p superloop-lint --release` using its pinned toolchain. Keep your own `Cargo.lock` because the tools project ships neither binaries nor a lockfile.
 
 Before 1.0, any later tools release may change the linter's commands or findings without compatibility guarantees. The linter used by the gate of record decides whether the candidate passes (`gate:nrz:verification-of-candidate`).
 
