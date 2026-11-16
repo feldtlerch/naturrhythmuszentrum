@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Complete original-role observations preflight every companion before the first load.
 
+mod product;
+pub use product::{LcInputProduct, LcProductCell, LcProductError};
+
 use super::{LcInputInventory, LcInputReaders, LcShapeAxes};
 use crate::{ExecutionAccount, HostChannel, LoanError, NumericalErrorScope, TileReader};
 use nrz_scalar::Scalar;
@@ -149,26 +152,31 @@ impl<'a, P: Scalar + 'static, const N: usize> LcInputCells<'a, P, N> {
             .ledger
             .with_work_phase(crate::loan::FAMILY, "LC input cell observation", |budget| {
                 crate::loan::charge(budget, work::<N>(7)?)?;
-                let selected = self.select(cell)?;
-                let readings = selected.map(|selected| {
-                    let values = selected.planes.map(|plane| {
-                        #[cfg(test)]
-                        crate::loan::fault::loaded();
-                        plane[(selected.address, 0)]
-                    });
-                    LcInputReading {
-                        values,
-                        scope: selected.scope,
-                    }
-                });
-                Ok(LcInputCell {
-                    inventory: self.readers.inventory,
-                    axes: self.readers.axes,
-                    cell,
-                    readings,
-                })
+                self.observe(cell)
             })
     }
+    /// Complete preflight and loads shared by prepaid observation and product consumers.
+    fn observe(&self, cell: usize) -> Result<LcInputCell<'a, P, N>, LoanError> {
+        let selected = self.select(cell)?;
+        let readings = selected.map(|selected| {
+            let values = selected.planes.map(|plane| {
+                #[cfg(test)]
+                crate::loan::fault::loaded();
+                plane[(selected.address, 0)]
+            });
+            LcInputReading {
+                values,
+                scope: selected.scope,
+            }
+        });
+        Ok(LcInputCell {
+            inventory: self.readers.inventory,
+            axes: self.readers.axes,
+            cell,
+            readings,
+        })
+    }
+
     /// All addresses and all three qualified channels are checked before any selected load.
     fn select(&self, cell: usize) -> Result<[Selected<'a, P>; N], LoanError> {
         if cell >= self.readers.axes.combined.axis().capacity() {

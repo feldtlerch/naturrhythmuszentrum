@@ -2,6 +2,7 @@
 //! Complete observations use independently mapped roles and a nonempty mask intersection.
 
 mod boundaries;
+mod product;
 mod refusals;
 use super::{Members, TestResult, fixture, setup};
 use crate::{
@@ -24,18 +25,13 @@ fn source<P: Scalar + 'static>(
     heap: &mut Heap,
     account: &mut ExecutionAccount,
     shift: usize,
+    values: &[[[P; 3]; 2]; 5],
 ) -> TestResult<crate::PublishedTile<P>> {
     let mut loan = fixture::granted(heap.request_loan(schema.source(axes, account)?, account))?;
-    for (cell, values) in VALUES[schema.input_index()].into_iter().enumerate() {
-        for (channel, numerator) in crate::HostChannel::ALL.into_iter().zip(values) {
+    for (cell, values) in values[schema.input_index()].into_iter().enumerate() {
+        for (channel, value) in crate::HostChannel::ALL.into_iter().zip(values) {
             if cell != 1 || channel != crate::HostChannel::Error || shift == 1 {
-                loan.write_component(
-                    channel,
-                    cell,
-                    0,
-                    P::from_u8(numerator) / P::from_u8(32),
-                    account,
-                )?;
+                loan.write_component(channel, cell, 0, value, account)?;
             }
         }
     }
@@ -61,11 +57,23 @@ fn publish<'a, P: Scalar + 'static>(
     cells: &[Vec<usize>; 5],
     shift: usize,
 ) -> TestResult<Members<'a, P>> {
+    let values = VALUES.map(|rows| rows.map(|row| row.map(|n| P::from_u8(n) / P::from_u8(32))));
+    publish_values(inventory, axes, heap, account, cells, shift, &values)
+}
+fn publish_values<'a, P: Scalar + 'static>(
+    inventory: &'a LcInputInventory<P, 5>,
+    axes: &LcShapeAxes,
+    heap: &mut Heap,
+    account: &mut ExecutionAccount,
+    cells: &[Vec<usize>; 5],
+    shift: usize,
+    values: &[[[P; 3]; 2]; 5],
+) -> TestResult<Members<'a, P>> {
     let mut tiles = Vec::new();
     let mut layouts = Vec::new();
     for (index, cells) in cells.iter().enumerate() {
         let schema = inventory.input(index).ok_or("original role")?;
-        let (tile, layout) = member(schema, axes, heap, account, cells, shift)?;
+        let (tile, layout) = member(schema, axes, heap, account, cells, shift, values)?;
         tiles.push(tile);
         layouts.push(layout);
     }
@@ -78,8 +86,9 @@ fn member<'a, P: Scalar + 'static>(
     account: &mut ExecutionAccount,
     cells: &[usize],
     shift: usize,
+    values: &[[[P; 3]; 2]; 5],
 ) -> TestResult<(LcShapeTile<'a, P>, crate::CellLayoutVersion)> {
-    let input = source(schema, axes, heap, account, shift)?;
+    let input = source(schema, axes, heap, account, shift, values)?;
     let index = schema.input_index();
     let (length, offset, stride) = [
         (32, 24, -2),

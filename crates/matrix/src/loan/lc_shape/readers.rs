@@ -2,7 +2,9 @@
 //! Complete positional inventory authority accompanies a borrowed current-reader set.
 
 mod cells;
-pub use cells::{LcInputCell, LcInputCells, LcInputReading};
+pub use cells::{
+    LcInputCell, LcInputCells, LcInputProduct, LcInputReading, LcProductCell, LcProductError,
+};
 
 use super::{LcInputInventory, LcShapeAxes, LcShapeTile};
 use crate::{ExecutionAccount, Heap, LoanError, TileReader};
