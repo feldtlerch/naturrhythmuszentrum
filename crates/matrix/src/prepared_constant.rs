@@ -72,6 +72,10 @@ pub struct ConstantImport {
     /// Center, total and numerical-only error, in that order.
     readings: [f64; 3],
     /// Outward conversion evidence; never lower/upper storage slabs.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "retained evidence preserves the import layout")
+    )]
     evidence: [f64; 2],
     /// Absolute per-endpoint bit target checked by this import.
     bits: u32,
@@ -87,10 +91,7 @@ impl ConstantImport {
     }
     /// Outward evidence used to establish containment and the endpoint target.
     #[must_use]
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "conversion evidence remains crate-private")
-    )]
+    #[cfg(test)]
     pub(crate) const fn evidence(self) -> [f64; 2] {
         self.evidence
     }
