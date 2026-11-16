@@ -100,6 +100,8 @@ Which symbolic laws should be primitive schemas and which should be checked deri
 
 Which exact scalar fields beyond rationals should the initial series design admit, and how should unavailable zero tests or inverses be exposed without widening trusted arithmetic?
 
+The coefficient-field question is resolved by (`def:nrz:cas-solving-design-coefficient-trait`): the series coefficient field beyond Q is the solving layer's checked fraction-coefficient capability over Q, `ExactCoefficients`. Its zero tests and inverses are decided under a scope with finite localization, and specialization goes through evaluation. Naming this capability reuses a registered checked implementation rather than widening trusted arithmetic, and an unavailable zero test or inverse maps to the existing Unresolved premise outcome, never to an assumed unit (`rule:nrz:cas-trig-series-inverse`). A parameter on which the coefficients depend belongs in the coefficient field rather than among the unknowns of the residual system, where its products with coefficient unknowns would leave the equations nonlinear.
+
 **Open Question (Residual trial and nonlinear orders)** · `open:nrz:cas-trig-series-residual-scope`
 
 Which concrete real residual system should field-theory-of-overlap use for the planned exact-linear trial, and what separate proposal would be needed for order-by-order systems that remain nonlinear after lower-order substitution and therefore lie outside that trial?
