@@ -182,7 +182,11 @@ fn render_context(root: &Path) -> Result<serde_json::Value, Box<dyn std::error::
 /// Evaluate the real templates with the production strictness and escaping policy.
 fn render_environment() -> Result<minijinja::Environment<'static>, minijinja::Error> {
     let mut environment = minijinja::Environment::new();
-    environment.set_keep_trailing_newline(true);
+    environment.set_syntax(
+        minijinja::syntax::SyntaxConfig::builder()
+            .keep_trailing_newline(true)
+            .build()?,
+    );
     environment.set_undefined_behavior(minijinja::UndefinedBehavior::Strict);
     environment.set_auto_escape_callback(|_| minijinja::AutoEscape::None);
     for (name, source) in [
@@ -232,8 +236,15 @@ fn compute_templates_preserve_separate_observations() -> Result<(), Box<dyn std:
         "lc",
         "provenance",
     ] {
-        let output = environment.get_template(name)?.render(&context)?;
-        assert_eq!(output, environment.get_template(name)?.render(&context)?);
+        let output = environment
+            .get_template(name)?
+            .render(minijinja::value::Serde(&context))?;
+        assert_eq!(
+            output,
+            environment
+                .get_template(name)?
+                .render(minijinja::value::Serde(&context))?
+        );
         assert!(output.contains("never") || output.contains("cannot"));
         if matches!(name, "index" | "arithmetic" | "provenance") {
             assert!(output.contains("fixture-two"));

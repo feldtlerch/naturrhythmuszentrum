@@ -13,7 +13,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
-use minijinja::{AutoEscape, Environment, UndefinedBehavior};
+use minijinja::{AutoEscape, Environment, UndefinedBehavior, syntax::SyntaxConfig, value::Serde};
 use serde_json::{Map, Value};
 
 use crate::error::{self, Error};
@@ -26,7 +26,14 @@ pub(crate) fn all(
     datasets: &BTreeMap<String, Value>,
 ) -> Result<BTreeMap<String, Vec<u8>>, Error> {
     let mut environment = Environment::new();
-    environment.set_keep_trailing_newline(true);
+    let syntax = SyntaxConfig::builder()
+        .keep_trailing_newline(true)
+        .build()
+        .map_err(|problem| Error::Template {
+            path: "syntax configuration".to_owned(),
+            detail: problem.to_string(),
+        })?;
+    environment.set_syntax(syntax);
     environment.set_undefined_behavior(UndefinedBehavior::Strict);
     environment.set_auto_escape_callback(|_| AutoEscape::None);
     for document in documents {
@@ -66,7 +73,7 @@ pub(crate) fn all(
                 detail: problem.to_string(),
             })?;
         let rendered = template
-            .render(context)
+            .render(Serde(&context))
             .map_err(|problem| Error::Template {
                 path: template_path,
                 detail: problem.to_string(),
