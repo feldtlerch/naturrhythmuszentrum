@@ -2,6 +2,7 @@
 //! Independent literal pi brackets and rational products check shared local quantities.
 
 mod boundaries;
+mod extremes;
 use super::{Rational, TestResult, VALUES, publish, publish_values, setup};
 use crate::{LcFrequencyPrelude, LcFrequencyState, LcQuantityCell, PiConstant};
 use nrz_bindings::{Budget, Limits};
