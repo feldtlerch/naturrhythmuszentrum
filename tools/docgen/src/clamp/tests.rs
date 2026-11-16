@@ -37,9 +37,10 @@ fn fixture(id: &str) -> Value {
 fn clamp_golden_refusals() -> TestResult {
     let cases = [
         ("/namespace", json!("other"), Cause::Namespace),
-        ("/version", json!([1, 0, 1]), Cause::Version),
-        ("/version", json!([1, 1, 0]), Cause::Version),
-        ("/version", json!([2, 0, 0]), Cause::Version),
+        ("/version", json!([1, 0, 0]), Cause::Version),
+        ("/version", json!([2, 0, 1]), Cause::Version),
+        ("/version", json!([2, 1, 0]), Cause::Version),
+        ("/version", json!([3, 0, 0]), Cause::Version),
         ("/owner", json!("other"), Cause::Envelope),
         ("/license", json!("other"), Cause::Envelope),
         ("/sources", json!([]), Cause::Envelope),
@@ -425,7 +426,7 @@ fn clamp_golden_values() -> TestResult {
         dyadic(total_bits - 1, &mut witness)?.compare(&distance, &mut witness)? == Ordering::Less,
         "non-nearest fixture has least covering total"
     );
-    assert_eq!(payload.entries.len(), 33, "row count");
+    assert_eq!(payload.entries.len(), 34, "row count");
     assert!(
         payload
             .entries
@@ -567,7 +568,62 @@ fn clamp_golden_wall_precedence() -> TestResult {
             outcome(&row, &mut ledger()?),
             Ok(("ClampWallCenterMismatch", None))
         ),
-        "wall precedes finite-range outcome"
+        "wall precedes unbounded-image outcome"
+    );
+    Ok(())
+}
+
+/// Measure complete row admission using the same arithmetic path as the reader.
+/// # Panics
+/// Panics only if the retained complete-row cost profile changes.
+/// ´claim:docgen:clamp-golden-costs´
+/// ´test:unit:clamp-golden-costs´
+#[test]
+fn clamp_golden_costs() -> TestResult {
+    use std::io::Write as _;
+    let payload = read(include_bytes!("../../../../data/clamp/floor.json").as_slice())?;
+    let mut maxima = [0; 6];
+    for row in &payload.entries {
+        let mut b = ledger()?;
+        check_row(row, &payload.routes, &mut b)?;
+        let mut costs = [b.usage().work, b.usage().arithmetic_steps, 0, 0, 0, 0];
+        for index in 2..6 {
+            let mut lower = u64::from(index == 3);
+            let mut upper = [0, 0, 1024, 4096, 8192, 4096][index];
+            while lower < upper {
+                let middle = lower + (upper - lower) / 2;
+                let mut limits = ledger()?.limits().clone();
+                match index {
+                    2 => limits.literal_bytes = middle,
+                    3 => limits.component_bits = middle,
+                    4 => {
+                        limits.component_bits = costs[3];
+                        limits.intermediate_bits = middle.max(costs[3]);
+                    }
+                    _ => limits.integer_exponent = middle,
+                }
+                if check_row(row, &payload.routes, &mut Budget::new(limits)?).is_ok() {
+                    upper = middle;
+                } else {
+                    lower = middle + 1;
+                }
+            }
+            costs[index] = if index == 4 {
+                lower.max(costs[3])
+            } else {
+                lower
+            };
+        }
+        for (peak, cost) in maxima.iter_mut().zip(costs) {
+            *peak = (*peak).max(cost);
+        }
+        writeln!(std::io::stdout(), "CLAMP COST {} {costs:?}", row.id)?;
+    }
+    writeln!(std::io::stdout(), "CLAMP MAXIMA {maxima:?}")?;
+    assert_eq!(
+        maxima,
+        [22_561_972, 61_629, 341, 1076, 1106, 1074],
+        "complete row profile"
     );
     Ok(())
 }

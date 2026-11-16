@@ -368,7 +368,7 @@ fn outcome(row: &Row, b: &mut Budget) -> Result<(&'static str, Option<Values>)> 
         nearest(&x.add(&r, b)?, b)?.and_then(|n| rounded_neighbor(n, true))
     };
     let (Some(lower), Some(upper)) = (lower, upper) else {
-        return Ok(("FiniteRange", None));
+        return Ok(("UnboundedImage", None));
     };
     let wall_lo = c.sub(&t, b)?;
     let wall_hi = c.add(&t, b)?;
@@ -389,11 +389,36 @@ fn outcome(row: &Row, b: &mut Budget) -> Result<(&'static str, Option<Values>)> 
     Ok(("Enclosure", Some(values)))
 }
 
-/// Admit the bounded envelope and reconstruct every associated result.
+/// Check one row with its own ledger, also used by the deterministic cost control.
 #[expect(
     clippy::suspicious_operation_groupings,
     reason = "An evidence route names a registry id; operands name the row operands."
 )]
+fn check_row(row: &Row, routes: &[Route; 2], b: &mut Budget) -> Result<()> {
+    let (expected, values) = outcome(row, b)?;
+    require(row.expected == expected, Cause::Expected)?;
+    if let Some(golden) = &row.golden {
+        for text in golden
+            .image
+            .iter()
+            .chain(&golden.nominal)
+            .chain([&golden.center, &golden.error])
+        {
+            rational(text, b)?;
+        }
+    }
+    require(row.golden == values, Cause::Golden)?;
+    for (evidence, route) in row.evidence.iter().zip(routes) {
+        require(
+            evidence.route == route.id && evidence.input == row.input && evidence.wall == row.wall,
+            Cause::Association,
+        )?;
+        require(evidence.golden == row.golden, Cause::Association)?;
+    }
+    Ok(())
+}
+
+/// Admit the bounded envelope and reconstruct every associated result.
 fn read(mut input: impl Read) -> Result<Payload> {
     let mut bytes = Vec::new();
     input
@@ -408,7 +433,7 @@ fn read(mut input: impl Read) -> Result<Payload> {
         payload.namespace == "org.naturrhythmuszentrum.test.golden.clamp-floor",
         Cause::Namespace,
     )?;
-    require(payload.version == [1, 0, 0], Cause::Version)?;
+    require(payload.version == [2, 0, 0], Cause::Version)?;
     require(
         payload.owner == "NRZ" && payload.license == "CC0-1.0",
         Cause::Envelope,
@@ -441,28 +466,7 @@ fn read(mut input: impl Read) -> Result<Payload> {
     for row in &payload.entries {
         require(!row.id.is_empty() && seen.insert(&row.id), Cause::Identity)?;
         let mut b = ledger()?;
-        let (expected, values) = outcome(row, &mut b)?;
-        require(row.expected == expected, Cause::Expected)?;
-        if let Some(golden) = &row.golden {
-            for text in golden
-                .image
-                .iter()
-                .chain(&golden.nominal)
-                .chain([&golden.center, &golden.error])
-            {
-                rational(text, &mut b)?;
-            }
-        }
-        require(row.golden == values, Cause::Golden)?;
-        for (evidence, route) in row.evidence.iter().zip(&payload.routes) {
-            require(
-                evidence.route == route.id
-                    && evidence.input == row.input
-                    && evidence.wall == row.wall,
-                Cause::Association,
-            )?;
-            require(evidence.golden == row.golden, Cause::Association)?;
-        }
+        check_row(row, &payload.routes, &mut b)?;
     }
     Ok(payload)
 }
