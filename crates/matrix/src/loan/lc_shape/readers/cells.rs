@@ -88,6 +88,7 @@ struct Bound<'a, P: Scalar> {
     scope: NumericalErrorScope,
 }
 /// One fully qualified original member and its checked physical address.
+#[derive(Clone, Copy)]
 struct Selected<'a, P: Scalar> {
     /// Immutable center/total/error owners, with a common validated extent.
     planes: [&'a faer::Mat<P>; 3],
@@ -100,6 +101,7 @@ impl<'a, P: Scalar + 'static, const N: usize> LcInputReaders<'a, P, N> {
     /// Resolve all original scalar companion planes once without loading a value.
     /// # Errors
     /// Refuses another account, incomplete representations and exhausted Work.
+    /// Refusal consumes this reader set; the caller retains its tiles and can re-admit them.
     pub fn into_cells(
         self,
         account: &mut ExecutionAccount,
@@ -148,22 +150,17 @@ impl<'a, P: Scalar + 'static, const N: usize> LcInputCells<'a, P, N> {
             .with_work_phase(crate::loan::FAMILY, "LC input cell observation", |budget| {
                 crate::loan::charge(budget, work::<N>(7)?)?;
                 let selected = self.select(cell)?;
-                let mut readings = [LcInputReading {
-                    values: [P::ZERO; 3],
-                    scope: NumericalErrorScope::HostInput,
-                }; N];
-                // Successful selection fills every slot, so no original role is skipped.
-                for (reading, selected) in readings.iter_mut().zip(selected.into_iter().flatten()) {
+                let readings = selected.map(|selected| {
                     let values = selected.planes.map(|plane| {
                         #[cfg(test)]
                         crate::loan::fault::loaded();
                         plane[(selected.address, 0)]
                     });
-                    *reading = LcInputReading {
+                    LcInputReading {
                         values,
                         scope: selected.scope,
-                    };
-                }
+                    }
+                });
                 Ok(LcInputCell {
                     inventory: self.readers.inventory,
                     axes: self.readers.axes,
@@ -173,33 +170,41 @@ impl<'a, P: Scalar + 'static, const N: usize> LcInputCells<'a, P, N> {
             })
     }
     /// All addresses and all three qualified channels are checked before any selected load.
-    fn select(&self, cell: usize) -> Result<[Option<Selected<'a, P>>; N], LoanError> {
+    fn select(&self, cell: usize) -> Result<[Selected<'a, P>; N], LoanError> {
         if cell >= self.readers.axes.combined.axis().capacity() {
             return Err(LoanError::LayoutMismatch);
         }
-        let mut selected = std::array::from_fn(|_| None);
-        for (index, slot) in selected.iter_mut().enumerate() {
-            let reader = self
-                .readers
-                .reader(index)
-                .ok_or(LoanError::UnsupportedContract)?;
-            for channel in HostChannel::ALL {
-                reader.selected_owner(channel, cell, 0)?;
-            }
-            let address = reader.bundle.layout.components.index(cell, 0)?;
-            let bound = self.bound[index]
-                .as_ref()
-                .ok_or(LoanError::UnsupportedContract)?;
-            if address >= bound.planes[0].nrows() {
-                return Err(LoanError::LayoutMismatch);
-            }
-            *slot = Some(Selected {
-                planes: bound.planes,
-                scope: bound.scope,
-                address,
-            });
+        if N == 0 {
+            return Err(LoanError::UnsupportedContract);
+        }
+        let first = self.select_member(0, cell)?;
+        let mut selected = [first; N];
+        for (index, slot) in selected.iter_mut().enumerate().skip(1) {
+            *slot = self.select_member(index, cell)?;
         }
         Ok(selected)
+    }
+    /// Resolve one position without loading any numerical companion.
+    fn select_member(&self, index: usize, cell: usize) -> Result<Selected<'a, P>, LoanError> {
+        let reader = self
+            .readers
+            .reader(index)
+            .ok_or(LoanError::UnsupportedContract)?;
+        for channel in HostChannel::ALL {
+            reader.selected_owner(channel, cell, 0)?;
+        }
+        let address = reader.bundle.layout.components.index(cell, 0)?;
+        let bound = self.bound[index]
+            .as_ref()
+            .ok_or(LoanError::UnsupportedContract)?;
+        if address >= bound.planes[0].nrows() {
+            return Err(LoanError::LayoutMismatch);
+        }
+        Ok(Selected {
+            planes: bound.planes,
+            scope: bound.scope,
+            address,
+        })
     }
 }
 /// Checked header plus literal per-member visit inventory.
