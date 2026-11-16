@@ -3,6 +3,11 @@
 
 mod inventory;
 mod lifecycle;
+mod output;
+pub use output::{
+    LcOmegaOutput, LcOutputCellState, LcOutputDeclaration, LcOutputPending,
+    LcOutputPublicationError,
+};
 mod readers;
 use super::{ExecutionAccount, HostTileDeclaration, LoanError, charge};
 use crate::{CellAxis, CellProduct, Coverage};

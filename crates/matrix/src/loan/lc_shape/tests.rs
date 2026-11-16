@@ -6,6 +6,7 @@ mod boundaries;
 mod fixture;
 mod inventory;
 mod observation;
+mod output;
 mod refusals;
 mod schema;
 mod scope;
