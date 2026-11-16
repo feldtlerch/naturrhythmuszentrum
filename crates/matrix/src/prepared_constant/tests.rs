@@ -211,7 +211,8 @@ fn constant_export_goldens() -> Result {
         }
         let bits = u32::try_from(row["target"]["bits"].as_u64().ok_or("bits")?)?;
         let before = b.usage().work;
-        let result = prepared.import(bits, LiteralLimits::default(), &context, &mut b, &mut used);
+        let literals = LiteralLimits::default();
+        let result = prepared.import_with_evidence(bits, literals, &context, &mut b, &mut used);
         assert_eq!(b.usage().work, before + used);
         if row["id"] == "twice-log-two-spacing" {
             assert_eq!(
@@ -228,27 +229,57 @@ fn constant_export_goldens() -> Result {
             result.is_ok(),
             "admitted golden row must export: {result:?}"
         );
-        let value = result?;
+        let (value, endpoints) = result?;
         assert_eq!(row["expected"].as_str(), Some("enclosure"));
-        assert_eq!(value.bits(), bits);
-        assert_eq!(value.arithmetic_revision(), context.revision());
-        readings(
-            value,
+        imported(
+            &prepared,
             [
                 row["golden"]["point"][0].as_str().ok_or("lo")?,
                 row["golden"]["point"][1].as_str().ok_or("hi")?,
             ],
+            (value, endpoints),
             bits,
+            &context,
             &mut b,
+            used,
         )?;
-        let again = prepared.import(bits, LiteralLimits::default(), &context, &mut b, &mut used);
-        assert!(again.is_ok(), "warm import must succeed: {again:?}");
-        let again = again?;
-        assert_eq!(again.readings(), value.readings());
-        assert_eq!(again.evidence(), value.evidence());
         assert_eq!(prepared.graph.counts(), graph_counts);
     }
     targets(&prepared, &context, &mut b);
+    Ok(())
+}
+
+/// Golden readings, public import and warm conversion share the charged evidence.
+/// # Panics
+/// Panics only if golden containment, public import or warm reuse disagrees with
+/// the checked readings, receipt or endpoints.
+fn imported(
+    prepared: &PreparedConstant,
+    golden: [&str; 2],
+    (value, endpoints): (ConstantImport, [f64; 2]),
+    bits: u32,
+    context: &ArithmeticContext,
+    b: &mut Budget,
+    import_work: u64,
+) -> Result {
+    assert_eq!(value.bits(), bits);
+    assert_eq!(value.arithmetic_revision(), context.revision());
+    readings(value, endpoints, golden, bits, b)?;
+    let mut used = 0;
+    let public = prepared.import(bits, LiteralLimits::default(), context, b, &mut used)?;
+    assert_eq!(public.readings(), value.readings());
+    assert_eq!(public.bits(), value.bits());
+    assert_eq!(public.arithmetic_revision(), value.arithmetic_revision());
+    assert_eq!(
+        used, import_work,
+        "public import shares the conversion receipt"
+    );
+    let again =
+        prepared.import_with_evidence(bits, LiteralLimits::default(), context, b, &mut used);
+    assert!(again.is_ok(), "warm import must succeed: {again:?}");
+    let (again, again_endpoints) = again?;
+    assert_eq!(again.readings(), value.readings());
+    assert_eq!(again_endpoints, endpoints);
     Ok(())
 }
 
@@ -772,6 +803,10 @@ fn constant_export_import_bounds() -> Result {
         "retained evidence covers at least its structural payload"
     );
     let bytes = size_of::<ConstantImport>() as u64;
+    assert_eq!(
+        bytes, 32,
+        "three binary64 readings and two u32 metadata fields"
+    );
     for (output, expected) in [(bytes, true), (bytes - 1, false)] {
         let mut b = Budget::new(Limits {
             output_bytes: output,
@@ -804,8 +839,13 @@ fn constant_export_import_bounds() -> Result {
 /// Decode the exported readings independently and compare the whole golden interval.
 /// # Panics
 /// Panics only if containment, both endpoint targets or the stored error guarantee fails.
-fn readings(value: ConstantImport, golden: [&str; 2], bits: u32, b: &mut Budget) -> Result {
-    let [lo, hi] = value.evidence();
+fn readings(
+    value: ConstantImport,
+    [lo, hi]: [f64; 2],
+    golden: [&str; 2],
+    bits: u32,
+    b: &mut Budget,
+) -> Result {
     let [center, total, error] = value.readings();
     assert_eq!(
         center.to_bits(),
