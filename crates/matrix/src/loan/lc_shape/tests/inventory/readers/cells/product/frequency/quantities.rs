@@ -162,7 +162,8 @@ fn local<P: Scalar>(values: [P; 3], left: P, right: P) -> TestResult {
     assert_ne!(center.add(&radius).compare(&exact), Ordering::Less);
     Ok(())
 }
-fn pi<P: Scalar + 'static>(
+/// Shared bounded pi fixture for quantity and sign-observation tests.
+pub(super) fn pi<P: Scalar + 'static>(
     context: &ArithmeticContext,
     budget: &mut Budget,
 ) -> TestResult<PiConstant<P>> {

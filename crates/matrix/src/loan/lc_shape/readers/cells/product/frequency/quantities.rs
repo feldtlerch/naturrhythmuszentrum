@@ -60,6 +60,21 @@ impl<'a, P: Scalar + 'static, const N: usize> LcInputProduct<'a, P, N> {
         prelude: &'p LcFrequencyPrelude<P>,
         account: &mut ExecutionAccount,
     ) -> Result<LcQuantityCell<'a, 'p, P, N>, LcProductError> {
+        self.observe_attempt(
+            cell,
+            "quantities",
+            account,
+            |account| self.quantities_attempt(cell, prelude, account),
+            |result| result.frequency().state(),
+        )
+    }
+    /// Preserve factor compatibility and both final products within the single public attempt.
+    fn quantities_attempt<'p>(
+        &self,
+        cell: usize,
+        prelude: &'p LcFrequencyPrelude<P>,
+        account: &mut ExecutionAccount,
+    ) -> Result<LcQuantityCell<'a, 'p, P, N>, LcProductError> {
         let original = self
             .cells
             .readers

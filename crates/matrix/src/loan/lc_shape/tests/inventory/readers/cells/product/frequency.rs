@@ -2,6 +2,7 @@
 //! Squared rational comparisons verify the positive chain without production root oracles.
 
 mod boundaries;
+mod observation;
 mod outcomes;
 mod quantities;
 use super::{Rational, SELECTED, TestResult, VALUES, publish, publish_values, setup};

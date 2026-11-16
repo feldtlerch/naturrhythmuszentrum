@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Complete original boxes authorize only strictly positive local frequency continuations.
 
+mod observation;
 mod quantities;
 pub use quantities::{LcFrequencyPrelude, LcQuantityCell, LcQuantityValues};
 
@@ -92,6 +93,20 @@ impl<'a, P: Scalar + 'static, const N: usize> LcInputProduct<'a, P, N> {
     /// Refuses authority, Work and incomplete coverage before loads. Native finite-image
     /// refusal retains its original tuple; the view remains usable for other cells.
     pub fn read_frequency(
+        &self,
+        cell: usize,
+        account: &mut ExecutionAccount,
+    ) -> Result<LcFrequencyCell<'a, P, N>, LcProductError> {
+        self.observe_attempt(
+            cell,
+            "frequency",
+            account,
+            |account| self.frequency_attempt(cell, account),
+            LcFrequencyCell::state,
+        )
+    }
+    /// Preserve the original authentication and prepaid continuation inside one traced attempt.
+    fn frequency_attempt(
         &self,
         cell: usize,
         account: &mut ExecutionAccount,
