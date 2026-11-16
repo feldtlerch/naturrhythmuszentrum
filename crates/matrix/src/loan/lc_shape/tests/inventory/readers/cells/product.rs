@@ -2,6 +2,7 @@
 //! Rational LC products preserve complete tuple authority and explicit repeated-role choices.
 
 mod boundaries;
+mod frequency;
 mod refusals;
 use super::{SELECTED, TestResult, VALUES, publish, publish_values, setup};
 use crate::loan::application::tests::binary::oracle::Rational;

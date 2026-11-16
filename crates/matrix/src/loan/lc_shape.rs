@@ -11,8 +11,8 @@ pub use lifecycle::{LcShapeApplication, LcShapeRequest, LcShapeTile};
 use nrz_bindings::{BindingSymbols, LcForwardCover};
 use nrz_scalar::Scalar;
 pub use readers::{
-    LcInputCell, LcInputCells, LcInputProduct, LcInputReaders, LcInputReading, LcProductCell,
-    LcProductError,
+    LcFrequencyCell, LcFrequencyState, LcFrequencyTarget, LcInputCell, LcInputCells,
+    LcInputProduct, LcInputReaders, LcInputReading, LcProductCell, LcProductError,
 };
 use std::marker::PhantomData;
 

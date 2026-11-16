@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //! Explicit original L and C positions feed one local enclosed multiplication.
 
+mod frequency;
+pub use frequency::{LcFrequencyCell, LcFrequencyState, LcFrequencyTarget};
+
 use super::{LcInputCell, LcInputCells, work};
 use crate::{ExecutionAccount, KernelError, LoanError, NumericalErrorScope};
 use nrz_bindings::LcQuantity;
@@ -133,23 +136,30 @@ impl<'a, P: Scalar + 'static, const N: usize> LcInputProduct<'a, P, N> {
                     .checked_add(1)
                     .ok_or(LoanError::CountOverflow)?;
                 crate::loan::charge(budget, visits)?;
-                let inputs = self.cells.observe(cell)?;
-                let [left, right] = self
-                    .positions
-                    .map(|position| inputs.readings()[position].values());
-                let value = crate::kernels::binary::evaluate_selected(
-                    [left[0], right[0]],
-                    [left[1], right[1]],
-                    crate::BinaryElementwise::Product,
-                    cell,
-                    &self.context,
-                )?;
-                Ok(LcProductCell {
-                    inputs,
-                    positions: self.positions,
-                    values: [value.center, value.total, value.error],
-                })
+                self.evaluate(self.cells.observe(cell)?)
             },
         )
+    }
+    /// Evaluate the original product after a caller prepays complete observation and invocation.
+    fn evaluate(
+        &self,
+        inputs: LcInputCell<'a, P, N>,
+    ) -> Result<LcProductCell<'a, P, N>, LcProductError> {
+        let cell = inputs.cell();
+        let [left, right] = self
+            .positions
+            .map(|position| inputs.readings()[position].values());
+        let value = crate::kernels::binary::evaluate_selected(
+            [left[0], right[0]],
+            [left[1], right[1]],
+            crate::BinaryElementwise::Product,
+            cell,
+            &self.context,
+        )?;
+        Ok(LcProductCell {
+            inputs,
+            positions: self.positions,
+            values: [value.center, value.total, value.error],
+        })
     }
 }

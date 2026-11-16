@@ -2,7 +2,10 @@
 //! Complete original-role observations preflight every companion before the first load.
 
 mod product;
-pub use product::{LcInputProduct, LcProductCell, LcProductError};
+pub use product::{
+    LcFrequencyCell, LcFrequencyState, LcFrequencyTarget, LcInputProduct, LcProductCell,
+    LcProductError,
+};
 
 use super::{LcInputInventory, LcInputReaders, LcShapeAxes};
 use crate::{ExecutionAccount, HostChannel, LoanError, NumericalErrorScope, TileReader};
